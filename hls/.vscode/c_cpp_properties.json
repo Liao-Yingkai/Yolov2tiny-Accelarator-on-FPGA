@@ -1,0 +1,29 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/app/Xilinx_22/Vitis_HLS/2022.2/include",
+                "/app/Xilinx_22/Vitis_HLS/2022.2/include/etc",
+                "/app/Xilinx_22/Vitis_HLS/2022.2/lnx64/tools/auto_cc/include",
+                "/mnt/public/app/Xilinx_22/Vitis_HLS/2022.2/tps/lnx64/gcc-8.3.0/include",
+                "/mnt/public/app/Xilinx_22/Vitis_HLS/2022.2/tps/lnx64/gcc-8.3.0/include/c++/8.3.0",
+                "/mnt/public/app/Xilinx_22/Vitis_HLS/2022.2/tps/lnx64/gcc-8.3.0/include/c++/8.3.0/backward",
+                "/mnt/public/app/Xilinx_22/Vitis_HLS/2022.2/tps/lnx64/gcc-8.3.0/include/c++/8.3.0/x86_64-pc-linux-gnu",
+                "/mnt/public/app/Xilinx_22/Vitis_HLS/2022.2/tps/lnx64/gcc-8.3.0/lib/gcc/x86_64-pc-linux-gnu/8.3.0/include",
+                "/mnt/public/app/Xilinx_22/Vitis_HLS/2022.2/tps/lnx64/gcc-8.3.0/lib/gcc/x86_64-pc-linux-gnu/8.3.0/include-fixed",
+                "/usr/include",
+                "/usr/local/include"
+            ],
+            "defines": [
+                "__SYNTHESIS__"
+            ],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++14",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
