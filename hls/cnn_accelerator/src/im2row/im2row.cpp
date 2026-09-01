@@ -6,6 +6,12 @@
 
 namespace {
 
+// Line Buffer 的一个存储字完整包含一个空间位置的全部物理通道。
+// IM2ROW_MAX_CHANNELS 对应当前通道并行度 C_PAR；默认配置下字宽为 8×8=64 位。
+static const int IM2ROW_LINE_WORD_BITS =
+    ACTIVATION_BITS * IM2ROW_MAX_CHANNELS;
+typedef ap_uint<IM2ROW_LINE_WORD_BITS> line_word_t;
+
 // 把一个 pixel_t 的全部物理通道写成量化零点。
 void clear_pixel(pixel_t& pixel) {
 #pragma HLS INLINE
@@ -30,29 +36,62 @@ void copy_valid_channels(
     }
 }
 
-// 读取指定物理行 Bank 中的一个列像素。
-// column%P 选择列 Bank，column/P 选择该 Bank 内地址。
+// 将一个 pixel_t 按通道完整打包为 Line Buffer 存储字。
+// channel[c] 固定映射到 [((c+1)*ACTIVATION_BITS-1):(c*ACTIVATION_BITS)]；
+// 通过位段直接复制有符号激活的原始补码位型，不进行数值符号扩展。
+line_word_t pack_line_pixel(const pixel_t& pixel) {
+#pragma HLS INLINE
+    line_word_t packed_pixel = 0;
+    for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
+#pragma HLS UNROLL
+        const int low_bit = channel * ACTIVATION_BITS;
+        const int high_bit = low_bit + ACTIVATION_BITS - 1;
+        packed_pixel.range(high_bit, low_bit) =
+            pixel.channel[channel].range(ACTIVATION_BITS - 1, 0);
+    }
+    return packed_pixel;
+}
+
+// 将 Line Buffer 存储字完整解包为 pixel_t。
+// 每个通道都按与打包函数相同的固定位置恢复全部位，负数的二进制补码保持不变。
+pixel_t unpack_line_pixel(const line_word_t& packed_pixel) {
+#pragma HLS INLINE
+    pixel_t pixel;
+    for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
+#pragma HLS UNROLL
+        const int low_bit = channel * ACTIVATION_BITS;
+        const int high_bit = low_bit + ACTIVATION_BITS - 1;
+        pixel.channel[channel].range(ACTIVATION_BITS - 1, 0) =
+            packed_pixel.range(high_bit, low_bit);
+    }
+    return pixel;
+}
+
+// 读取指定物理行 Bank 中的一个完整通道打包字，并组合解包为 pixel_t。
+// column%P 选择列 Bank，column/P 选择该 Bank 内地址；Line Buffer 只发生整字读取。
 pixel_t read_line_pixel(
-    const pixel_t line_buffer[2][IM2ROW_P][IM2ROW_MAX_BLOCKS_PER_ROW],
+    const line_word_t line_buffer[2][IM2ROW_P][IM2ROW_MAX_BLOCKS_PER_ROW],
     int row_bank,
     int column
 ) {
 #pragma HLS INLINE
-    return line_buffer[row_bank][column % IM2ROW_P]
-                      [column / IM2ROW_P];
+    const line_word_t packed_pixel =
+        line_buffer[row_bank][column % IM2ROW_P][column / IM2ROW_P];
+    return unpack_line_pixel(packed_pixel);
 }
 
-// 把一个像素写入指定物理行 Bank 和列位置。
-// 写地址与读取采用相同的 P 路列 Bank 映射。
+// 将一个 pixel_t 完整打包后写入指定物理行 Bank 和列位置。
+// 写地址与读取采用相同的 P 路列 Bank 映射；Line Buffer 禁止通道级部分写。
 void write_line_pixel(
-    pixel_t line_buffer[2][IM2ROW_P][IM2ROW_MAX_BLOCKS_PER_ROW],
+    line_word_t line_buffer[2][IM2ROW_P][IM2ROW_MAX_BLOCKS_PER_ROW],
     int row_bank,
     int column,
     const pixel_t& pixel
 ) {
 #pragma HLS INLINE
+    const line_word_t packed_pixel = pack_line_pixel(pixel);
     line_buffer[row_bank][column % IM2ROW_P]
-               [column / IM2ROW_P] = pixel;
+               [column / IM2ROW_P] = packed_pixel;
 }
 
 // 计算当前 Tile 需要从输入流读取的第一个 Bottom 列。
@@ -115,9 +154,11 @@ void im2row(
     }
 
     // Line Buffer 的三个维度依次表示：2个循环行 Bank、P个按列取模的独立列 Bank、
-    // 每个列 Bank 内的块地址。处理输出行时，一个行 Bank 保存 Middle，另一个先保存 Top，
-    // 待旧 Top 已进入 Strip 后再按列覆盖为下一输入行，避免整行搬移。
-    pixel_t line_buffer[2][IM2ROW_P][IM2ROW_MAX_BLOCKS_PER_ROW];
+    // 每个列 Bank 内的块地址。每个元素是包含全部 C_PAR 通道的无符号打包字，读写始终覆盖整字；
+    // 打包只改变内部存储位型，不改变 pixel_t、Strip 或模块间 Stream 接口。
+    // 处理输出行时，一个行 Bank 保存 Middle，另一个先保存 Top；待旧 Top 已进入 Strip 后，
+    // 再按列覆盖为下一输入行，避免整行搬移。
+    line_word_t line_buffer[2][IM2ROW_P][IM2ROW_MAX_BLOCKS_PER_ROW];
     // 双 Strip 的维度依次为：2个 Ping-Pong 缓冲、Top/Middle/Bottom 三行、P+2个逻辑列。
     // 对 base_x 的 Tile，逻辑列覆盖 base_x-1...base_x+P；current 只读输出，next 只写准备。
     pixel_t strip[2][IM2ROW_KERNEL][IM2ROW_STRIP_WIDTH];

@@ -46,7 +46,9 @@ static_assert(IM2ROW_P > 0 && IM2ROW_P <= 5,
               "当前 Im2Row 双 Strip 调度要求 1 <= IM2ROW_P <= 5");
 
 // 对称八位有符号量化激活，数值0既是量化零点，也是卷积 Padding 的填充值。
-typedef ap_int<8> activation_t;
+// 独立保留位宽常量，供模块内部构造完整通道打包字，避免重复硬编码。
+static const int ACTIVATION_BITS = 8;
+typedef ap_int<ACTIVATION_BITS> activation_t;
 
 // 一个 pixel_t 表示一个空间位置的全部物理输入通道。
 // 运行时仅 channel[0...Cin-1] 有效；Im2Row 输出前会清零其余通道，便于 Systolic 固定宽度接收。
