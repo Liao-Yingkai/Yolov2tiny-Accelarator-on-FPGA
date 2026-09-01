@@ -1,0 +1,24 @@
+# Vitis HLS 独立综合验证工程（仅限仓库根目录）
+/vitis_hls_*_csynth_*/
+
+# Vitis HLS 与 Vivado 工具日志
+**/vitis_hls*.log
+**/vivado*.log
+**/vivado*.jou
+
+# Xilinx 工具缓存与综合数据库
+**/.Xil/
+**/.autopilot/
+
+# Vitis HLS Solution 生成目录
+**/solution*/syn/
+**/solution*/csim/
+**/solution*/sim/
+**/solution*/impl/
+**/solution*/.debug/
+
+# Vitis HLS Solution 状态与报告索引文件
+**/solution*/solution*.aps
+**/solution*/solution*.log
+**/solution*/solution*.directive
+**/solution*/solution*_data.json
