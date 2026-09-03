@@ -50,6 +50,29 @@ static_assert(IM2ROW_P > 0 && IM2ROW_P <= 5,
 static const int ACTIVATION_BITS = 8;
 typedef ap_int<ACTIVATION_BITS> activation_t;
 
+// Systolic 第一版固定使用 8 位有符号权重和 32 位有符号累加器。虽然当前
+// IM2ROW_P 与输出通道并行度都为4，但二者在概念上独立，避免后续将空间
+// 并行度变化无意传递为 Cout 并行度变化。
+typedef ap_int<ACTIVATION_BITS> weight_t;
+typedef ap_int<32> acc_t;
+
+static const int SYSTOLIC_SPATIAL_PAR = IM2ROW_P;
+static const int SYSTOLIC_COUT_PAR = 4;
+static const int SYSTOLIC_CIN_PAR = IM2ROW_MAX_CHANNELS;
+static const int SYSTOLIC_MAX_COUT = 16;
+static const int SYSTOLIC_KERNEL_TOKENS = IM2ROW_KERNEL * IM2ROW_KERNEL;
+static const int SYSTOLIC_MAX_COUT_TILES =
+    SYSTOLIC_MAX_COUT / SYSTOLIC_COUT_PAR;
+static const int SYSTOLIC_WEIGHT_BUFFER_DEPTH =
+    SYSTOLIC_MAX_COUT_TILES * SYSTOLIC_KERNEL_TOKENS;
+
+static_assert(SYSTOLIC_SPATIAL_PAR == 4,
+              "第一版 Systolic 固定要求4个空间Lane");
+static_assert(SYSTOLIC_COUT_PAR == 4,
+              "第一版 Systolic 固定要求4个Cout Lane");
+static_assert(SYSTOLIC_CIN_PAR == 8,
+              "第一版 Systolic 固定要求8个物理输入通道");
+
 // 一个 pixel_t 表示一个空间位置的全部物理输入通道。
 // 运行时仅 channel[0...Cin-1] 有效；Im2Row 输出前会清零其余通道，便于 Systolic 固定宽度接收。
 struct pixel_t {
@@ -63,6 +86,25 @@ struct pixel_t {
 struct activation_pack_t {
     pixel_t pixel[IM2ROW_P];
     ap_uint<IM2ROW_P> spatial_valid;
+};
+
+// 一个 weight_lane_t 对应当前 Cout Tile 中的一条输出通道，并固定打包8个
+// 物理输入通道。Conv1 由权重导出端将 channel[1..7] 填零。
+struct weight_lane_t {
+    weight_t channel[SYSTOLIC_CIN_PAR];
+};
+
+// Weight stream 的一个事务对应相同 (cout_tile, kh, kw) 下的全部4条 Cout
+// Lane。其 stream 顺序为 cout_tile -> token(kh*3+kw)。
+struct weight_pack_t {
+    weight_lane_t lane[SYSTOLIC_COUT_PAR];
+};
+
+// Systolic 输出的一个事务包含4个相邻空间位置和当前4条输出通道的 INT32
+// 累加结果；空间尾 Lane 的有效性不由数值本身表达，必须继续携带该掩码。
+struct acc_tile_t {
+    acc_t value[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+    ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
 };
 
 #endif  // CNN_ACCELERATOR_TYPES_H_

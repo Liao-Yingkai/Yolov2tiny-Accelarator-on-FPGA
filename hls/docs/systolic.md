@@ -213,13 +213,27 @@ token = 8：result = next_acc
 
 ## 8. Activation Replay Buffer
 
-同一个 spatial tile 会用于该层的全部 Cout tile，因此使用：
+同一个 spatial tile 会用于该层的全部 Cout tile，因此使用四个显式的 spatial-lane replay bank：
 
 ```text
-activation_buffer[9]
+activation_bank[4][9]
+
+activation_bank[0]：spatial lane 0，9 个 64-bit word
+activation_bank[1]：spatial lane 1，9 个 64-bit word
+activation_bank[2]：spatial lane 2，9 个 64-bit word
+activation_bank[3]：spatial lane 3，9 个 64-bit word
 ```
 
-逻辑容量为：
+每个 64-bit word 显式打包一个 `pixel_t` 的 8 个 INT8 activation，位序固定为：
+
+```text
+bit [7:0]   = channel 0
+bit [15:8]  = channel 1
+...
+bit [63:56] = channel 7
+```
+
+逻辑容量仍为：
 
 ```text
 9 × 4 spatial × 8 channel × 8 bit = 2304 bit
@@ -230,12 +244,14 @@ activation_buffer[9]
 ```text
 Cout tile 0：
     activation = activation_stream
-    同时写 activation_buffer[token]
+    同时把4个 spatial lane 分别写入 activation_bank[lane][token]
 
 Cout tile 1 及之后：
-    activation = activation_buffer[token]
+    同时从4个 Bank 读取 activation_bank[lane][token] 并解包
     不读取 activation_stream
 ```
+
+lane 维 complete partition 后，每拍可并行访问四个单端口 64-bit BRAM bank，即固定得到 `4×64=256 bit/cycle` 的完整 token 带宽。`spatial_valid` 在同一个 spatial tile 的9个 token中不变，故不写入 replay BRAM，而是由 token 0 捕获到 `tile_spatial_valid`，在 replay 时重新附加。
 
 当前 spatial tile 的全部 Cout tile 完成后，buffer 可被下一个 spatial tile 覆盖。第一版不使用 activation ping-pong；replay 期间依靠 stream backpressure 暂停 Im2Row。
 
@@ -506,4 +522,3 @@ for each spatial tile:
 8. 验证 output backpressure 不会丢失、重复或错位 token；
 9. 综合确认 token loop II、BRAM、DSP、LUT、时钟频率；
 10. RTL co-sim 验证带输入气泡和下游阻塞的行为。
-
