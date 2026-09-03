@@ -19,7 +19,7 @@
 
 Tile 间和输出行间不插入准备气泡。源码以单一 `PIPELINE II=1` 的全局 Token 循环表达此目标，循环体中恰好一次 `output_stream.write`；实际 II、RAM 读延迟和资源结果仍必须以综合报告为准。
 
-本阶段已经完成静态语法和边界审计；尚未执行 C Simulation、C Synthesis 或 RTL Co-simulation。
+本模块已经过多轮综合，现有结果确认稳态 Token 循环达到 `II=1`，Line Buffer 映射到 BRAM。正式功能验证、RTL Co-simulation 和硬件反压验证仍未完成。
 
 ## 2. 接口与数据契约
 
@@ -98,14 +98,14 @@ strip[2][3][P+2]
 strip[kh][lane+kw]
 ```
 
-两个 Strip 的所有权固定：
+两个 Strip 采用 Ping-Pong 角色切换，但 `current Strip` 并非严格只读：
 
 ```text
-current Strip：仅被输出读取
-next Strip：仅被下一 Tile 准备写入
+current Strip：提供当前 Tile 输出；在 Top/Middle 输出期间，其 Bottom 行按需写入下一输入行
+next Strip：准备下一 Tile 已可提前构造的 Top/Middle、重叠列和 Bottom 初值
 ```
 
-`token=8` 的输出写成功后才交换两个 Strip。这样当前 Tile 的9拍读取不会与下一 Tile 的构造发生同一 Strip 的读写冲突。
+`current Strip` 的 Bottom 写入发生在该 Bottom 被 token 6～8 读取之前，是分阶段复用而不是同一数据的冲突读写。`token=8` 的输出写成功后才交换两个 Strip。
 
 ## 5. 全局 Token 调度
 
@@ -227,11 +227,11 @@ pending / pending_forward
 全局跨行 Tile
 ```
 
-当前实现以 `#pragma HLS PIPELINE II=1` 表达目标，并按两个行 Bank 的一次读/写访问设计时序；但以下结果必须留待后续综合和仿真确认：
+当前实现以 `#pragma HLS PIPELINE II=1` 表达目标，并按两个行 Bank 的访问模式设计时序。已有综合已经确认稳态 Token 循环达到 `II=1`，Line Buffer 映射到 BRAM；以下结果仍需后续正式验证或继续观察：
 
-- 实际输出循环 II 是否为1；
-- `ram_t2p` 在数组分区后的真实 BRAM/LUTRAM 映射和读延迟；
-- 同周期预取、Bottom 写入和输出的端口推导；
+- 不同运行参数下综合结果是否继续保持目标 II；
+- BRAM 端口和读延迟在后续模块集成后的时序行为；
+- 同周期预取、Bottom 写入和输出在集成后的端口与时序余量；
 - 资源、频率和动态多路选择开销；
 - C Simulation 下与 Golden Model 的逐 Token 数值一致性；
 - 输入气泡、下游反压和多帧连续处理行为。

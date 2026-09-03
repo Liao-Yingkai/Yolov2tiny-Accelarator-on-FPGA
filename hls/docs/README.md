@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行，当前正在完成 Conv 前端的 Im2Row 模块；Systolic、卷积输出组装、Pool、FC 和顶层控制将在后续阶段实现。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row 已形成稳定实现，下一阶段是单物理实例复用的 Broadcast / Output-Stationary Systolic 模块；PostProcess、Pool、FC 和顶层控制将在后续阶段实现。
 
 ## 工程原则
 
@@ -27,6 +27,20 @@ Im2Row ── P 路 activation_pack_t ──► 广播型 P×P Systolic
                                  输出通道组装 / Pool / 后续 Conv / FC
 ```
 
+## 单物理卷积流水引擎
+
+系统目标是只实例化一套物理 Im2Row、Systolic、PostProcess 和 Pool。Conv1、Conv2 不并发，而是分两个阶段顺序复用同一套模块；每个卷积层内部仍通过 `hls::stream<>` 形成模块间流水：
+
+```text
+阶段 1：
+Input → Im2Row → Systolic → PostProcess → Pool → Pool1 Feature Buffer
+
+阶段 2：
+Pool1 Feature Buffer → Im2Row → Systolic → PostProcess → Pool → FC
+```
+
+Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。具体 top-level 单实例调度和 HLS 资源共享方式在各计算模块完成后设计。
+
 ## Im2Row 当前状态
 
 Im2Row 固定支持 `3×3`、`stride=1`、`same padding`，每行独立划分 `ceil(W/P)` 个 Tile，不允许 Tile 跨行。尾部不足 P 的 Lane 在9拍中输出全零并携带 `spatial_valid=0`；卷积边界 Padding 也输出零，但有效 Lane 保持 `spatial_valid=1`。
@@ -44,4 +58,19 @@ Im2Row 固定支持 `3×3`、`stride=1`、`same padding`，每行独立划分 `c
 
 完整的周期时序、双 Strip 所有权、换行两 Beat 预取、反压语义和未确认风险见 [Im2Row 模块详细设计](im2row.md)。
 
-当前仅完成静态检查，未执行 C Simulation、C Synthesis 或 RTL Co-simulation。实际 II、Line Buffer 的 BRAM 端口与读延迟、资源、频率、反压和数值正确性仍需在后续验证阶段确认。
+Im2Row 已经过多轮综合，现有结果确认稳态 Token 循环达到 `II=1`，Line Buffer 映射到 BRAM。正式功能验证、RTL Co-simulation 和硬件反压行为仍待完成；反压下的 token 守恒和内部状态停顿必须在后续验证阶段重点检查。
+
+## Systolic 第一版设计
+
+Systolic 采用 `4 spatial × 4 Cout` Broadcast / Output-Stationary PE Array，每个 PE 固定并行处理 8 个物理输入通道，理论物理并行度为 128 个 INT8 multiplication/cycle。
+
+- Conv1 使用运行时 `Cin=1、Cout=8`，无效的 7 个物理通道填零；
+- Conv2 使用运行时 `Cin=8、Cout=16`；
+- 同一 spatial tile 的 9 个 activation token通过本地 buffer replay；
+- 每层只在第一个 spatial tile 期间读取一次整层权重，后续 spatial tile 从 Weight Buffer replay；
+- Weight Buffer 使用四个 64-bit BRAM bank，每拍聚合提供 256-bit 权重；
+- 输出保持 `output_y → tile_x → cout_tile` 顺序；
+- Bias、Requant、ReLU 不进入 PE，后续由独立 PostProcess 完成；
+- 第一版允许 Cout tile 边界存在额外控制或输出周期，不要求严格每 9 周期输出一个结果 Tile。
+
+完整接口、Buffer、时序、事务守恒、HLS 约束和验证要求见 [Systolic / Broadcast PE Array 设计](systolic.md)。
