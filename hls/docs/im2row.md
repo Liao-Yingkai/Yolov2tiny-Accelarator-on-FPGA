@@ -5,9 +5,9 @@
 - 适用工具：Vitis HLS 2022.2。
 - 对应源码：`cnn_accelerator/src/im2row/im2row.cpp`。
 - 固定卷积：`3×3`、`stride=1`、`same padding`。
-- 当前空间并行度：`P=IM2ROW_P=4`。
+- 当前空间并行度：固定 `P=4`。
 
-当前无气泡调度要求 `1<=P<=5`。原因是行首 Tile 最多需要在 Top/Middle 的6拍内读取 `P+1` 个 Bottom 标量；本工程默认 `P=4`。
+本分支不再生成可变 P 的硬件。P=4 的行首 Tile 在 Top/Middle 的6拍内读取5个 Bottom 像素，满足当前双 Strip 无气泡调度。
 
 本版本的首要接口目标是：启动完成且下游可接收时，Im2Row 每一个连续时钟周期向 Systolic 写出一个 `activation_pack_t`。一个 Pack 固定包含同一 `(kh,kw)` 下、同一输出行和同一 Tile 的 P 个空间 Lane。每一个 Tile 连续输出9拍，严格为：
 
@@ -33,7 +33,7 @@ void im2row(
 );
 ```
 
-`pixel_t` 打包一个空间位置的全部物理输入通道。输入是严格行优先的标量空间流，每帧严格提供 `H×W` 个真实像素；卷积 Padding 和行尾无效数据都不在输入流中。
+`pixel_t` 打包一个空间位置的全部物理输入通道。输入是严格行优先的标量空间流，接口只接受 Conv1 `(H,W,Cin)=(28,28,1)` 或 Conv2 `(14,14,8)`；卷积 Padding 和行尾无效数据都不在输入流中。函数签名保持不变，综合态只以 `Cin==8` 形成 `is_conv2`，完整三元组仅在非综合构建中断言。
 
 ```cpp
 struct activation_pack_t {
@@ -46,19 +46,17 @@ struct activation_pack_t {
 
 - P 个 `pixel_t` 的 `(kh,kw)` 完全一致；
 - P 个 Lane 属于同一输出行、同一 `tile_x`；
-- `channel[0...Cin-1]` 保留，其他物理通道强制置零；
+- 输入从 stream 读出时立即规范化：Conv1 仅保留 channel0、channel1..7 置零；Conv2 保留全部8通道；
 - `spatial_valid` 在同一 Tile 的9拍中不变；
 - 下游 Systolic 每拍接收这一个 P 路 Pack，并将它与同拍 P 路权重对应。
 
 ## 3. 逐行 Tile 与边界规则
 
-空间 Tile 不跨行：
+空间 Tile 不跨行。两种固定模式为：
 
 ```text
-tiles_per_row = ceil(W/P)
-tile_base_x   = tile_x × P
-lane_x        = tile_base_x + lane
-spatial_valid[lane] = (lane_x < W)
+Conv1：H=W=28，tiles_per_row=7，tile_base_x=tile_x<<2，所有 Tile valid=1111
+Conv2：H=W=14，tiles_per_row=4，tile_base_x=tile_x<<2，末 Tile valid=0011
 ```
 
 最后 Tile 中超出宽度的 Lane 是尾部无效 Lane：9拍均输出全零且 `spatial_valid=0`。它们不消费输入，也不代表卷积 Padding。
@@ -67,17 +65,17 @@ spatial_valid[lane] = (lane_x < W)
 
 当前网络固定为两层卷积：Conv1 的 Im2Row 输入为 `28×28`；第一层 Pool 后，Conv2 的 Im2Row 输入为 `14×14`。Conv2 之后再 Pool 虽会得到 `7×7`，但网络不再进入第三层卷积，因此 `7×7` 不是本 Im2Row 的实际工作尺寸。
 
-运行时接口仍支持 `W<P` 等小宽度，用于健壮性和边界检查；这些尺寸不参与当前两层 CNN 的时序与资源决策。
+不支持其他宽高或 `W<P` 的通用运行时模式。
 
 ## 4. 存储结构与所有权
 
 ### 4.1 Line Buffer
 
 ```text
-line_buffer[2][P][ceil(MAX_W/P)]
+line_buffer[2][4][7]
 ```
 
-第一个维度是两行物理 Bank，第二个维度按 `x % P` 分区。处理输出行 `y` 时：
+第一个维度是两行物理 Bank，第二个维度按固定的 `x & 3` 分区，Bank 内地址为 `x >> 2`。处理输出行 `y` 时：
 
 ```text
 middle_bank = y % 2        保存输入行 y
@@ -140,13 +138,13 @@ row / tile_x / token / current_strip / next_strip
 | 8 | Bottom | 写入预取结果；复制 Bottom 两列重叠；新 Bottom 列置为零 |
 | 下一拍 | 下一个 Tile 的 Top `(0,0)` | 新 Tile 开始在自己的前6拍读取 Bottom |
 
-同行 P 个新增列为：
+同行4个新增列为：
 
 ```text
 x = tile_base_x + P + 1 ... tile_base_x + 2P
 ```
 
-它们的列模 P 互不冲突；Top 与 Middle 位于不同物理行 Bank，可在一个 Bank Beat 中并行读取。代码把 Token 7 作为预取阶段、Token 8 作为写入阶段，按 BRAM 读延迟为一拍保守安排。
+它们的列模4互不冲突；Top 与 Middle 位于不同物理行 Bank，可在一个 Bank Beat 中并行读取。即将准备末 Tile 时，源码不再进行通用 `input_x<W` 比较，而使用固定掩码：Conv1 当前 tile5 的新列 mask 为 `0111`，Conv2 当前 tile2 的新列 mask 为 `0001`（lane0 为 LSB）。代码把 Token 7 作为预取阶段、Token 8 作为写入阶段，按 BRAM 读延迟为一拍保守安排。
 
 ### 5.2 换行首 Tile 的时序
 
@@ -171,28 +169,14 @@ x = tile_base_x + P + 1 ... tile_base_x + 2P
 
 Bottom 数据归属于当前输出 Tile，而不是下一 Tile。在 Token 0～5 中每拍至多读取一个真实像素，Token 6 开始输出 Bottom 前已经就绪。
 
-非底部输出行中，每行的读取区间如下：
-
-```text
-首 Tile：x=0 ... min(P,W-1)，最多 P+1 个
-后续 Tile：x=tile_base_x+1 起，最多 P 个
-```
-
-P=4 时，当前两层 CNN 实际工作宽度的核心读取数量为：
+非底部输出行中，首 Tile 从 x=0 读取，后续 Tile 从 `tile_base_x+1` 读取。固定模式的每行 Bottom 数量为：
 
 | W | 每行各 Tile 的 Bottom 读取数量 |
 |---:|---|
 | 28 | 5, 4, 4, 4, 4, 4, 3 |
 | 14 | 5, 4, 4, 1 |
 
-以下小宽度仅用于运行时接口健壮性与边界检查，不参与当前网络的时序与资源决策：
-
-| W | 每行各 Tile 的 Bottom 读取数量 |
-|---:|---|
-| 5 | 5, 0 |
-| 1～4 | W |
-
-各区间连续、不重复，单行总数恰好为 W。因此首行预装 W 个像素，加上后续 H-1 行各 W 个 Bottom 像素，输入总量严格为：
+各区间连续、不重复，单行总数分别为28和14。因此首行预装一行像素，加上后续各行的 Bottom 像素，输入总量严格为：
 
 ```text
 W + (H-1)×W = H×W
@@ -214,7 +198,17 @@ max(0, W-P)
 
 稳定输出速率的目标为每周期一个 P 路 Pack。输入接口的峰值读取能力为每周期一个 `pixel_t`，但平均需求远低于此值：P=4 时，每9个输出 Token 通常读取约4个新像素。未读周期依靠阻塞式 `hls::stream` 反压暂停上游；上游不能要求无限期每周期灌入一个像素而不接受反压。
 
-## 8. 实现与验证边界
+## 8. 相对 dev 通用实现的固定网络化
+
+| 内容 | 本分支固定化 | 保持不变 |
+|---|---|---|
+| 参数 | 移除可覆盖 P/H/W/C 宏和通用非法参数返回；只允许 Conv1/Conv2，综合态以 `Cin` 选择模式 | `im2row` 函数签名、`pixel_t`、`activation_pack_t` 布局 |
+| 通道 | 输入读取后立即完成 Conv1 的 channel1..7 零填充 | 全部物理8通道仍在一个 pixel_t 中打包，Systolic 可固定8路计算 |
+| 边界 | 固定 Tile 数、valid、Bottom load 与末 Tile 新列预取 mask | Padding、tail lane 全零和9-token `(kh,kw)` 顺序 |
+| 地址 | 列 Bank/地址固定为 `column&3` / `column>>2` | 两行 circular line buffer、4-way banking、BRAM 绑定 |
+| Strip 数据与索引 | Strip 内部保存一个完整 `64-bit line_word_t`；`output_y`、`tile_x`、`token` 和 current/next Strip 维持窄状态。输出以固定9-token selector 选择编译期确定的 Strip 行/列，仅保留 current Strip 的2选1 | 固定网络下的实际状态范围、9-token 调度与模块 Stream 数据布局不变 |
+
+## 9. 实现与验证边界
 
 源码中不存在以下旧结构：
 

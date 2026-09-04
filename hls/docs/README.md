@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row 已形成稳定实现，下一阶段是单物理实例复用的 Broadcast / Output-Stationary Systolic 模块；PostProcess、Pool、FC 和顶层控制将在后续阶段实现。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row 和 Broadcast / Output-Stationary Systolic 已完成第一版实现；PostProcess、Pool、FC 和顶层控制将在后续阶段实现。
 
 ## 工程原则
 
@@ -8,7 +8,7 @@
 - 激活采用对称八位有符号量化，零点为0；
 - 特征图逻辑布局采用 NHWC；
 - `pixel_t` 打包一个空间位置的全部物理通道；
-- 物理并行度是编译期参数，H、W、Cin、Cout 是运行时参数；
+- 物理并行度固定为 `4 spatial × 4 Cout × 8 Cin`；接口仍保留 H、W、Cin、Cout 以支持同一物理模块分时复用；
 - 注释、文档、断言和工程说明统一使用中文；
 - 性能和资源结论必须以综合与协同仿真报告为准。
 
@@ -41,11 +41,18 @@ Pool1 Feature Buffer → Im2Row → Systolic → PostProcess → Pool → FC
 
 Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。具体 top-level 单实例调度和 HLS 资源共享方式在各计算模块完成后设计。
 
+当前分支只支持下列两个层调用；在综合态，Im2Row/Systolic 都只使用 `Cin` 形成一位 `is_conv2` 模式选择，H/W/Cout 不进入核心调度。非综合构建会断言完整配置，防止测试误用接口。
+
+| 模式 | Im2Row / Systolic 配置 | Spatial Tile 数 | Cout Tile 数 |
+|---|---|---:|---:|
+| Conv1 | `(H,W,Cin,Cout)=(28,28,1,8)` | 196 | 2 |
+| Conv2 | `(H,W,Cin,Cout)=(14,14,8,16)` | 56 | 4 |
+
 ## Im2Row 当前状态
 
 Im2Row 固定支持 `3×3`、`stride=1`、`same padding`，每行独立划分 `ceil(W/P)` 个 Tile，不允许 Tile 跨行。尾部不足 P 的 Lane 在9拍中输出全零并携带 `spatial_valid=0`；卷积边界 Padding 也输出零，但有效 Lane 保持 `spatial_valid=1`。
 
-当前网络为两层卷积：Conv1 的 Im2Row 输入是 `28×28`，第一层 Pool 后 Conv2 的 Im2Row 输入是 `14×14`。Conv2 后的 Pool 虽得到 `7×7`，但该数据不会进入第三层卷积，因此 `7×7` 不属于本 Im2Row 的实际工作尺寸。`W<P` 等小宽度仅保留作运行时接口健壮性与边界检查，不参与当前网络的时序和资源决策。
+当前网络为两层卷积：Conv1 的 Im2Row 输入是 `28×28`，第一层 Pool 后 Conv2 的 Im2Row 输入是 `14×14`。Conv2 后的 Pool 虽得到 `7×7`，但该数据不会进入第三层卷积，因此 `7×7` 不属于本 Im2Row 的工作尺寸。
 
 内部采用两个行 Bank 与 `strip[2][3][P+2]` 双 Strip Ping-Pong：
 
@@ -74,3 +81,15 @@ Systolic 采用 `4 spatial × 4 Cout` Broadcast / Output-Stationary PE Array，�
 - 第一版允许 Cout tile 边界存在额外控制或输出周期，不要求严格每 9 周期输出一个结果 Tile。
 
 完整接口、Buffer、时序、事务守恒、HLS 约束和验证要求见 [Systolic / Broadcast PE Array 设计](systolic.md)。
+
+## 相对 dev 通用实现的固定网络化
+
+| 内容 | 本分支变化 | 保持不变 |
+|---|---|---|
+| 参数与调度 | 删除可覆盖的 P/H/W/C 宏、通用宽高/Tile 计算和综合态非法参数返回；固定为 Conv1/Conv2 两种模式 | Im2Row、Systolic 的函数签名和 stream struct 字段布局 |
+| Im2Row 边界 | 固定 Conv1/Conv2 的 Tile 数、tail valid、Bottom load 和预取 mask；输入读出后立即完成 Conv1 通道零填充 | 2-row circular line buffer、4-way banking、双 Strip、9-token 顺序和 write-first 反压语义 |
+| Systolic 调度 | `row × tile_x` 合并成固定数量的 `spatial_tile`；Cout tile 固定为2或4 | 唯一 `4×4×8` PE、activation/weight replay BRAM、dot tree、累加和输出顺序 |
+
+## 生成物目录
+
+今后的 csynth/csim/cosim 工程与日志统一写入仓库根目录 `build/hls/<run-name>/`，不要写入 `hls` 源码树；该目录由 Git 忽略。

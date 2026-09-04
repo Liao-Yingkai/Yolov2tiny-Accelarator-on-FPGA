@@ -22,3 +22,10 @@
 **/solution*/solution*.log
 **/solution*/solution*.directive
 **/solution*/solution*_data.json
+
+# 集中保存的 HLS 运行工程与日志；禁止生成物回到源码树
+/build/hls/
+/vitis_hls_*/
+/vitis_hls*.log
+/hls/vitis_hls*.log
+/hls/.Xil/

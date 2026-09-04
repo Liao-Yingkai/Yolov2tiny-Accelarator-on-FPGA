@@ -4,46 +4,31 @@
 #include <ap_int.h>
 #include <hls_stream.h>
 
-// 以下宏决定 Im2Row 及其 Systolic 接口的编译期物理规模，可在综合前通过编译选项覆盖。
-// P 是每个输出 Pack 的空间 Lane 数，也是 Systolic 每次接收的激活路数。
-#ifndef CNN_ACCEL_IM2ROW_P
-#define CNN_ACCEL_IM2ROW_P 4
-#endif
+// 本分支针对固定 MNIST 网络综合：不再通过编译宏生成不同硬件规模。
+// P 是每个 Pack 的空间 Lane 数；Cin 物理宽度固定为8，Conv1 仅使用 channel0。
+static const int IM2ROW_P = 4;
+static const int IM2ROW_MAX_H = 28;
+static const int IM2ROW_MAX_W = 28;
+static const int IM2ROW_MAX_CHANNELS = 8;
 
-#ifndef CNN_ACCEL_IM2ROW_MAX_H
-#define CNN_ACCEL_IM2ROW_MAX_H 28
-#endif
+// 唯一允许的两组运行时接口配置。接口保留 H/W/Cin/Cout，以便同一物理模块
+// 按层分时复用；综合态仅由 Cin 选择模式，调用方必须提供下列合法组合。
+static const int CNN_CONV1_H = 28;
+static const int CNN_CONV1_W = 28;
+static const int CNN_CONV1_CIN = 1;
+static const int CNN_CONV1_COUT = 8;
+static const int CNN_CONV2_H = 14;
+static const int CNN_CONV2_W = 14;
+static const int CNN_CONV2_CIN = 8;
+static const int CNN_CONV2_COUT = 16;
 
-#ifndef CNN_ACCEL_IM2ROW_MAX_W
-#define CNN_ACCEL_IM2ROW_MAX_W 28
-#endif
-
-#ifndef CNN_ACCEL_IM2ROW_MAX_CHANNELS
-#define CNN_ACCEL_IM2ROW_MAX_CHANNELS 8
-#endif
-
-// 运行时参数不能超过这些编译期上限；它们共同决定数组、接口和并行硬件规模。
-static const int IM2ROW_P = CNN_ACCEL_IM2ROW_P;
-static const int IM2ROW_MAX_H = CNN_ACCEL_IM2ROW_MAX_H;
-static const int IM2ROW_MAX_W = CNN_ACCEL_IM2ROW_MAX_W;
-static const int IM2ROW_MAX_CHANNELS = CNN_ACCEL_IM2ROW_MAX_CHANNELS;
-
-// 第一版卷积窗口固定为3×3、Padding=1、Stride=1；K 包含9个空间位置及全部物理通道。
+// 固定卷积窗口为3×3、Padding=1、Stride=1。
 static const int IM2ROW_KERNEL = 3;
 static const int IM2ROW_PADDING = 1;
 static const int IM2ROW_STRIDE = 1;
-static const int IM2ROW_MAX_K =
-    IM2ROW_KERNEL * IM2ROW_KERNEL * IM2ROW_MAX_CHANNELS;
-// P 路列 Bank 中每个 Bank 的最大地址深度，以及一个 Tile 覆盖的 P+2 个输入逻辑列。
-static const int IM2ROW_MAX_BLOCKS_PER_ROW =
-    (IM2ROW_MAX_W + IM2ROW_P - 1) / IM2ROW_P;
-static const int IM2ROW_STRIP_WIDTH =
-    IM2ROW_P + IM2ROW_KERNEL - 1;
-
-// 首 Tile 的 Bottom 最多需要 P+1 个标量输入，必须在 Top/Middle 的6拍内读取完毕。
-// 当前双 Strip 无气泡调度因此支持 1<=P<=5；本工程默认 P=4。
-static_assert(IM2ROW_P > 0 && IM2ROW_P <= 5,
-              "当前 Im2Row 双 Strip 调度要求 1 <= IM2ROW_P <= 5");
+// P=4 时，每个列 Bank 深度固定为 ceil(28/4)=7；每个 Strip 覆盖4+2列。
+static const int IM2ROW_MAX_BLOCKS_PER_ROW = 7;
+static const int IM2ROW_STRIP_WIDTH = 6;
 
 // 对称八位有符号量化激活，数值0既是量化零点，也是卷积 Padding 的填充值。
 // 独立保留位宽常量，供模块内部构造完整通道打包字，避免重复硬编码。
@@ -56,25 +41,15 @@ typedef ap_int<ACTIVATION_BITS> activation_t;
 typedef ap_int<ACTIVATION_BITS> weight_t;
 typedef ap_int<32> acc_t;
 
-static const int SYSTOLIC_SPATIAL_PAR = IM2ROW_P;
+static const int SYSTOLIC_SPATIAL_PAR = 4;
 static const int SYSTOLIC_COUT_PAR = 4;
-static const int SYSTOLIC_CIN_PAR = IM2ROW_MAX_CHANNELS;
-static const int SYSTOLIC_MAX_COUT = 16;
+static const int SYSTOLIC_CIN_PAR = 8;
 static const int SYSTOLIC_KERNEL_TOKENS = IM2ROW_KERNEL * IM2ROW_KERNEL;
-static const int SYSTOLIC_MAX_COUT_TILES =
-    SYSTOLIC_MAX_COUT / SYSTOLIC_COUT_PAR;
-static const int SYSTOLIC_WEIGHT_BUFFER_DEPTH =
-    SYSTOLIC_MAX_COUT_TILES * SYSTOLIC_KERNEL_TOKENS;
+static const int SYSTOLIC_MAX_COUT_TILES = 4;
+static const int SYSTOLIC_WEIGHT_BUFFER_DEPTH = 36;
 
-static_assert(SYSTOLIC_SPATIAL_PAR == 4,
-              "第一版 Systolic 固定要求4个空间Lane");
-static_assert(SYSTOLIC_COUT_PAR == 4,
-              "第一版 Systolic 固定要求4个Cout Lane");
-static_assert(SYSTOLIC_CIN_PAR == 8,
-              "第一版 Systolic 固定要求8个物理输入通道");
-
-// 一个 pixel_t 表示一个空间位置的全部物理输入通道。
-// 运行时仅 channel[0...Cin-1] 有效；Im2Row 输出前会清零其余通道，便于 Systolic 固定宽度接收。
+// 一个 pixel_t 表示一个空间位置的全部8个物理输入通道。
+// Im2Row 在输入读取时完成规范化：Conv1 仅 channel0 有效，Conv2 使用全部通道。
 struct pixel_t {
     activation_t channel[IM2ROW_MAX_CHANNELS];
 };
