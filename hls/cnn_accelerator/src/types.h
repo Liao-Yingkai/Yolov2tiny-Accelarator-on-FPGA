@@ -82,4 +82,21 @@ struct acc_tile_t {
     ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
 };
 
+// PostProcess 输出保持与 acc_tile_t 相同的 spatial_tile -> cout_tile 事务
+// 粒度，只将每个 INT32 累加结果 requantize 为 INT8 activation。尾部无效
+// spatial lane 的 value 必须为零，不能由 bias 生成伪有效数据。
+struct activation_tile_t {
+    activation_t value[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+    ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
+};
+
+// 一个参数 Pack 对应一个 Cout tile 的4条输出通道。所有字段都是已经由
+// exporter 离线生成的有符号 INT32：bias 位于 accumulator 域，multiplier 与
+// shift 共同表示 real_multiplier ~= multiplier / 2^shift。
+struct postprocess_param_pack_t {
+    ap_int<32> bias[SYSTOLIC_COUT_PAR];
+    ap_int<32> multiplier[SYSTOLIC_COUT_PAR];
+    ap_int<32> shift[SYSTOLIC_COUT_PAR];
+};
+
 #endif  // CNN_ACCELERATOR_TYPES_H_

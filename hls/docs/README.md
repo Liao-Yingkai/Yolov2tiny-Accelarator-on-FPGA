@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row 和 Broadcast / Output-Stationary Systolic 已完成第一版实现；PostProcess、Pool、FC 和顶层控制将在后续阶段实现。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row、Broadcast / Output-Stationary Systolic 与 PostProcess 已完成第一版实现；Pool、FC 和顶层控制将在后续阶段实现。
 
 ## 工程原则
 
@@ -24,7 +24,7 @@
 Im2Row ── P 路 activation_pack_t ──► 广播型 P×P Systolic
                                               │
                                               ▼
-                                 输出通道组装 / Pool / 后续 Conv / FC
+                                   PostProcess ──► Pool / 后续 Conv / FC
 ```
 
 ## 单物理卷积流水引擎
@@ -81,6 +81,24 @@ Systolic 采用 `4 spatial × 4 Cout` Broadcast / Output-Stationary PE Array，�
 - 第一版允许 Cout tile 边界存在额外控制或输出周期，不要求严格每 9 周期输出一个结果 Tile。
 
 完整接口、Buffer、时序、事务守恒、HLS 约束和验证要求见 [Systolic / Broadcast PE Array 设计](systolic.md)。
+
+## PostProcess 第一版设计
+
+PostProcess 消费 Systolic 的 `acc_tile_t`，保持 `spatial_tile(row -> tile_x) -> cout_tile`
+顺序输出 `activation_tile_t`。每个输出通道使用独立的 INT32 bias、multiplier、
+shift；首个 spatial tile 读取并缓存所有 Cout tile 的参数，之后回放寄存器缓存。
+
+- 数值顺序固定为 `INT32 bias add → ReLU → INT64 multiply → 直接算术右移 → 上限127饱和`；
+- 运行时不加入任何 rounding offset，保持与 golden model 当前 requant 的直接截断一致；
+- 无效 spatial lane 强制输出零，不经过 bias；
+- Conv1 处理 `196×2=392` 个 Tile、读取2个参数 Pack；Conv2 处理 `56×4=224` 个 Tile、读取4个参数 Pack；
+- spatial loop 已确认达到 `II=1`，每周期完成1条 spatial lane 的4条 Cout lane requant；
+- 在 `xc7z020-clg400-2`、10 ns 约束下，csynth 估计时钟为 7.050 ns，外层为13 cycles/Tile；
+  Conv1/Conv2 分别为5,097/2,913 cycles，快于现有 Systolic 的19 cycles/Tile，因而不是当前瓶颈；
+- 资源为0 BRAM、12 DSP、3,126 FF、2,933 LUT；4个32×32→64 位乘法器各占3 DSP，
+  动态右移约占716 LUT，参数缓存为寄存器。
+
+详细接口、位宽、缓存、验证范围、已确认综合结果及后续两级右移候选见 [PostProcess 设计](postprocess.md)。
 
 ## 相对 dev 通用实现的固定网络化
 
