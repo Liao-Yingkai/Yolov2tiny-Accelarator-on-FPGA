@@ -54,6 +54,11 @@ struct pixel_t {
     activation_t channel[IM2ROW_MAX_CHANNELS];
 };
 
+// Pool 与后续层之间也以一个空间位置的连续8个物理通道为基本事务。该别名
+// 明确表达其通道 pack 语义，同时保证 Pool1 的输出可直接作为 Conv2 Im2Row
+// 所需的 pixel_t 输入。
+typedef pixel_t channel_pack_t;
+
 // activation_pack_t 是 Im2Row 到 Systolic 的基本流事务：P 个像素属于同一输出行、
 // 同一 Tile 和同一个 (kh,kw)。Systolic 的接口目标是在每个成功接收周期消费一个 Pack。
 // spatial_valid 只标记空间 Lane 是否真实存在，在同一 Tile 的9拍内保持不变；

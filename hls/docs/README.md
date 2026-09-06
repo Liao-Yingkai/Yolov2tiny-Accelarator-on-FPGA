@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row、Broadcast / Output-Stationary Systolic 与 PostProcess 已完成第一版实现；Pool、FC 和顶层控制将在后续阶段实现。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row、Broadcast / Output-Stationary Systolic、PostProcess 与 Pool 已完成第一版实现；独立FC和顶层控制将在后续阶段实现。
 
 ## 工程原则
 
@@ -24,7 +24,7 @@
 Im2Row ── P 路 activation_pack_t ──► 广播型 P×P Systolic
                                               │
                                               ▼
-                                   PostProcess ──► Pool / 后续 Conv / FC
+                                   PostProcess ──► Pool / 后续 Conv / 独立 FC
 ```
 
 ## 单物理卷积流水引擎
@@ -36,10 +36,10 @@ Im2Row ── P 路 activation_pack_t ──► 广播型 P×P Systolic
 Input → Im2Row → Systolic → PostProcess → Pool → Pool1 Feature Buffer
 
 阶段 2：
-Pool1 Feature Buffer → Im2Row → Systolic → PostProcess → Pool → FC
+Pool1 Feature Buffer → Im2Row → Systolic → PostProcess → Pool → 独立 FC
 ```
 
-Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。具体 top-level 单实例调度和 HLS 资源共享方式在各计算模块完成后设计。
+Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。其属于顶层阶段间缓冲，因为Conv1和Conv2复用同一卷积流水硬件。Pool2默认直接流入独立FC；若FC需要回放输入，其缓存归FC模块自身。具体顶层调度仍在后续阶段设计。
 
 当前分支只支持下列两个层调用；在综合态，Im2Row/Systolic 都只使用 `Cin` 形成一位 `is_conv2` 模式选择，H/W/Cout 不进入核心调度。非综合构建会断言完整配置，防止测试误用接口。
 
@@ -81,6 +81,17 @@ Systolic 采用 `4 spatial × 4 Cout` Broadcast / Output-Stationary PE Array，�
 - 第一版允许 Cout tile 边界存在额外控制或输出周期，不要求严格每 9 周期输出一个结果 Tile。
 
 完整接口、Buffer、时序、事务守恒、HLS 约束和验证要求见 [Systolic / Broadcast PE Array 设计](systolic.md)。
+
+## Pool 第一版设计
+
+Pool固定实现2×2、stride=2的INT8有符号MaxPool，消费PostProcess保持的
+`row -> tile_x -> cout_tile` 事务顺序。偶数输入行写入16×128-bit单端口Line
+Buffer，奇数行读取上一行并完成四值有符号最大值；之后按 `pooled_H -> pooled_W
+-> channel_pack` 紧密输出。Pool1产生196个8-channel pack，Pool2产生98个。
+
+Pool1的输出由顶层写入阶段间Feature Buffer供Conv2使用；Pool2默认直连独立FC，
+不复用当前Systolic，也不要求Pool侧FC Input Buffer。详细设计见
+[Pool 模块详细设计](pool.md)。本阶段仅完成源码与静态检查，尚未进行C仿真、协同仿真或综合；BRAM、II、时序和资源结论待验证。
 
 ## PostProcess 第一版设计
 
