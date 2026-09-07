@@ -41,6 +41,41 @@ typedef ap_int<ACTIVATION_BITS> activation_t;
 typedef ap_int<ACTIVATION_BITS> weight_t;
 typedef ap_int<32> acc_t;
 
+// 固定 MNIST 全连接层：Pool2 的 7x7x16 输出按 NHWC 展开为784个输入。
+// 一个 channel_pack_t 含8个连续通道，因此输入流固定为98个 Pack；物理计算
+// 阵列每拍处理8个输入通道和5个输出通道，10个 logit 分为两个输出 Tile。
+static const int FC_INPUT_PACKS = 98;
+static const int FC_CIN_PAR = 8;
+static const int FC_COUT_PAR = 5;
+static const int FC_OUT_TILES = 2;
+static const int FC_OUTPUTS = 10;
+
+// 一个 FC 权重事务对应一个 out_tile 和一个8通道输入 token，逻辑位宽为
+// 5 x 8 x 8 = 320 bit。流顺序固定为 out_tile -> token。
+struct fc_weight_pack_t {
+    weight_t value[FC_COUT_PAR][FC_CIN_PAR];
+};
+
+// 一个 FC accumulator 事务对应一个 out_tile 的5个输出通道。
+struct fc_acc_pack_t {
+    acc_t value[FC_COUT_PAR];
+};
+
+// FC 后处理参数同样以5个输出通道为一组；字段均为 exporter 导出的
+// signed INT32，bias 位于 accumulator 域。
+struct fc_param_pack_t {
+    ap_int<32> bias[FC_COUT_PAR];
+    ap_int<32> multiplier[FC_COUT_PAR];
+    ap_int<32> shift[FC_COUT_PAR];
+};
+
+typedef ap_int<ACTIVATION_BITS> logit_t;
+
+// FC 最终只写出一个完整的10类 signed INT8 logit Pack。
+struct logits_pack_t {
+    logit_t value[FC_OUTPUTS];
+};
+
 static const int SYSTOLIC_SPATIAL_PAR = 4;
 static const int SYSTOLIC_COUT_PAR = 4;
 static const int SYSTOLIC_CIN_PAR = 8;

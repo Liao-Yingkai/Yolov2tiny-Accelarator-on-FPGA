@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row、Broadcast / Output-Stationary Systolic、PostProcess 与 Pool 已完成第一版实现；独立FC和顶层控制将在后续阶段实现。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row、Broadcast / Output-Stationary Systolic、PostProcess、Pool 与独立FC已完成第一版源码；顶层控制将在后续阶段实现。
 
 ## 工程原则
 
@@ -39,7 +39,7 @@ Input → Im2Row → Systolic → PostProcess → Pool → Pool1 Feature Buffer
 Pool1 Feature Buffer → Im2Row → Systolic → PostProcess → Pool → 独立 FC
 ```
 
-Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。其属于顶层阶段间缓冲，因为Conv1和Conv2复用同一卷积流水硬件。Pool2默认直接流入独立FC；若FC需要回放输入，其缓存归FC模块自身。具体顶层调度仍在后续阶段设计。
+Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。其属于顶层阶段间缓冲，因为Conv1和Conv2复用同一卷积流水硬件。Pool2默认直接流入独立FC；FC在第一个输出 Tile 消费 Pool2 的98个8-channel Pack，并写入自身的98x64-bit BRAM，供第二个输出 Tile 回放。具体顶层调度仍在后续阶段设计。
 
 当前分支只支持下列两个层调用；在综合态，Im2Row/Systolic 都只使用 `Cin` 形成一位 `is_conv2` 模式选择，H/W/Cout 不进入核心调度。非综合构建会断言完整配置，防止测试误用接口。
 
@@ -110,6 +110,12 @@ shift；首个 spatial tile 读取并缓存所有 Cout tile 的参数，之后�
   动态右移约占716 LUT，参数缓存为寄存器。
 
 详细接口、位宽、缓存、验证范围、已确认综合结果及后续两级右移候选见 [PostProcess 设计](postprocess.md)。
+
+## 独立 FC 第一版设计
+
+固定FC将 Pool2 的 `7×7×16=784` 个 INT8 activation 分类为10个 signed INT8 logit。输入顺序保持 Pool2 的紧密 NHWC：`y -> x -> 8-channel pack`，共98个 Pack；权重顺序为 `out_tile(2) -> token(98)`，每个320-bit逻辑 Pack 有5条输出 lane和8条输入 lane。第一输出 Tile 边计算边写入98x64-bit FC Input Buffer，第二 Tile 从该 BRAM 回放，两个 Tile 各输出一个5路 INT32 accumulator Pack。
+
+FC MAC 后使用独立后处理：每组5 lane 串行复用一套32x32 signed requant数据通路，执行 bias、INT64乘法、直接算术右移和 `[-128,127]` 双向饱和，不做 ReLU 或额外 rounding。输出一次完整10路 logit Pack。FC 与卷积 Systolic 的滑窗/空间并行计算不同，既不复用其阵列也不复用其权重缓存。详细接口、缓冲和未验证项见 [独立 FC 设计](fc.md)；本阶段未运行C仿真、协同仿真或综合。
 
 ## 相对 dev 通用实现的固定网络化
 
