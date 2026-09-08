@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row、Broadcast / Output-Stationary Systolic、PostProcess、Pool 与独立FC已完成第一版源码；顶层控制将在后续阶段实现。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool 与独立FC MAC/后处理已完成第一版源码；顶层控制将在后续阶段实现。
 
 ## 工程原则
 
@@ -24,19 +24,19 @@
 Im2Row ── P 路 activation_pack_t ──► 广播型 P×P Systolic
                                               │
                                               ▼
-                                   PostProcess ──► Pool / 后续 Conv / 独立 FC
+                               ConvPostProcess ──► Pool / 后续 Conv / 独立 FC
 ```
 
 ## 单物理卷积流水引擎
 
-系统目标是只实例化一套物理 Im2Row、Systolic、PostProcess 和 Pool。Conv1、Conv2 不并发，而是分两个阶段顺序复用同一套模块；每个卷积层内部仍通过 `hls::stream<>` 形成模块间流水：
+系统目标是只实例化一套物理 Im2Row、Systolic、ConvPostProcess 和 Pool。Conv1、Conv2 不并发，而是分两个阶段顺序复用同一套模块；每个卷积层内部仍通过 `hls::stream<>` 形成模块间流水：
 
 ```text
 阶段 1：
-Input → Im2Row → Systolic → PostProcess → Pool → Pool1 Feature Buffer
+Input → Im2Row → Systolic → ConvPostProcess → Pool → Pool1 Feature Buffer
 
 阶段 2：
-Pool1 Feature Buffer → Im2Row → Systolic → PostProcess → Pool → 独立 FC
+Pool1 Feature Buffer → Im2Row → Systolic → ConvPostProcess → Pool → 独立 FC
 ```
 
 Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。其属于顶层阶段间缓冲，因为Conv1和Conv2复用同一卷积流水硬件。Pool2默认直接流入独立FC；FC在第一个输出 Tile 消费 Pool2 的98个8-channel Pack，并写入自身的98x64-bit BRAM，供第二个输出 Tile 回放。具体顶层调度仍在后续阶段设计。
@@ -77,14 +77,14 @@ Systolic 采用 `4 spatial × 4 Cout` Broadcast / Output-Stationary PE Array，�
 - 每层只在第一个 spatial tile 期间读取一次整层权重，后续 spatial tile 从 Weight Buffer replay；
 - Weight Buffer 使用四个 64-bit BRAM bank，每拍聚合提供 256-bit 权重；
 - 输出保持 `output_y → tile_x → cout_tile` 顺序；
-- Bias、Requant、ReLU 不进入 PE，后续由独立 PostProcess 完成；
+- Bias、Requant、ReLU 不进入 PE，后续由独立 ConvPostProcess 完成；
 - 第一版允许 Cout tile 边界存在额外控制或输出周期，不要求严格每 9 周期输出一个结果 Tile。
 
 完整接口、Buffer、时序、事务守恒、HLS 约束和验证要求见 [Systolic / Broadcast PE Array 设计](systolic.md)。
 
 ## Pool 第一版设计
 
-Pool固定实现2×2、stride=2的INT8有符号MaxPool，消费PostProcess保持的
+Pool固定实现2×2、stride=2的INT8有符号MaxPool，消费ConvPostProcess保持的
 `row -> tile_x -> cout_tile` 事务顺序。偶数输入行写入16×128-bit单端口Line
 Buffer，奇数行读取上一行并完成四值有符号最大值；之后按 `pooled_H -> pooled_W
 -> channel_pack` 紧密输出。Pool1产生196个8-channel pack，Pool2产生98个。
@@ -93,9 +93,9 @@ Pool1的输出由顶层写入阶段间Feature Buffer供Conv2使用；Pool2默认
 不复用当前Systolic，也不要求Pool侧FC Input Buffer。详细设计见
 [Pool 模块详细设计](pool.md)。本阶段仅完成源码与静态检查，尚未进行C仿真、协同仿真或综合；BRAM、II、时序和资源结论待验证。
 
-## PostProcess 第一版设计
+## ConvPostProcess 第一版设计
 
-PostProcess 消费 Systolic 的 `acc_tile_t`，保持 `spatial_tile(row -> tile_x) -> cout_tile`
+ConvPostProcess 消费 Systolic 的 `acc_tile_t`，保持 `spatial_tile(row -> tile_x) -> cout_tile`
 顺序输出 `activation_tile_t`。每个输出通道使用独立的 INT32 bias、multiplier、
 shift；首个 spatial tile 读取并缓存所有 Cout tile 的参数，之后回放寄存器缓存。
 
@@ -109,13 +109,13 @@ shift；首个 spatial tile 读取并缓存所有 Cout tile 的参数，之后�
 - 资源为0 BRAM、12 DSP、3,126 FF、2,933 LUT；4个32×32→64 位乘法器各占3 DSP，
   动态右移约占716 LUT，参数缓存为寄存器。
 
-详细接口、位宽、缓存、验证范围、已确认综合结果及后续两级右移候选见 [PostProcess 设计](postprocess.md)。
+详细接口、位宽、缓存、验证范围、已确认综合结果及后续两级右移候选见 [ConvPostProcess 设计](conv_postprocess.md)。
 
 ## 独立 FC 第一版设计
 
 固定FC将 Pool2 的 `7×7×16=784` 个 INT8 activation 分类为10个 signed INT8 logit。输入顺序保持 Pool2 的紧密 NHWC：`y -> x -> 8-channel pack`，共98个 Pack；权重顺序为 `out_tile(2) -> token(98)`，每个320-bit逻辑 Pack 有5条输出 lane和8条输入 lane。第一输出 Tile 边计算边写入98x64-bit FC Input Buffer，第二 Tile 从该 BRAM 回放，两个 Tile 各输出一个5路 INT32 accumulator Pack。
 
-FC MAC 后使用独立后处理：每组5 lane 串行复用一套32x32 signed requant数据通路，执行 bias、INT64乘法、直接算术右移和 `[-128,127]` 双向饱和，不做 ReLU 或额外 rounding。输出一次完整10路 logit Pack。FC 与卷积 Systolic 的滑窗/空间并行计算不同，既不复用其阵列也不复用其权重缓存。详细接口、缓冲和未验证项见 [独立 FC 设计](fc.md)；本阶段未运行C仿真、协同仿真或综合。
+FC MAC 后使用 `src/postprocess/fc_postprocess.*` 的独立后处理：每组5 lane 串行复用一套32x32 signed requant数据通路，执行 bias、INT64乘法、直接算术右移和 `[-128,127]` 双向饱和，不做 ReLU 或额外 rounding。输出一次完整10路 logit Pack。FC 与卷积 Systolic 的滑窗/空间并行计算不同，既不复用其阵列也不复用其权重缓存。详细接口、缓冲和未验证项见 [独立 FC 设计](fc.md)；本阶段未运行C仿真、协同仿真或综合。
 
 ## 相对 dev 通用实现的固定网络化
 

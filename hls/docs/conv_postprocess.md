@@ -1,25 +1,25 @@
-# PostProcess 设计
+# ConvPostProcess 设计
 
 ## 1. 定位与接口
 
-PostProcess 位于 Systolic 与 Pool 之间，完成每输出通道的 bias、ReLU 和
+ConvPostProcess 位于 Systolic 与 Pool 之间，完成每输出通道的 bias、ReLU 和
 requant；不改变 Im2Row 或 Systolic 的数据布局和事务顺序。
 
 ```text
 acc_tile_t (INT32)
        │
        ▼
-PostProcess
+ConvPostProcess
        │
        ▼
 activation_tile_t (INT8)
 ```
 
 ```cpp
-void postprocess(hls::stream<acc_tile_t>& input_stream,
-                 hls::stream<postprocess_param_pack_t>& param_stream,
-                 hls::stream<activation_tile_t>& output_stream,
-                 int Cout);
+void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
+                      hls::stream<postprocess_param_pack_t>& param_stream,
+                      hls::stream<activation_tile_t>& output_stream,
+                      int Cout);
 ```
 
 `Cout=8` 选择 Conv1，`Cout=16` 选择 Conv2；其他值只在非综合构建中断言。
@@ -119,7 +119,7 @@ Tile iteration 的 latency 为 13 个周期。
 约使用 716 LUT，是后续资源优化时最值得关注的部分。
 
 以该实现的外层 13 cycles/Tile 计，Conv1 总计 5,097 cycles，Conv2 总计
-2,913 cycles。现有 Systolic 综合结果为 19 cycles/Tile，因此 PostProcess
+2,913 cycles。现有 Systolic 综合结果为 19 cycles/Tile，因此 ConvPostProcess
 已确认快于 Systolic，不是当前流水瓶颈。
 
 若动态移位器成为瓶颈，可在另一次经验证的优化中，针对 exporter 明确保证

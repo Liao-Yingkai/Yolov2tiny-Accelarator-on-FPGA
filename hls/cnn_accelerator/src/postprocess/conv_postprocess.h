@@ -1,12 +1,12 @@
-#ifndef CNN_ACCELERATOR_POSTPROCESS_POSTPROCESS_H_
-#define CNN_ACCELERATOR_POSTPROCESS_POSTPROCESS_H_
+#ifndef CNN_ACCELERATOR_POSTPROCESS_CONV_POSTPROCESS_H_
+#define CNN_ACCELERATOR_POSTPROCESS_CONV_POSTPROCESS_H_
 
 #include "../types.h"
 
-// 对单个 accumulator 执行 PostProcess 数值规则：INT32 bias add、ReLU、
+// 对单个卷积 accumulator 执行 ConvPostProcess 数值规则：INT32 bias add、ReLU、
 // INT64 multiply、直接算术右移和上限127饱和。此函数不加入任何 rounding
-// offset，供独立数值测试和 postprocess 主循环共同使用。
-activation_t postprocess_requantize(acc_t accumulator,
+// offset，供独立数值测试和 conv_postprocess 主循环共同使用。
+activation_t conv_postprocess_requantize(acc_t accumulator,
                                     ap_int<32> bias,
                                     ap_int<32> multiplier,
                                     ap_int<32> shift);
@@ -20,9 +20,9 @@ activation_t postprocess_requantize(acc_t accumulator,
 // output_stream：与 input_stream 完全相同的事务顺序，元素为 requantized
 //                activation_tile_t。
 // Cout：仅允许8（Conv1）或16（Conv2）；非法值仅在非综合态断言。
-void postprocess(hls::stream<acc_tile_t>& input_stream,
-                 hls::stream<postprocess_param_pack_t>& param_stream,
-                 hls::stream<activation_tile_t>& output_stream,
-                 int Cout);
+void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
+                      hls::stream<postprocess_param_pack_t>& param_stream,
+                      hls::stream<activation_tile_t>& output_stream,
+                      int Cout);
 
-#endif  // CNN_ACCELERATOR_POSTPROCESS_POSTPROCESS_H_
+#endif  // CNN_ACCELERATOR_POSTPROCESS_CONV_POSTPROCESS_H_

@@ -122,7 +122,7 @@ struct acc_tile_t {
     ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
 };
 
-// PostProcess 输出保持与 acc_tile_t 相同的 spatial_tile -> cout_tile 事务
+// ConvPostProcess 输出保持与 acc_tile_t 相同的 spatial_tile -> cout_tile 事务
 // 粒度，只将每个 INT32 累加结果 requantize 为 INT8 activation。尾部无效
 // spatial lane 的 value 必须为零，不能由 bias 生成伪有效数据。
 struct activation_tile_t {

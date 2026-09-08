@@ -10,7 +10,8 @@ channel 0..7，再是8..15。因此 FC 有98个输入 token，
 权重 exporter 顺序固定为 `out_tile(0..1) -> token(0..97) -> cout_lane(0..4)
 -> cin_lane(0..7)`。一个 `fc_weight_pack_t` 是5x8个 signed INT8（逻辑320 bit）；
 两个 tile 覆盖10类。参数也为两个 `fc_param_pack_t`，每组5路 signed INT32
-bias、multiplier、shift。
+bias、multiplier、shift；它们由 `src/postprocess/fc_postprocess.h` 的 FC
+后处理模块消费，而不属于 FC MAC 模块。
 
 当前 exporter 参数契约要求 multiplier 和 shift 非负；非综合态会断言该契约。
 
@@ -20,6 +21,11 @@ bias、multiplier、shift。
 void fully_connected(hls::stream<channel_pack_t>& input_stream,
                      hls::stream<fc_weight_pack_t>& weight_stream,
                      hls::stream<fc_acc_pack_t>& output_stream);
+```
+
+FC 后处理位于 `src/postprocess/fc_postprocess.h`：
+
+```cpp
 void fc_postprocess(hls::stream<fc_acc_pack_t>& input_stream,
                     hls::stream<fc_param_pack_t>& param_stream,
                     hls::stream<logits_pack_t>& output_stream);
@@ -45,6 +51,7 @@ signed right_shift 一样符号扩展。lane loop 目标 `PIPELINE II=1`；实�
 
 卷积 Systolic 面向3x3滑窗、4个空间 lane 和跨空间 tile 的权重回放；FC 没有滑窗，
 只扁平化 Pool2 的 HWC 向量，并仅为第二输出 tile 缓存输入，不复用卷积阵列或其
-权重缓存。本阶段只添加实现与 `test_fc.cpp` 源码，尚未运行 C-sim、co-sim 或综合。
-测试源码覆盖完整784x10 MAC reference、HWC顺序、signed、两个输出 tile、负数
+权重缓存。本阶段只添加实现与 `test_fc.cpp`、`test_fc_postprocess.cpp` 源码，
+尚未运行 C-sim、co-sim 或综合。前者覆盖完整784x10 MAC reference、HWC顺序、
+signed、两个输出 tile 和连续两次调用；后者独立覆盖 FC 后处理的 bias、负数
 requant/shift40/41/饱和、事务守恒及连续两次调用。

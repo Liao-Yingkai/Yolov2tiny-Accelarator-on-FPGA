@@ -2,7 +2,7 @@
 
 ## 1. 模块定位与当前状态
 
-Systolic 位于 Im2Row 与 PostProcess 之间，只负责卷积的 INT8 乘法和 INT32 累加：
+Systolic 位于 Im2Row 与 ConvPostProcess 之间，只负责卷积的 INT8 乘法和 INT32 累加：
 
 ```text
 activation_pack_t
@@ -23,14 +23,14 @@ Bias / Requant / ReLU
 
 ## 2. 单物理实例与运行方式
 
-系统只实例化一套物理 Im2Row、Systolic、PostProcess 和 Pool。Conv1、Conv2 分两个阶段顺序使用同一套硬件：
+系统只实例化一套物理 Im2Row、Systolic、ConvPostProcess 和 Pool。Conv1、Conv2 分两个阶段顺序使用同一套硬件：
 
 ```text
 阶段 1：Conv1
-Input → Im2Row → Systolic → PostProcess → Pool → Pool1 Feature Buffer
+Input → Im2Row → Systolic → ConvPostProcess → Pool → Pool1 Feature Buffer
 
 阶段 2：Conv2
-Pool1 Feature Buffer → Im2Row → Systolic → PostProcess → Pool → FC
+Pool1 Feature Buffer → Im2Row → Systolic → ConvPostProcess → Pool → FC
 ```
 
 每个卷积层内部的模块通过 `hls::stream<>` 连接，并计划在上层形成 DATAFLOW。Conv1 和 Conv2 之间不并发；Pool1 的完整输出必须先写入片上 Feature Buffer，再作为 Conv2 的输入。
@@ -365,13 +365,13 @@ Conv2 完成
 
 第一版不 gate invalid PE row，因为 Im2Row 已把无效 spatial lane 的 activation 清零。因此 Systolic 的对应 accumulator 自然为零。
 
-但是 PostProcess 加入 bias 后，无效 lane 不再自然保持零。因此 `spatial_valid` 必须继续经过：
+但是 ConvPostProcess 加入 bias 后，无效 lane 不再自然保持零。因此 `spatial_valid` 必须继续经过：
 
 ```text
-Systolic → PostProcess → Pool
+Systolic → ConvPostProcess → Pool
 ```
 
-PostProcess 应继续传递 mask，并建议在输出时把 invalid spatial lane 强制清零，防止 bias/requant 结果意外参与后续处理。
+ConvPostProcess 应继续传递 mask，并建议在输出时把 invalid spatial lane 强制清零，防止 bias/requant 结果意外参与后续处理。
 
 非综合测试应检查同一 spatial tile 的 9 个输入 token 具有一致的 `spatial_valid`。
 
@@ -401,7 +401,7 @@ spatial_tile = output_y × tiles_per_row + tile_x
     → cout_tile
 ```
 
-`spatial_tile` 只是内部合并计数器；外部可观察顺序仍严格等价于 `output_y → tile_x → cout_tile`。第一版不显式输出 H/W 坐标或 `cout_tile_index`。PostProcess 和 Pool 根据固定模式和固定事务顺序维护自己的计数器。
+`spatial_tile` 只是内部合并计数器；外部可观察顺序仍严格等价于 `output_y → tile_x → cout_tile`。第一版不显式输出 H/W 坐标或 `cout_tile_index`。ConvPostProcess 和 Pool 根据固定模式和固定事务顺序维护自己的计数器。
 
 如果 output stream 阻塞，Systolic 不得覆盖当前结果、推进 Cout/spatial 计数器或消费属于下一计算组的 activation。第一版允许 PE 在 result write 阻塞时整体停顿。
 

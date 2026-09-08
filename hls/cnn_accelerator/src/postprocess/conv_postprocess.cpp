@@ -1,4 +1,4 @@
-#include "postprocess.h"
+#include "conv_postprocess.h"
 
 #ifndef __SYNTHESIS__
 #include <assert.h>
@@ -39,7 +39,7 @@ static ap_int<32> checked_bias_add(acc_t accumulator, ap_int<32> bias) {
 
 }  // namespace
 
-activation_t postprocess_requantize(acc_t accumulator,
+activation_t conv_postprocess_requantize(acc_t accumulator,
                                     ap_int<32> bias,
                                     ap_int<32> multiplier,
                                     ap_int<32> shift) {
@@ -60,7 +60,7 @@ activation_t postprocess_requantize(acc_t accumulator,
     return (scaled > 127) ? (activation_t)127 : (activation_t)scaled;
 }
 
-void postprocess(hls::stream<acc_tile_t>& input_stream,
+void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
                  hls::stream<postprocess_param_pack_t>& param_stream,
                  hls::stream<activation_tile_t>& output_stream,
                  int Cout) {
@@ -134,7 +134,7 @@ void postprocess(hls::stream<acc_tile_t>& input_stream,
 #pragma HLS UNROLL
                     if (input.spatial_valid[spatial_lane]) {
                         output.value[spatial_lane][cout_lane] =
-                            postprocess_requantize(
+                            conv_postprocess_requantize(
                                 input.value[spatial_lane][cout_lane],
                                 bias_cache[cout_tile][cout_lane],
                                 multiplier_cache[cout_tile][cout_lane],
