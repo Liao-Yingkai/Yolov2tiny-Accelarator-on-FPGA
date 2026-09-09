@@ -128,3 +128,13 @@ FC MAC 后使用 `src/postprocess/fc_postprocess.*` 的独立后处理：每组5
 ## 生成物目录
 
 今后的 csynth/csim/cosim 工程与日志统一写入仓库根目录 `build/hls/<run-name>/`，不要写入 `hls` 源码树；该目录由 Git 忽略。
+
+## 模块级验证
+
+`cnn_accelerator/testbench/` 保留两组独立的模块 testbench：原有 `test_*.cpp`
+使用确定性程序数据，新增 `test_*_pytorch.cpp` 直接读取 Python exporter 和
+`dump_trace.py` 的单图 golden 数据。后者每个文件只调用一个 DUT top，输入直接来自
+PyTorch 的对应上游边界，不将多个 HLS 模块串接；输出按硬件 stream 顺序恢复坐标后逐项
+比较，不缓存完整 feature map 做重排。运行时 CSV 位于
+`simulation_data/pytorch/<module>/`。当前 Python header 使用绝对路径 include，替换
+trace 或模型结构后须同步检查 shape 断言和索引映射。

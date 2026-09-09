@@ -112,6 +112,8 @@ void fully_connected(hls::stream<channel_pack_t>& input_stream,
 
         fc_acc_pack_t output;
 #pragma HLS ARRAY_PARTITION variable=output.value complete dim=1
+
+
         for (int cout_lane = 0; cout_lane < FC_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
             output.value[cout_lane] = accumulator[cout_lane];
