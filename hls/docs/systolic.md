@@ -2,7 +2,7 @@
 
 ## 1. 模块定位与当前状态
 
-Systolic 位于 Im2Row 与 PostProcess 之间，只负责卷积的 INT8 乘法和 INT32 累加：
+Systolic 位于 Im2Row 与 ConvPostProcess 之间，只负责卷积的 INT8 乘法和 INT32 累加：
 
 ```text
 activation_pack_t
@@ -19,18 +19,18 @@ Bias / Requant / ReLU
 
 本模块不是经典的 A、B 双向传播 wavefront systolic array，而是一个 `spatial × Cout` 的 Broadcast、Output-Stationary PE Array。
 
-本文记录第一版已冻结的架构契约。Systolic 尚未实现和综合，因此文中的 `II=1`、资源映射、时钟频率和反压行为均是待验证目标，不是已有综合结论。
+本文记录第一版已冻结的架构契约。Systolic 已实现，并已完成独立综合；当前实现的 token loop 达到 `II=1`。资源映射、时钟频率和 RTL 级反压行为仍必须随集成持续验证。
 
 ## 2. 单物理实例与运行方式
 
-系统只实例化一套物理 Im2Row、Systolic、PostProcess 和 Pool。Conv1、Conv2 分两个阶段顺序使用同一套硬件：
+系统只实例化一套物理 Im2Row、Systolic、ConvPostProcess 和 Pool。Conv1、Conv2 分两个阶段顺序使用同一套硬件：
 
 ```text
 阶段 1：Conv1
-Input → Im2Row → Systolic → PostProcess → Pool → Pool1 Feature Buffer
+Input → Im2Row → Systolic → ConvPostProcess → Pool → Pool1 Feature Buffer
 
 阶段 2：Conv2
-Pool1 Feature Buffer → Im2Row → Systolic → PostProcess → Pool → FC
+Pool1 Feature Buffer → Im2Row → Systolic → ConvPostProcess → Pool → FC
 ```
 
 每个卷积层内部的模块通过 `hls::stream<>` 连接，并计划在上层形成 DATAFLOW。Conv1 和 Conv2 之间不并发；Pool1 的完整输出必须先写入片上 Feature Buffer，再作为 Conv2 的输入。
@@ -58,31 +58,21 @@ MAX_COUT    = 16
 MAX_COUT_TILES = 4
 ```
 
-当前 `IM2ROW_P=4` 同时被选作 spatial 并行度和 Cout 并行度，但两者在概念上不同：
+`IM2ROW_P=4` 与 Cout 并行度都固定为4，但两者在概念上不同：
 
 ```text
 spatial lane：同一输出行中连续的 4 个 W 位置
 Cout lane：当前 Cout tile 中连续的 4 个输出通道
 ```
 
-后续若调整 Im2Row 的空间并行度，不应未经评估自动改变 Cout 并行度。
-
-运行时支持的两组卷积配置为：
+同一套物理硬件只支持并分时复用下列两组配置：
 
 | 层 | H×W | Cin | Cout | Spatial tiles | Cout tiles |
 |---|---:|---:|---:|---:|---:|
 | Conv1 | 28×28 | 1 | 8 | `28×ceil(28/4)=196` | 2 |
 | Conv2 | 14×14 | 8 | 16 | `14×ceil(14/4)=56` | 4 |
 
-第一版要求：
-
-```text
-0 < Cout <= MAX_COUT
-Cout % COUT_PAR == 0
-0 < Cin <= CIN_PAR
-```
-
-暂不支持 Cout tail；空间 tail 继续使用 Im2Row 已有的 `spatial_valid`。
+函数接口只接收调用级一位`layer_mode`：`LAYER1_MODE`选择Conv1，`LAYER2_MODE`选择Conv2。固定H/W/Cin/Cout、Tile数和Weight Buffer深度都由`src/config.h`的编译期常量派生；不保留通用运行时尺寸端口或拒绝路径。Cout tail不支持，Conv2的空间tail继续使用`spatial_valid=0011`。
 
 ## 4. Activation 接口契约
 
@@ -119,7 +109,7 @@ Im2Row 对一个 spatial tile 连续输出 9 个 token：
 
 Systolic 不需要显式接收 `kh`、`kw`，而是维护 `token=0..8` 计数器。
 
-Im2Row 输出前会把 `channel >= Cin` 的物理通道清零。因此 Systolic 的第一版 PE 不再进行运行时 `channel < Cin` 判断，而是固定计算全部 8 个物理 channel。
+Im2Row 在输入 pixel 刚被消费时完成通道规范化：Conv1 清零 channel 1..7，Conv2 保留全部8通道。因此 Systolic 的 PE 不再进行运行时 `channel < Cin` 判断，而是固定计算全部8个物理 channel。
 
 对于 Conv1：
 
@@ -375,13 +365,13 @@ Conv2 完成
 
 第一版不 gate invalid PE row，因为 Im2Row 已把无效 spatial lane 的 activation 清零。因此 Systolic 的对应 accumulator 自然为零。
 
-但是 PostProcess 加入 bias 后，无效 lane 不再自然保持零。因此 `spatial_valid` 必须继续经过：
+但是 ConvPostProcess 加入 bias 后，无效 lane 不再自然保持零。因此 `spatial_valid` 必须继续经过：
 
 ```text
-Systolic → PostProcess → Pool
+Systolic → ConvPostProcess → Pool
 ```
 
-PostProcess 应继续传递 mask，并建议在输出时把 invalid spatial lane 强制清零，防止 bias/requant 结果意外参与后续处理。
+ConvPostProcess 应继续传递 mask，并建议在输出时把 invalid spatial lane 强制清零，防止 bias/requant 结果意外参与后续处理。
 
 非综合测试应检查同一 spatial tile 的 9 个输入 token 具有一致的 `spatial_valid`。
 
@@ -407,22 +397,21 @@ value[spatial_lane][cout_lane]
 输出顺序固定为：
 
 ```text
-output_y
-    → tile_x
-        → cout_tile
+spatial_tile = output_y × tiles_per_row + tile_x
+    → cout_tile
 ```
 
-第一版不显式输出 H/W 坐标或 `cout_tile_index`。PostProcess 和 Pool 根据相同的运行时 H、W、Cout 以及固定事务顺序维护自己的计数器。
+`spatial_tile` 只是内部合并计数器；外部可观察顺序仍严格等价于 `output_y → tile_x → cout_tile`。第一版不显式输出 H/W 坐标或 `cout_tile_index`。ConvPostProcess 和 Pool 根据固定模式和固定事务顺序维护自己的计数器。
 
 如果 output stream 阻塞，Systolic 不得覆盖当前结果、推进 Cout/spatial 计数器或消费属于下一计算组的 activation。第一版允许 PE 在 result write 阻塞时整体停顿。
 
 ## 14. Stream 事务守恒
 
-设：
+固定模式下：
 
 ```text
-spatial_tiles = H × ceil(W/SPATIAL_PAR)
-cout_tiles    = Cout / COUT_PAR
+Conv1：spatial_tiles = 196，cout_tiles = 2
+Conv2：spatial_tiles = 56， cout_tiles = 4
 ```
 
 一次完整层运行必须满足：
@@ -442,13 +431,14 @@ result stream writes    = spatial_tiles × cout_tiles
 
 Activation replay 不会增加 activation stream 的读取数量；Weight replay 不会增加 weight stream 的读取数量。
 
-## 15. 建议控制层级
+## 15. 实际控制层级
 
 第一版逻辑循环为：
 
 ```text
 for each spatial tile:
     capture tile spatial_valid
+    weight_base = 0
 
     for each Cout tile:
         for token 0..8:
@@ -465,13 +455,14 @@ for each spatial tile:
             PE dot + accumulate
 
         output one acc_tile_t
+        weight_base += 9
 ```
 
-是否使用嵌套循环、loop flatten 或显式状态机，应根据首次综合结果决定。由于第一版允许 Cout tile 边界气泡，控制器不需要为了理论上的严格 9-cycle 输出而过早复杂化。
+实现使用单一 `spatial_tile` 循环，不再在 Systolic 内部根据运行时 H/W 计算或嵌套 `output_y × tile_x`。`weight_base` 为窄地址基址，按每个 Cout tile 加9；这与原有 `cout_tile×9+token` 地址和权重流顺序完全等价。第一版允许 Cout tile 边界气泡，不实现 accumulator ping-pong。
 
 ## 16. HLS 结构要求
 
-第一版计划：
+当前实现：
 
 - spatial lane 循环完全 UNROLL；
 - Cout lane 循环完全 UNROLL；
@@ -479,11 +470,11 @@ for each spatial tile:
 - accumulator 的 spatial/Cout 两维完全 partition；
 - PE 输入所需的 activation/weight lane 和 channel 必须支持同周期并行访问；
 - Weight Buffer 采用四个 64-bit BRAM bank；
-- token reduction loop 尝试 `PIPELINE II=1`；
+- token reduction loop 已约束并在独立综合中达到 `II=1`；
 - Systolic 内部第一版不使用 DATAFLOW；
 - 顶层层内模块连接以后再使用 DATAFLOW。
 
-不得仅因为添加了 `PIPELINE II=1` 就宣称实现了一拍一个 token。首次综合必须检查：
+集成后的综合仍必须检查：
 
 - 实际 token loop II；
 - accumulator recurrence constraint；

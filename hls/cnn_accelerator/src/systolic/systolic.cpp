@@ -6,14 +6,14 @@
 
 namespace {
 
-typedef ap_int<16> product_t;
-typedef ap_int<17> sum2_t;
-typedef ap_int<18> sum4_t;
-typedef ap_int<19> dot_t;
+typedef ap_int<PRODUCT_BITS> product_t;
+typedef ap_int<SYSTOLIC_SUM2_BITS> sum2_t;
+typedef ap_int<SYSTOLIC_SUM4_BITS> sum4_t;
+typedef ap_int<SYSTOLIC_DOT_BITS> dot_t;
 // Activation replay 的一个物理 Bank 字对应一个 spatial lane 的8个 INT8通道。
 // 显式打包避免 HLS 将 activation_pack_t 拆成32个窄存储器。
-typedef ap_uint<64> packed_activation_lane_t;
-typedef ap_uint<64> packed_weight_lane_t;
+typedef ap_uint<SYSTOLIC_ACTIVATION_LANE_BITS> packed_activation_lane_t;
+typedef ap_uint<SYSTOLIC_WEIGHT_LANE_BITS> packed_weight_lane_t;
 
 // 使用显式平衡树，避免依赖累加表达式的默认位宽或综合器将其解释为不平衡链。
 // 8 个 signed INT8 乘积的精确和需要至少19位有符号数。
@@ -103,23 +103,13 @@ static pixel_t unpack_activation_lane(packed_activation_lane_t packed) {
 void systolic(hls::stream<activation_pack_t>& activation_stream,
               hls::stream<weight_pack_t>& weight_stream,
               hls::stream<acc_tile_t>& output_stream,
-              int H,
-              int W,
-              int Cin,
-              int Cout) {
-#ifndef __SYNTHESIS__
-    assert(H > 0 && H <= IM2ROW_MAX_H);
-    assert(W > 0 && W <= IM2ROW_MAX_W);
-    assert(Cin > 0 && Cin <= SYSTOLIC_CIN_PAR);
-    assert(Cout > 0 && Cout <= SYSTOLIC_MAX_COUT);
-    assert((Cout % SYSTOLIC_COUT_PAR) == 0);
-#endif
-
-    if (H <= 0 || H > IM2ROW_MAX_H || W <= 0 || W > IM2ROW_MAX_W ||
-        Cin <= 0 || Cin > SYSTOLIC_CIN_PAR || Cout <= 0 ||
-        Cout > SYSTOLIC_MAX_COUT || (Cout % SYSTOLIC_COUT_PAR) != 0) {
-        return;
-    }
+              layer_mode_t layer_mode) {
+    const bool is_conv2 = (layer_mode == LAYER2_MODE);
+    // 同一个物理PE阵列由一位调用级模式在Conv1、Conv2之间分时复用。
+    const int spatial_tiles = is_conv2 ? CNN_CONV2_SPATIAL_TILES :
+                                         CNN_CONV1_SPATIAL_TILES;
+    const int cout_tiles = is_conv2 ? CNN_CONV2_COUT_TILES :
+                                      CNN_CONV1_COUT_TILES;
 
     // 四个独立64-bit Cout Lane Bank。首个 spatial tile 只写入，后续 Tile
     // 只读取；ram_1p 因此足够。综合时必须确认这些 Bank 映射到 BRAM。
@@ -141,15 +131,9 @@ void systolic(hls::stream<activation_pack_t>& activation_stream,
     acc_t accumulator[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
 #pragma HLS ARRAY_PARTITION variable=accumulator complete dim=0
 
-    /** WARN: 此处partition可能存在问题 */
+    // 4条 Cout Lane 在同一周期广播给全部 spatial PE 行，必须完整分区。
     weight_lane_t active_weight[SYSTOLIC_COUT_PAR];
 #pragma HLS ARRAY_PARTITION variable=active_weight complete dim=1
-
-    const int tiles_per_row =
-        (W + SYSTOLIC_SPATIAL_PAR - 1) / SYSTOLIC_SPATIAL_PAR;
-
-    //Cout当前固定为8或16，能够整除
-    const int cout_tiles = Cout / SYSTOLIC_COUT_PAR;
 
 #ifndef __SYNTHESIS__
     int activation_read_count = 0;
@@ -157,18 +141,19 @@ void systolic(hls::stream<activation_pack_t>& activation_stream,
     int result_write_count = 0;
 #endif
 
-    for (int output_y = 0; output_y < H; ++output_y) {
-        for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-            const bool first_spatial_tile = (output_y == 0 && tile_x == 0);
+    // spatial_tile 与 Im2Row 的 row -> tile_x 顺序完全等价：Conv1 共有196个，
+    // Conv2 共有56个。合并计数器不改变 activation 或 result 的事务顺序。
+    for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
+            const bool first_spatial_tile = (spatial_tile == 0);
             ap_uint<SYSTOLIC_SPATIAL_PAR> tile_spatial_valid = 0;
+            ap_uint<6> weight_base = 0;
 
             for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
                 for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS;
                      ++token) {
 #pragma HLS PIPELINE II=1
                     activation_pack_t activation;
-                    const int weight_address =
-                        cout_tile * SYSTOLIC_KERNEL_TOKENS + token;
+                    const ap_uint<6> weight_address = weight_base + token;
 
                     // 每个 spatial Tile 仅在第一个 Cout Tile 消费9个新的
                     // Im2Row token。其余 Cout Tile 通过本地缓冲回放。
@@ -272,12 +257,11 @@ void systolic(hls::stream<activation_pack_t>& activation_stream,
 #ifndef __SYNTHESIS__
                 ++result_write_count;
 #endif
+                weight_base += SYSTOLIC_KERNEL_TOKENS;
             }
-        }
     }
 
 #ifndef __SYNTHESIS__
-    const int spatial_tiles = H * tiles_per_row;
     assert(activation_read_count ==
            spatial_tiles * SYSTOLIC_KERNEL_TOKENS);
     assert(weight_read_count == cout_tiles * SYSTOLIC_KERNEL_TOKENS);
