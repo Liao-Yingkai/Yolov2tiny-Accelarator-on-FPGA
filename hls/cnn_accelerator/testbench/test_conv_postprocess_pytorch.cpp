@@ -84,17 +84,18 @@ static int bias_relu_value(bool conv2, int y, int x, int output) {
     return biased > 0 ? (int)biased : 0;
 }
 
-static int run_layer(bool conv2, hls::stream<acc_tile_t>& input_stream,
+static int run_layer(layer_mode_t layer_mode,
+                     hls::stream<acc_tile_t>& input_stream,
                      hls::stream<postprocess_param_pack_t>& param_stream,
                      hls::stream<activation_tile_t>& output_stream,
                      const char* name, const std::string& directory) {
+    const bool conv2 = (layer_mode == LAYER2_MODE);
     const int H = conv2 ? CNN_CONV2_H : CNN_CONV1_H;
     const int W = conv2 ? CNN_CONV2_W : CNN_CONV1_W;
     const int Cout = conv2 ? CNN_CONV2_COUT : CNN_CONV1_COUT;
-    const int tiles_per_row = (W + SYSTOLIC_SPATIAL_PAR - 1) /
-                              SYSTOLIC_SPATIAL_PAR;
-    const int cout_tiles = Cout / SYSTOLIC_COUT_PAR;
-    const int spatial_tiles = H * tiles_per_row;
+    const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
+    const int cout_tiles = conv2 ? CNN_CONV2_COUT_TILES : CNN_CONV1_COUT_TILES;
+    const int spatial_tiles = conv2 ? CNN_CONV2_SPATIAL_TILES : CNN_CONV1_SPATIAL_TILES;
     const std::string prefix = directory + "/" + name;
     std::ofstream input_csv, param_csv, output_csv;
     if (!open_csv(input_csv, prefix + "_input.csv",
@@ -113,7 +114,8 @@ static int run_layer(bool conv2, hls::stream<acc_tile_t>& input_stream,
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
         const int y = spatial_tile / tiles_per_row;
         const int tile_x = spatial_tile % tiles_per_row;
-        const int valid_mask = (conv2 && tile_x == tiles_per_row - 1) ? 0x3 : 0xf;
+        const int valid_mask = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
+            ? CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
         for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
             acc_tile_t input;
             input.spatial_valid = valid_mask;
@@ -173,13 +175,14 @@ static int run_layer(bool conv2, hls::stream<acc_tile_t>& input_stream,
         }
     }
 
-    conv_postprocess(input_stream, param_stream, output_stream, Cout);
+    conv_postprocess(input_stream, param_stream, output_stream, layer_mode);
     int comparisons = 0;
     int outputs_read = 0;
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
         const int y = spatial_tile / tiles_per_row;
         const int tile_x = spatial_tile % tiles_per_row;
-        const int expected_valid = (conv2 && tile_x == tiles_per_row - 1) ? 0x3 : 0xf;
+        const int expected_valid = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
+            ? CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
         for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
             const activation_tile_t actual = output_stream.read();
             const int actual_valid = actual.spatial_valid.to_uint();
@@ -236,34 +239,34 @@ static int run_layer(bool conv2, hls::stream<acc_tile_t>& input_stream,
 }  // namespace
 
 static_assert(sizeof(trace_conv1_systolic_int32_nhwc) /
-              sizeof(trace_conv1_systolic_int32_nhwc[0]) == 28 * 28 * 8,
+              sizeof(trace_conv1_systolic_int32_nhwc[0]) == CNN_CONV1_H * CNN_CONV1_W * CNN_CONV1_COUT,
               "conv1 systolic trace shape changed");
 static_assert(sizeof(trace_conv1_postprocess_int32_nhwc) /
-              sizeof(trace_conv1_postprocess_int32_nhwc[0]) == 28 * 28 * 8,
+              sizeof(trace_conv1_postprocess_int32_nhwc[0]) == CNN_CONV1_H * CNN_CONV1_W * CNN_CONV1_COUT,
               "conv1 postprocess trace shape changed");
 static_assert(sizeof(trace_conv1_requant_int8_nhwc) /
-              sizeof(trace_conv1_requant_int8_nhwc[0]) == 28 * 28 * 8,
+              sizeof(trace_conv1_requant_int8_nhwc[0]) == CNN_CONV1_H * CNN_CONV1_W * CNN_CONV1_COUT,
               "conv1 requant trace shape changed");
 static_assert(sizeof(trace_conv2_systolic_int32_nhwc) /
-              sizeof(trace_conv2_systolic_int32_nhwc[0]) == 14 * 14 * 16,
+              sizeof(trace_conv2_systolic_int32_nhwc[0]) == CNN_CONV2_H * CNN_CONV2_W * CNN_CONV2_COUT,
               "conv2 systolic trace shape changed");
 static_assert(sizeof(trace_conv2_postprocess_int32_nhwc) /
-              sizeof(trace_conv2_postprocess_int32_nhwc[0]) == 14 * 14 * 16,
+              sizeof(trace_conv2_postprocess_int32_nhwc[0]) == CNN_CONV2_H * CNN_CONV2_W * CNN_CONV2_COUT,
               "conv2 postprocess trace shape changed");
 static_assert(sizeof(trace_conv2_requant_int8_nhwc) /
-              sizeof(trace_conv2_requant_int8_nhwc[0]) == 14 * 14 * 16,
+              sizeof(trace_conv2_requant_int8_nhwc[0]) == CNN_CONV2_H * CNN_CONV2_W * CNN_CONV2_COUT,
               "conv2 requant trace shape changed");
-static_assert(sizeof(conv1_bias) / sizeof(conv1_bias[0]) == 8,
+static_assert(sizeof(conv1_bias) / sizeof(conv1_bias[0]) == CNN_CONV1_COUT,
               "conv1 bias shape changed");
-static_assert(sizeof(conv2_bias) / sizeof(conv2_bias[0]) == 16,
+static_assert(sizeof(conv2_bias) / sizeof(conv2_bias[0]) == CNN_CONV2_COUT,
               "conv2 bias shape changed");
-static_assert(sizeof(conv1_multiplier) / sizeof(conv1_multiplier[0]) == 8,
+static_assert(sizeof(conv1_multiplier) / sizeof(conv1_multiplier[0]) == CNN_CONV1_COUT,
               "conv1 multiplier shape changed");
-static_assert(sizeof(conv2_multiplier) / sizeof(conv2_multiplier[0]) == 16,
+static_assert(sizeof(conv2_multiplier) / sizeof(conv2_multiplier[0]) == CNN_CONV2_COUT,
               "conv2 multiplier shape changed");
-static_assert(sizeof(conv1_shift) / sizeof(conv1_shift[0]) == 8,
+static_assert(sizeof(conv1_shift) / sizeof(conv1_shift[0]) == CNN_CONV1_COUT,
               "conv1 shift shape changed");
-static_assert(sizeof(conv2_shift) / sizeof(conv2_shift[0]) == 16,
+static_assert(sizeof(conv2_shift) / sizeof(conv2_shift[0]) == CNN_CONV2_COUT,
               "conv2 shift shape changed");
 
 int main() {
@@ -278,9 +281,9 @@ int main() {
     hls::stream<postprocess_param_pack_t> param_stream;
     hls::stream<activation_tile_t> output_stream;
     int errors = 0;
-    errors += run_layer(false, input_stream, param_stream, output_stream,
+    errors += run_layer(LAYER1_MODE, input_stream, param_stream, output_stream,
                         "conv1", directory);
-    errors += run_layer(true, input_stream, param_stream, output_stream,
+    errors += run_layer(LAYER2_MODE, input_stream, param_stream, output_stream,
                         "conv2", directory);
     std::cout << "ConvPostProcess PyTorch CSV保存路径=" << directory << std::endl;
     return errors ? 1 : 0;

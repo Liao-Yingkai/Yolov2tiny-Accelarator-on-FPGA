@@ -6,7 +6,7 @@
 
 namespace {
 
-typedef ap_uint<FC_CIN_PAR * ACTIVATION_BITS> fc_activation_word_t;
+typedef ap_uint<FC_ACTIVATION_WORD_BITS> fc_activation_word_t;
 
 // 保留 activation 的二进制补码位型；Pool2 channel_pack_t 的 channel[0..7]
 // 就是当前 NHWC token 的连续8个通道。
@@ -32,13 +32,13 @@ static activation_t unpack_activation(const fc_activation_word_t& packed,
     return result;
 }
 
-// 固定8项 INT8 dot 的4层平衡加法树。明确的16/17/18/19位中间值避免
+// 固定8项INT8 dot的4层平衡加法树。中间位宽均从PRODUCT_BITS派生，避免
 // 工具将链式加法改写为不必要的长进位路径。
-static ap_int<19> dot8(const fc_activation_word_t& activation_word,
+static ap_int<FC_DOT_BITS> dot8(const fc_activation_word_t& activation_word,
                        const fc_weight_pack_t& weights,
                        int cout_lane) {
 #pragma HLS INLINE
-    ap_int<16> product[FC_CIN_PAR];
+    ap_int<PRODUCT_BITS> product[FC_CIN_PAR];
 #pragma HLS ARRAY_PARTITION variable=product complete dim=1
     for (int cin_lane = 0; cin_lane < FC_CIN_PAR; ++cin_lane) {
 #pragma HLS UNROLL
@@ -46,13 +46,19 @@ static ap_int<19> dot8(const fc_activation_word_t& activation_word,
                             weights.value[cout_lane][cin_lane];
     }
 
-    const ap_int<17> sum17_0 = (ap_int<17>)product[0] + product[1];
-    const ap_int<17> sum17_1 = (ap_int<17>)product[2] + product[3];
-    const ap_int<17> sum17_2 = (ap_int<17>)product[4] + product[5];
-    const ap_int<17> sum17_3 = (ap_int<17>)product[6] + product[7];
-    const ap_int<18> sum18_0 = (ap_int<18>)sum17_0 + sum17_1;
-    const ap_int<18> sum18_1 = (ap_int<18>)sum17_2 + sum17_3;
-    return (ap_int<19>)sum18_0 + sum18_1;
+    const ap_int<FC_SUM2_BITS> sum2_0 =
+        (ap_int<FC_SUM2_BITS>)product[0] + product[1];
+    const ap_int<FC_SUM2_BITS> sum2_1 =
+        (ap_int<FC_SUM2_BITS>)product[2] + product[3];
+    const ap_int<FC_SUM2_BITS> sum2_2 =
+        (ap_int<FC_SUM2_BITS>)product[4] + product[5];
+    const ap_int<FC_SUM2_BITS> sum2_3 =
+        (ap_int<FC_SUM2_BITS>)product[6] + product[7];
+    const ap_int<FC_SUM4_BITS> sum4_0 =
+        (ap_int<FC_SUM4_BITS>)sum2_0 + sum2_1;
+    const ap_int<FC_SUM4_BITS> sum4_1 =
+        (ap_int<FC_SUM4_BITS>)sum2_2 + sum2_3;
+    return (ap_int<FC_DOT_BITS>)sum4_0 + sum4_1;
 }
 
 }  // namespace
@@ -60,9 +66,9 @@ static ap_int<19> dot8(const fc_activation_word_t& activation_word,
 void fully_connected(hls::stream<channel_pack_t>& input_stream,
                      hls::stream<fc_weight_pack_t>& weight_stream,
                      hls::stream<fc_acc_pack_t>& output_stream) {
-    // 98 x 64 bit = 784 bytes。只在第一个 out tile 写，第二个 out tile
+    // FC_ACTIVATION_BUFFER_DEPTH x FC_ACTIVATION_WORD_BITS bit。只在第一个out tile写，第二个out tile
     // 只读，因此一个 ram_1p BRAM 足以承担该回放缓存。
-    ap_uint<64> activation_buffer[FC_INPUT_PACKS];
+    fc_activation_word_t activation_buffer[FC_ACTIVATION_BUFFER_DEPTH];
 #pragma HLS BIND_STORAGE variable=activation_buffer type=ram_1p impl=bram
 
 #ifndef __SYNTHESIS__
@@ -71,7 +77,7 @@ void fully_connected(hls::stream<channel_pack_t>& input_stream,
     int output_write_count = 0;
 #endif
 
-    //tile0: logit0-4, tile1: logit 5-8
+    // tile0: logit0-4, tile1: logit5-9
     for (int out_tile = 0; out_tile < FC_OUT_TILES; ++out_tile) {
         acc_t accumulator[FC_COUT_PAR];
 #pragma HLS ARRAY_PARTITION variable=accumulator complete dim=1
@@ -80,8 +86,8 @@ void fully_connected(hls::stream<channel_pack_t>& input_stream,
 #pragma HLS PIPELINE II=1
             fc_activation_word_t activation_word;
             if (out_tile == 0) {
-                // 第一 Tile 直接使用当前 stream token 计算，并显式写入64-bit
-                // Buffer 字；不能要求上游为第二 Tile 重放98个输入事务。
+                // 第一Tile直接使用当前stream token计算，并显式写入一个完整
+                // FC activation word；不能要求上游为第二Tile重放输入事务。
                 const channel_pack_t input = input_stream.read();
                 activation_word = pack_activation(input);
                 activation_buffer[token] = activation_word;
@@ -99,8 +105,8 @@ void fully_connected(hls::stream<channel_pack_t>& input_stream,
 #endif
             for (int cout_lane = 0; cout_lane < FC_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
-                const ap_int<19> dot = dot8(activation_word, weights,
-                                            cout_lane);
+                const ap_int<FC_DOT_BITS> dot = dot8(activation_word, weights,
+                                                     cout_lane);
                 // token0 覆盖旧值，避免跨 out tile 或跨函数调用残留累加器状态。
                 if (token == 0) {
                     accumulator[cout_lane] = dot;

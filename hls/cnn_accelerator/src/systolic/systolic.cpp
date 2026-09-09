@@ -6,14 +6,14 @@
 
 namespace {
 
-typedef ap_int<16> product_t;
-typedef ap_int<17> sum2_t;
-typedef ap_int<18> sum4_t;
-typedef ap_int<19> dot_t;
+typedef ap_int<PRODUCT_BITS> product_t;
+typedef ap_int<SYSTOLIC_SUM2_BITS> sum2_t;
+typedef ap_int<SYSTOLIC_SUM4_BITS> sum4_t;
+typedef ap_int<SYSTOLIC_DOT_BITS> dot_t;
 // Activation replay 的一个物理 Bank 字对应一个 spatial lane 的8个 INT8通道。
 // 显式打包避免 HLS 将 activation_pack_t 拆成32个窄存储器。
-typedef ap_uint<64> packed_activation_lane_t;
-typedef ap_uint<64> packed_weight_lane_t;
+typedef ap_uint<SYSTOLIC_ACTIVATION_LANE_BITS> packed_activation_lane_t;
+typedef ap_uint<SYSTOLIC_WEIGHT_LANE_BITS> packed_weight_lane_t;
 
 // 使用显式平衡树，避免依赖累加表达式的默认位宽或综合器将其解释为不平衡链。
 // 8 个 signed INT8 乘积的精确和需要至少19位有符号数。
@@ -103,21 +103,13 @@ static pixel_t unpack_activation_lane(packed_activation_lane_t packed) {
 void systolic(hls::stream<activation_pack_t>& activation_stream,
               hls::stream<weight_pack_t>& weight_stream,
               hls::stream<acc_tile_t>& output_stream,
-              int H,
-              int W,
-              int Cin,
-              int Cout) {
-    const bool is_conv2 = (Cin == CNN_CONV2_CIN);
-#ifndef __SYNTHESIS__
-    assert((H == CNN_CONV1_H && W == CNN_CONV1_W &&
-            Cin == CNN_CONV1_CIN && Cout == CNN_CONV1_COUT) ||
-           (H == CNN_CONV2_H && W == CNN_CONV2_W &&
-            Cin == CNN_CONV2_CIN && Cout == CNN_CONV2_COUT));
-#endif
-    // 综合态仅由 Cin 选择固定网络模式；H/W/Cout 不参与核心调度。调用方必须
-    // 遵守接口契约，使同一个物理PE阵列按 Conv1、Conv2 分时复用。
-    const int spatial_tiles = is_conv2 ? 56 : 196;
-    const int cout_tiles = is_conv2 ? 4 : 2;
+              layer_mode_t layer_mode) {
+    const bool is_conv2 = (layer_mode == LAYER2_MODE);
+    // 同一个物理PE阵列由一位调用级模式在Conv1、Conv2之间分时复用。
+    const int spatial_tiles = is_conv2 ? CNN_CONV2_SPATIAL_TILES :
+                                         CNN_CONV1_SPATIAL_TILES;
+    const int cout_tiles = is_conv2 ? CNN_CONV2_COUT_TILES :
+                                      CNN_CONV1_COUT_TILES;
 
     // 四个独立64-bit Cout Lane Bank。首个 spatial tile 只写入，后续 Tile
     // 只读取；ram_1p 因此足够。综合时必须确认这些 Bank 映射到 BRAM。

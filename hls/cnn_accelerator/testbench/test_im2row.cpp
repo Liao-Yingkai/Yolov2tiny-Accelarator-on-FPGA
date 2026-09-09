@@ -41,9 +41,13 @@ static bool open_csv(std::ofstream& file, const std::string& path,
 
 static int run_layer(hls::stream<pixel_t>& input_stream,
                      hls::stream<activation_pack_t>& output_stream,
-                     int H, int W, int Cin, const char* name,
+                     layer_mode_t layer_mode, const char* name,
                      const std::string& directory) {
-    const int tiles_per_row = (W + IM2ROW_P - 1) / IM2ROW_P;
+    const bool conv2 = (layer_mode == LAYER2_MODE);
+    const int H = conv2 ? CNN_CONV2_H : CNN_CONV1_H;
+    const int W = conv2 ? CNN_CONV2_W : CNN_CONV1_W;
+    const int Cin = conv2 ? CNN_CONV2_CIN : CNN_CONV1_CIN;
+    const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
     const int expected_inputs = H * W;
     const int expected_packs = H * tiles_per_row * SYSTOLIC_KERNEL_TOKENS;
     std::ofstream input_csv;
@@ -63,7 +67,7 @@ static int run_layer(hls::stream<pixel_t>& input_stream,
         for (int col = 0; col < W; ++col) {
             pixel_t pixel;
             for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
-                const int value = (Cin == 1 && channel != 0) ?
+                const int value = (Cin == CNN_CONV1_CIN && channel != 0) ?
                     (91 + channel) : sample_value(row, col, channel);
                 pixel.channel[channel] = value;
                 input_csv << row << ',' << col << ',' << channel << ','
@@ -74,18 +78,18 @@ static int run_layer(hls::stream<pixel_t>& input_stream,
         }
     }
 
-    im2row(input_stream, output_stream, H, W, Cin);
+    im2row(input_stream, output_stream, layer_mode);
     int errors = 0;
     int comparisons = 0;
     int transaction = 0;
     for (int row = 0; row < H; ++row) {
         for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-            const int valid_mask = (Cin == CNN_CONV2_CIN && tile_x == 3) ?
-                0x3 : 0xf;
+            const int valid_mask = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X) ?
+                CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
             for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS; ++token) {
                 const activation_pack_t actual = output_stream.read();
-                const int kh = token / 3;
-                const int kw = token % 3;
+                const int kh = token / IM2ROW_KERNEL;
+                const int kw = token % IM2ROW_KERNEL;
                 const int actual_valid = actual.spatial_valid.to_uint();
                 const bool valid_match = actual_valid == valid_mask;
                 if (!valid_match) {
@@ -106,7 +110,7 @@ static int run_layer(hls::stream<pixel_t>& input_stream,
                         const bool padding = valid &&
                             (sy < 0 || sy >= H || sx < 0 || sx >= W);
                         int expected = 0;
-                        if (valid && !padding && (Cin == 8 || channel == 0))
+                        if (valid && !padding && (Cin == CNN_CONV2_CIN || channel == 0))
                             expected = sample_value(sy, sx, channel);
                         const int got = actual.pixel[lane].channel[channel].to_int();
                         const bool match = valid_match && got == expected;
@@ -154,8 +158,8 @@ int main() {
     hls::stream<pixel_t> input_stream;
     hls::stream<activation_pack_t> output_stream;
     int errors = 0;
-    errors += run_layer(input_stream, output_stream, 28, 28, 1, "conv1", directory);
-    errors += run_layer(input_stream, output_stream, 14, 14, 8, "conv2", directory);
+    errors += run_layer(input_stream, output_stream, LAYER1_MODE, "conv1", directory);
+    errors += run_layer(input_stream, output_stream, LAYER2_MODE, "conv2", directory);
     std::cout << "Im2Row CSV保存路径=" << directory << std::endl;
     return errors ? 1 : 0;
 }

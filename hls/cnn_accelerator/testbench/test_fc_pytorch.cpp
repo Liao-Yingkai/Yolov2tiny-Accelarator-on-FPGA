@@ -51,14 +51,14 @@ static int run_fc(hls::stream<channel_pack_t>& input_stream,
     }
 
     int inputs_written = 0;
-    for (int y = 0; y < 7; ++y) {
-        for (int x = 0; x < 7; ++x) {
-            for (int pack = 0; pack < 2; ++pack) {
+    for (int y = 0; y < CNN_POOL2_H; ++y) {
+        for (int x = 0; x < CNN_POOL2_W; ++x) {
+            for (int pack = 0; pack < CNN_POOL2_CHANNEL_PACKS; ++pack) {
                 channel_pack_t input;
                 for (int lane = 0; lane < FC_CIN_PAR; ++lane) {
                     const int channel = pack * FC_CIN_PAR + lane;
                     const int value = trace_pool2_int8_nhwc[
-                        (y * 7 + x) * CNN_CONV2_COUT + channel];
+                        (y * CNN_POOL2_W + x) * CNN_POOL2_C + channel];
                     input.channel[lane] = value;
                     input_csv << inputs_written << ',' << y << ',' << x << ','
                               << pack << ',' << lane << ',' << channel << ','
@@ -136,7 +136,7 @@ static int run_fc(hls::stream<channel_pack_t>& input_stream,
 }  // namespace
 
 static_assert(sizeof(trace_pool2_int8_nhwc) / sizeof(trace_pool2_int8_nhwc[0]) ==
-              7 * 7 * 16, "pool2 trace shape changed");
+              CNN_POOL2_H * CNN_POOL2_W * CNN_POOL2_C, "pool2 trace shape changed");
 static_assert(sizeof(trace_fc_systolic_int32) / sizeof(trace_fc_systolic_int32[0]) ==
               FC_OUTPUTS, "fc systolic trace shape changed");
 static_assert(sizeof(fc_weight) / sizeof(fc_weight[0]) ==

@@ -47,10 +47,10 @@ static int weight_value(int cout_tile, int token, int cout_lane,
     return ((cout_tile * 5 + token * 3 + cout_lane * 7 + channel * 2) % 13) - 6;
 }
 
-static int token_contribution(int Cin, int token) {
+static int token_contribution(bool conv2, int token) {
     int sum = 0;
     for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
-        const int activation = (Cin == CNN_CONV2_CIN || channel == 0) ?
+        const int activation = (conv2 || channel == 0) ?
             activation_value(0, token, 0, channel) : 0;
         sum += activation * weight_value(0, token, 0, channel);
     }
@@ -60,12 +60,12 @@ static int token_contribution(int Cin, int token) {
 static int run_layer(hls::stream<activation_pack_t>& activation_stream,
                      hls::stream<weight_pack_t>& weight_stream,
                      hls::stream<acc_tile_t>& output_stream,
-                     int H, int W, int Cin, int Cout, const char* name,
+                     layer_mode_t layer_mode, const char* name,
                      const std::string& directory) {
-    const int tiles_per_row = (W + SYSTOLIC_SPATIAL_PAR - 1) /
-                              SYSTOLIC_SPATIAL_PAR;
-    const int spatial_tiles = H * tiles_per_row;
-    const int cout_tiles = Cout / SYSTOLIC_COUT_PAR;
+    const bool conv2 = (layer_mode == LAYER2_MODE);
+    const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
+    const int spatial_tiles = conv2 ? CNN_CONV2_SPATIAL_TILES : CNN_CONV1_SPATIAL_TILES;
+    const int cout_tiles = conv2 ? CNN_CONV2_COUT_TILES : CNN_CONV1_COUT_TILES;
     const int expected_activations = spatial_tiles * SYSTOLIC_KERNEL_TOKENS;
     const int expected_weights = cout_tiles * SYSTOLIC_KERNEL_TOKENS;
     const int expected_outputs = spatial_tiles * cout_tiles;
@@ -84,8 +84,8 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
     }
 
     int errors = 0;
-    const int token0_dot = token_contribution(Cin, 0);
-    const int token8_dot = token_contribution(Cin, 8);
+    const int token0_dot = token_contribution(conv2, 0);
+    const int token8_dot = token_contribution(conv2, SYSTOLIC_KERNEL_TOKENS - 1);
     if (token0_dot == 0 || token8_dot == 0) {
         ++errors;
         std::cerr << name << " token contribution is zero: token0="
@@ -96,15 +96,15 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
         const int row = spatial_tile / tiles_per_row;
         const int tile_x = spatial_tile % tiles_per_row;
-        const int valid_mask = (Cin == CNN_CONV2_CIN && tile_x == 3) ?
-            0x3 : 0xf;
+        const int valid_mask = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X) ?
+            CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
         for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS; ++token) {
             activation_pack_t pack;
             pack.spatial_valid = valid_mask;
             for (int lane = 0; lane < SYSTOLIC_SPATIAL_PAR; ++lane) {
                 for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
                     const int value = ((valid_mask & (1 << lane)) &&
-                                       (Cin == CNN_CONV2_CIN || channel == 0)) ?
+                                       (conv2 || channel == 0)) ?
                         activation_value(spatial_tile, token, lane, channel) : 0;
                     pack.pixel[lane].channel[channel] = value;
                     activation_csv << activations_written << ',' << spatial_tile
@@ -139,14 +139,14 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
         }
     }
 
-    systolic(activation_stream, weight_stream, output_stream, H, W, Cin, Cout);
+    systolic(activation_stream, weight_stream, output_stream, layer_mode);
     int comparisons = 0;
     int outputs_read = 0;
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
         const int row = spatial_tile / tiles_per_row;
         const int tile_x = spatial_tile % tiles_per_row;
-        const int expected_valid = (Cin == CNN_CONV2_CIN && tile_x == 3) ?
-            0x3 : 0xf;
+        const int expected_valid = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X) ?
+            CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
         for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
             const acc_tile_t actual_tile = output_stream.read();
             const int actual_valid = actual_tile.spatial_valid.to_uint();
@@ -171,7 +171,7 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
                             for (int channel = 0; channel < SYSTOLIC_CIN_PAR;
                                  ++channel) {
                                 const int activation =
-                                    (Cin == CNN_CONV2_CIN || channel == 0) ?
+                                    (conv2 || channel == 0) ?
                                     activation_value(spatial_tile, token,
                                                      spatial_lane, channel) : 0;
                                 sum += (int64_t)activation * weight_value(
@@ -189,7 +189,7 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
                     output_csv << outputs_read << ',' << spatial_tile << ','
                                << row << ',' << tile_x << ',' << cout_tile
                                << ",-1," << spatial_lane << ',' << cout_lane
-                               << ',' << (cout_tile * 4 + cout_lane) << ','
+                               << ',' << (cout_tile * SYSTOLIC_COUT_PAR + cout_lane) << ','
                                << expected_valid << ',' << actual_valid << ','
                                << valid_match << ',' << sum << ',' << actual
                                << ',' << match << '\n';
@@ -241,11 +241,9 @@ int main() {
     hls::stream<acc_tile_t> output_stream;
     int errors = 0;
     errors += run_layer(activation_stream, weight_stream, output_stream,
-                        CNN_CONV1_H, CNN_CONV1_W, CNN_CONV1_CIN,
-                        CNN_CONV1_COUT, "conv1", directory);
+                        LAYER1_MODE, "conv1", directory);
     errors += run_layer(activation_stream, weight_stream, output_stream,
-                        CNN_CONV2_H, CNN_CONV2_W, CNN_CONV2_CIN,
-                        CNN_CONV2_COUT, "conv2", directory);
+                        LAYER2_MODE, "conv2", directory);
     std::cout << "Systolic CSV保存路径=" << directory << std::endl;
     return errors ? 1 : 0;
 }

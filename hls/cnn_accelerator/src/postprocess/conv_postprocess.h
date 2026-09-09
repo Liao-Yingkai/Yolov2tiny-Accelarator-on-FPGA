@@ -19,10 +19,10 @@ activation_t conv_postprocess_requantize(acc_t accumulator,
 //               参数缓存回放。
 // output_stream：与 input_stream 完全相同的事务顺序，元素为 requantized
 //                activation_tile_t。
-// Cout：仅允许8（Conv1）或16（Conv2）；非法值仅在非综合态断言。
+// layer_mode在一次完整层调用中保持稳定：LAYER1_MODE选择Conv1，LAYER2_MODE选择Conv2。
 void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
                       hls::stream<postprocess_param_pack_t>& param_stream,
                       hls::stream<activation_tile_t>& output_stream,
-                      int Cout);
+                      layer_mode_t layer_mode);
 
 #endif  // CNN_ACCELERATOR_POSTPROCESS_CONV_POSTPROCESS_H_

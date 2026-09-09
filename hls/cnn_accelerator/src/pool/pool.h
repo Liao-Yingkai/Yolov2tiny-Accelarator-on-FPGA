@@ -8,12 +8,9 @@
 // 空间 Lane 和4条连续输出通道。输出为紧密的 NHWC 通道 Pack 流：
 // pooled_H -> pooled_W -> channel_pack。
 //
-// 只允许 Pool1 (28, 28, 8) 与 Pool2 (14, 14, 16)。综合态仅以 Cout 选择
-// 固定模式，H/W 的完整组合由顶层调用契约保证；非综合态会断言完整三元组。
+// layer_mode在一次完整层调用中保持稳定：LAYER1_MODE选择Pool1，LAYER2_MODE选择Pool2。
 void maxpool(hls::stream<activation_tile_t>& input_stream,
              hls::stream<channel_pack_t>& output_stream,
-             int H,
-             int W,
-             int Cout);
+             layer_mode_t layer_mode);
 
 #endif  // CNN_ACCELERATOR_POOL_POOL_H_

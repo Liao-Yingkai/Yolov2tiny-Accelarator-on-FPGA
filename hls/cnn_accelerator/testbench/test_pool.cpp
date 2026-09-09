@@ -43,14 +43,17 @@ static int source_index(int y, int x, int channel, int width, int cout) {
     return (y * width + x) * cout + channel;
 }
 
-static int run_layer(int H, int W, int Cout, const char* name,
+static int run_layer(layer_mode_t layer_mode, const char* name,
                      const std::string& directory) {
-    const int tiles_per_row = (W + SYSTOLIC_SPATIAL_PAR - 1) /
-                              SYSTOLIC_SPATIAL_PAR;
-    const int cout_tiles = Cout / SYSTOLIC_COUT_PAR;
-    const int pooled_h = H / 2;
-    const int pooled_w = W / 2;
-    const int channel_packs = Cout / IM2ROW_MAX_CHANNELS;
+    const bool pool2 = (layer_mode == LAYER2_MODE);
+    const int H = pool2 ? CNN_CONV2_H : CNN_CONV1_H;
+    const int W = pool2 ? CNN_CONV2_W : CNN_CONV1_W;
+    const int Cout = pool2 ? CNN_CONV2_COUT : CNN_CONV1_COUT;
+    const int tiles_per_row = pool2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
+    const int cout_tiles = pool2 ? CNN_CONV2_COUT_TILES : CNN_CONV1_COUT_TILES;
+    const int pooled_h = pool2 ? CNN_POOL2_H : CNN_POOL1_H;
+    const int pooled_w = pool2 ? CNN_POOL2_W : CNN_POOL1_W;
+    const int channel_packs = pool2 ? CNN_POOL2_CHANNEL_PACKS : CNN_POOL1_CHANNEL_PACKS;
     const int expected_inputs = H * tiles_per_row * cout_tiles;
     const int expected_outputs = pooled_h * pooled_w * channel_packs;
     hls::stream<activation_tile_t> input_stream;
@@ -79,8 +82,8 @@ static int run_layer(int H, int W, int Cout, const char* name,
     int inputs_written = 0;
     for (int row = 0; row < H; ++row) {
         for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-            const int valid_mask = (Cout == CNN_CONV2_COUT && tile_x == 3) ?
-                0x3 : 0xf;
+            const int valid_mask = (pool2 && tile_x == CNN_CONV2_LAST_TILE_X) ?
+                CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
             for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
                 activation_tile_t input;
                 input.spatial_valid = valid_mask;
@@ -108,7 +111,7 @@ static int run_layer(int H, int W, int Cout, const char* name,
         }
     }
 
-    maxpool(input_stream, output_stream, H, W, Cout);
+    maxpool(input_stream, output_stream, layer_mode);
     int errors = 0;
     int comparisons = 0;
     int outputs_read = 0;
@@ -174,10 +177,8 @@ int main() {
         return 1;
     }
     int errors = 0;
-    errors += run_layer(CNN_CONV1_H, CNN_CONV1_W, CNN_CONV1_COUT,
-                        "pool1", directory);
-    errors += run_layer(CNN_CONV2_H, CNN_CONV2_W, CNN_CONV2_COUT,
-                        "pool2", directory);
+    errors += run_layer(LAYER1_MODE, "pool1", directory);
+    errors += run_layer(LAYER2_MODE, "pool2", directory);
     std::cout << "Pool CSV保存路径=" << directory << std::endl;
     return errors ? 1 : 0;
 }

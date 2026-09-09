@@ -56,9 +56,9 @@ static void write_case(hls::stream<channel_pack_t>& input_stream,
     inputs_written = 0;
     weights_written = 0;
     // NHWC 49像素各写两个连续8通道pack，恰好98个输入事务。
-    for (int y = 0; y < 7; ++y) {
-        for (int x = 0; x < 7; ++x) {
-            for (int pack = 0; pack < 2; ++pack) {
+    for (int y = 0; y < CNN_POOL2_H; ++y) {
+        for (int x = 0; x < CNN_POOL2_W; ++x) {
+            for (int pack = 0; pack < CNN_POOL2_CHANNEL_PACKS; ++pack) {
                 channel_pack_t input;
                 for (int lane = 0; lane < FC_CIN_PAR; ++lane) {
                     const int channel = pack * FC_CIN_PAR + lane;
@@ -102,10 +102,10 @@ static int check_mac(hls::stream<fc_acc_pack_t>& output_stream, int case_id,
                      int& outputs_read) {
     int32_t reference[FC_OUTPUTS] = {0};
     // 明确的784x10参考公式，不复用DUT的pack/replay实现。
-    for (int y = 0; y < 7; ++y) {
-        for (int x = 0; x < 7; ++x) {
-            for (int channel = 0; channel < 16; ++channel) {
-                const int input = (y * 7 + x) * 16 + channel;
+    for (int y = 0; y < CNN_POOL2_H; ++y) {
+        for (int x = 0; x < CNN_POOL2_W; ++x) {
+            for (int channel = 0; channel < CNN_POOL2_C; ++channel) {
+                const int input = (y * CNN_POOL2_W + x) * CNN_POOL2_C + channel;
                 const int activation = activation_value(case_id, y, x, channel);
                 for (int output = 0; output < FC_OUTPUTS; ++output) {
                     reference[output] += activation *

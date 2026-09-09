@@ -10,14 +10,10 @@
 //                cout_tile -> token(kh*3+kw)。
 // output_stream：保持 Im2Row 等价的 spatial_tile(row -> tile_x) -> cout_tile 顺序输出 INT32 累加 Tile。
 //
-// 接口仅接受 Conv1=(28,28,1,8) 或 Conv2=(14,14,8,16)。H/W/Cin/Cout 保留以供
-// 单物理模块分时复用；综合态由 Cin 选择固定调度，非法组合仅在非综合态断言。
+// layer_mode在一次完整层调用中保持稳定：LAYER1_MODE选择Conv1，LAYER2_MODE选择Conv2。
 void systolic(hls::stream<activation_pack_t>& activation_stream,
               hls::stream<weight_pack_t>& weight_stream,
               hls::stream<acc_tile_t>& output_stream,
-              int H,
-              int W,
-              int Cin,
-              int Cout);
+              layer_mode_t layer_mode);
 
 #endif  // CNN_ACCELERATOR_SYSTOLIC_SYSTOLIC_H_

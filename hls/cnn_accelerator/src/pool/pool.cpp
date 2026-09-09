@@ -14,9 +14,6 @@ static const int POOL_LINE_WORD_BITS =
     SYSTOLIC_SPATIAL_PAR * SYSTOLIC_COUT_PAR * ACTIVATION_BITS;
 typedef ap_uint<POOL_LINE_WORD_BITS> pool_line_word_t;
 
-static const int POOL_MAX_TILES_PER_ROW = 7;
-static const int POOL_MAX_COUT_TILES = 4;
-
 pool_line_word_t pack_line_word(const activation_tile_t& input) {
 #pragma HLS INLINE
     pool_line_word_t packed = 0;
@@ -66,11 +63,11 @@ activation_t signed_max4(activation_t top_left,
     return signed_max2(top_max, bottom_max);
 }
 
-ap_uint<32> make_pooled_half(const pool_line_word_t& top_word,
-                             const activation_tile_t& bottom_tile,
-                             int first_spatial_lane) {
+ap_uint<POOL_HALF_BITS> make_pooled_half(const pool_line_word_t& top_word,
+                                         const activation_tile_t& bottom_tile,
+                                         int first_spatial_lane) {
 #pragma HLS INLINE
-    ap_uint<32> half = 0;
+    ap_uint<POOL_HALF_BITS> half = 0;
     for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
         const activation_t pooled = signed_max4(
@@ -85,12 +82,13 @@ ap_uint<32> make_pooled_half(const pool_line_word_t& top_word,
     return half;
 }
 
-channel_pack_t make_channel_pack(ap_uint<32> low_half, ap_uint<32> high_half) {
+channel_pack_t make_channel_pack(ap_uint<POOL_HALF_BITS> low_half,
+                                 ap_uint<POOL_HALF_BITS> high_half) {
 #pragma HLS INLINE
     channel_pack_t pack;
     for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
 #pragma HLS UNROLL
-        const ap_uint<32> source = (channel < SYSTOLIC_COUT_PAR) ?
+        const ap_uint<POOL_HALF_BITS> source = (channel < SYSTOLIC_COUT_PAR) ?
             low_half : high_half;
         const int local_channel =
             (channel < SYSTOLIC_COUT_PAR) ? channel :
@@ -120,25 +118,19 @@ ap_uint<2> make_pool_valid(ap_uint<SYSTOLIC_SPATIAL_PAR> top_valid,
 
 void maxpool(hls::stream<activation_tile_t>& input_stream,
              hls::stream<channel_pack_t>& output_stream,
-             int H,
-             int W,
-             int Cout) {
-    const bool is_pool2 = (Cout == CNN_CONV2_COUT);
-#ifndef __SYNTHESIS__
-    assert((H == CNN_CONV1_H && W == CNN_CONV1_W &&
-            Cout == CNN_CONV1_COUT) ||
-           (H == CNN_CONV2_H && W == CNN_CONV2_W &&
-            Cout == CNN_CONV2_COUT));
-#endif
-    // 综合态只保留Cout到固定Pool模式的一位选择；H/W不进入核心调度。
+             layer_mode_t layer_mode) {
+    const bool is_pool2 = (layer_mode == LAYER2_MODE);
+    // 一位调用级模式选择固定Pool1/Pool2调度。
     const int feature_height = is_pool2 ? CNN_CONV2_H : CNN_CONV1_H;
-    const int tiles_per_row = is_pool2 ? 4 : 7;
-    const int cout_tiles = is_pool2 ? 4 : 2;
+    const int tiles_per_row = is_pool2 ? CNN_CONV2_TILES_PER_ROW :
+                                         CNN_CONV1_TILES_PER_ROW;
+    const int cout_tiles = is_pool2 ? CNN_CONV2_COUT_TILES :
+                                      CNN_CONV1_COUT_TILES;
 
     // 地址按每行输入事务顺序递增。Pool1使用地址0..13，Pool2使用
     // 地址0..15；偶数行只写、随后的奇数行只读，因此
     // 单端口BRAM在一个控制分支内不会有并发读写需求。
-    pool_line_word_t line_buffer[16];
+    pool_line_word_t line_buffer[POOL_LINE_BUFFER_DEPTH];
 #pragma HLS BIND_STORAGE variable=line_buffer type=ram_1p impl=bram
 
     // line_valid 只保存上一偶数行各空间tile的4-bit valid；同一tile所有
@@ -148,7 +140,7 @@ void maxpool(hls::stream<activation_tile_t>& input_stream,
 
     // [pooled position][Cout tile]，每个half含该Cout tile的4个pool结果。
     // 完全分区后每拍可独立写两个half，避免64-bit连续read-modify-write依赖。
-    ap_uint<32> pooled_half[2][POOL_MAX_COUT_TILES];
+    ap_uint<POOL_HALF_BITS> pooled_half[2][POOL_MAX_COUT_TILES];
 #pragma HLS ARRAY_PARTITION variable=pooled_half complete dim=0
 
 #ifndef __SYNTHESIS__
@@ -180,7 +172,7 @@ void maxpool(hls::stream<activation_tile_t>& input_stream,
             }
         } else {
             // 奇数行只读取上一偶数行缓存。每一个Cout transaction产生两个
-            // 32-bit half；全部Cout tile完成后才按position -> pack输出。
+            // 一个POOL_HALF_BITS half；全部Cout tile完成后才按position -> pack输出。
             int line_address = 0;
             for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
                 ap_uint<SYSTOLIC_SPATIAL_PAR> bottom_valid = 0;
@@ -211,7 +203,8 @@ void maxpool(hls::stream<activation_tile_t>& input_stream,
 
                 // Cout%8是pack完整性的实际固定约束。Pool1有一个pack，Pool2
                 // 有两个；对每个有效pooled位置，pack顺序总是低Cout组在前。
-                const int channel_packs = is_pool2 ? 2 : 1;
+                const int channel_packs = is_pool2 ? CNN_POOL2_CHANNEL_PACKS :
+                                                     CNN_POOL1_CHANNEL_PACKS;
                 for (int pooled_position = 0; pooled_position < 2;
                      ++pooled_position) {
                     if (pool_valid[pooled_position]) {
@@ -234,8 +227,10 @@ void maxpool(hls::stream<activation_tile_t>& input_stream,
     }
 
 #ifndef __SYNTHESIS__
-    const int expected_input_tiles = is_pool2 ? 224 : 392;
-    const int expected_output_packs = is_pool2 ? 98 : 196;
+    const int expected_input_tiles = is_pool2 ? CNN_POOL2_INPUT_TRANSACTIONS :
+                                                CNN_POOL1_INPUT_TRANSACTIONS;
+    const int expected_output_packs = is_pool2 ? CNN_POOL2_OUTPUT_TRANSACTIONS :
+                                                CNN_POOL1_OUTPUT_TRANSACTIONS;
     assert(input_read_count == expected_input_tiles);
     assert(output_write_count == expected_output_packs);
 #endif

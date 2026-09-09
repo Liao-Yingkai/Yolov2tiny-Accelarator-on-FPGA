@@ -63,13 +63,12 @@ activation_t conv_postprocess_requantize(acc_t accumulator,
 void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
                  hls::stream<postprocess_param_pack_t>& param_stream,
                  hls::stream<activation_tile_t>& output_stream,
-                 int Cout) {
-    const bool is_conv2 = (Cout == CNN_CONV2_COUT);
-#ifndef __SYNTHESIS__
-    assert(Cout == CNN_CONV1_COUT || Cout == CNN_CONV2_COUT);
-#endif
-    const int spatial_tiles = is_conv2 ? 56 : 196;
-    const int cout_tiles = is_conv2 ? 4 : 2;
+                 layer_mode_t layer_mode) {
+    const bool is_conv2 = (layer_mode == LAYER2_MODE);
+    const int spatial_tiles = is_conv2 ? CNN_CONV2_SPATIAL_TILES :
+                                         CNN_CONV1_SPATIAL_TILES;
+    const int cout_tiles = is_conv2 ? CNN_CONV2_COUT_TILES :
+                                      CNN_CONV1_COUT_TILES;
 
     // 参数仅在本层第一个 spatial tile 从 stream 装载。两个维度 complete
     // partition 后为寄存器阵列，后续 Tile 每拍可同时取得4条 Cout Lane。

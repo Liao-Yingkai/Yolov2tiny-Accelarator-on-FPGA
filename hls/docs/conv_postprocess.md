@@ -19,10 +19,10 @@ activation_tile_t (INT8)
 void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
                       hls::stream<postprocess_param_pack_t>& param_stream,
                       hls::stream<activation_tile_t>& output_stream,
-                      int Cout);
+                      layer_mode_t layer_mode);
 ```
 
-`Cout=8` 选择 Conv1，`Cout=16` 选择 Conv2；其他值只在非综合构建中断言。
+`LAYER1_MODE`选择Conv1，`LAYER2_MODE`选择Conv2。固定Cout、spatial tile数和参数Pack数均由`src/config.h`的编译期常量派生。
 两个数据 Tile 都是 `4 spatial lane × 4 Cout lane`：
 
 ```cpp

@@ -27,13 +27,11 @@ Tile 间和输出行间不插入准备气泡。源码以单一 `PIPELINE II=1` �
 void im2row(
     hls::stream<pixel_t>& input_stream,
     hls::stream<activation_pack_t>& output_stream,
-    int H,
-    int W,
-    int Cin
+    layer_mode_t layer_mode
 );
 ```
 
-`pixel_t` 打包一个空间位置的全部物理输入通道。输入是严格行优先的标量空间流，接口只接受 Conv1 `(H,W,Cin)=(28,28,1)` 或 Conv2 `(14,14,8)`；卷积 Padding 和行尾无效数据都不在输入流中。函数签名保持不变，综合态只以 `Cin==8` 形成 `is_conv2`，完整三元组仅在非综合构建中断言。
+`pixel_t` 打包一个空间位置的全部物理输入通道。输入是严格行优先的标量空间流；`layer_mode`在完整层调用中保持稳定，`LAYER1_MODE`选择Conv1 `(28,28,1)`，`LAYER2_MODE`选择Conv2 `(14,14,8)`。卷积Padding和行尾无效数据都不在输入流中。固定尺寸、Tile数和tail mask都由`src/config.h`的编译期常量派生。
 
 ```cpp
 struct activation_pack_t {
@@ -202,7 +200,7 @@ max(0, W-P)
 
 | 内容 | 本分支固定化 | 保持不变 |
 |---|---|---|
-| 参数 | 移除可覆盖 P/H/W/C 宏和通用非法参数返回；只允许 Conv1/Conv2，综合态以 `Cin` 选择模式 | `im2row` 函数签名、`pixel_t`、`activation_pack_t` 布局 |
+| 参数 | 移除可覆盖 P/H/W/C 宏和通用非法参数返回；只允许 Conv1/Conv2，综合态以一位`layer_mode`选择模式 | `pixel_t`、`activation_pack_t`布局及token顺序 |
 | 通道 | 输入读取后立即完成 Conv1 的 channel1..7 零填充 | 全部物理8通道仍在一个 pixel_t 中打包，Systolic 可固定8路计算 |
 | 边界 | 固定 Tile 数、valid、Bottom load 与末 Tile 新列预取 mask | Padding、tail lane 全零和9-token `(kh,kw)` 顺序 |
 | 地址 | 列 Bank/地址固定为 `column&3` / `column>>2` | 两行 circular line buffer、4-way banking、BRAM 绑定 |

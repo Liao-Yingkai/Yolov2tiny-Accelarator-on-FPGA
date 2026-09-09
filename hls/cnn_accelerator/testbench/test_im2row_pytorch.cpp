@@ -62,13 +62,13 @@ static int unfold_value(bool conv2, int spatial, int token, int channel) {
         token * CNN_CONV2_CIN + channel];
 }
 
-static int run_layer(bool conv2, hls::stream<pixel_t>& input_stream,
+static int run_layer(layer_mode_t layer_mode, hls::stream<pixel_t>& input_stream,
                      hls::stream<activation_pack_t>& output_stream,
                      const char* name, const std::string& directory) {
+    const bool conv2 = (layer_mode == LAYER2_MODE);
     const int H = conv2 ? CNN_CONV2_H : CNN_CONV1_H;
     const int W = conv2 ? CNN_CONV2_W : CNN_CONV1_W;
-    const int Cin = conv2 ? CNN_CONV2_CIN : CNN_CONV1_CIN;
-    const int tiles_per_row = (W + IM2ROW_P - 1) / IM2ROW_P;
+    const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
     const int expected_inputs = H * W;
     const int expected_outputs = H * tiles_per_row * SYSTOLIC_KERNEL_TOKENS;
     const std::string prefix = directory + "/" + name;
@@ -96,15 +96,15 @@ static int run_layer(bool conv2, hls::stream<pixel_t>& input_stream,
         }
     }
 
-    im2row(input_stream, output_stream, H, W, Cin);
+    im2row(input_stream, output_stream, layer_mode);
 
     int errors = 0;
     int comparisons = 0;
     int outputs_read = 0;
     for (int y = 0; y < H; ++y) {
         for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-            const int expected_valid = (conv2 && tile_x == tiles_per_row - 1)
-                ? 0x3 : 0xf;
+            const int expected_valid = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
+                ? CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
             for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS; ++token) {
                 const activation_pack_t actual = output_stream.read();
                 const int actual_valid = actual.spatial_valid.to_uint();
@@ -128,8 +128,8 @@ static int run_layer(bool conv2, hls::stream<pixel_t>& input_stream,
                         const bool match = actual_valid == expected_valid &&
                                            got == expected;
                         output_csv << outputs_read << ',' << y << ',' << tile_x
-                                   << ',' << token << ',' << token / 3 << ','
-                                   << token % 3 << ',' << lane << ',' << channel
+                                   << ',' << token << ',' << token / IM2ROW_KERNEL << ','
+                                   << token % IM2ROW_KERNEL << ',' << lane << ',' << channel
                                    << ',' << expected_valid << ',' << actual_valid
                                    << ',' << expected << ',' << got << ',' << match
                                    << '\n';
@@ -186,8 +186,8 @@ int main() {
     hls::stream<pixel_t> input_stream;
     hls::stream<activation_pack_t> output_stream;
     int errors = 0;
-    errors += run_layer(false, input_stream, output_stream, "conv1", directory);
-    errors += run_layer(true, input_stream, output_stream, "conv2", directory);
+    errors += run_layer(LAYER1_MODE, input_stream, output_stream, "conv1", directory);
+    errors += run_layer(LAYER2_MODE, input_stream, output_stream, "conv2", directory);
     std::cout << "Im2Row PyTorch CSV保存路径=" << directory << std::endl;
     return errors ? 1 : 0;
 }

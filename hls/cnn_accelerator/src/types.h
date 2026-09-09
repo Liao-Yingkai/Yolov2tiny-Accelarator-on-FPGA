@@ -3,52 +3,16 @@
 
 #include <ap_int.h>
 #include <hls_stream.h>
-
-// 本分支针对固定 MNIST 网络综合：不再通过编译宏生成不同硬件规模。
-// P 是每个 Pack 的空间 Lane 数；Cin 物理宽度固定为8，Conv1 仅使用 channel0。
-static const int IM2ROW_P = 4;
-static const int IM2ROW_MAX_H = 28;
-static const int IM2ROW_MAX_W = 28;
-static const int IM2ROW_MAX_CHANNELS = 8;
-
-// 唯一允许的两组运行时接口配置。接口保留 H/W/Cin/Cout，以便同一物理模块
-// 按层分时复用；综合态仅由 Cin 选择模式，调用方必须提供下列合法组合。
-static const int CNN_CONV1_H = 28;
-static const int CNN_CONV1_W = 28;
-static const int CNN_CONV1_CIN = 1;
-static const int CNN_CONV1_COUT = 8;
-static const int CNN_CONV2_H = 14;
-static const int CNN_CONV2_W = 14;
-static const int CNN_CONV2_CIN = 8;
-static const int CNN_CONV2_COUT = 16;
-
-// 固定卷积窗口为3×3、Padding=1、Stride=1。
-static const int IM2ROW_KERNEL = 3;
-static const int IM2ROW_PADDING = 1;
-static const int IM2ROW_STRIDE = 1;
-// P=4 时，每个列 Bank 深度固定为 ceil(28/4)=7；每个 Strip 覆盖4+2列。
-static const int IM2ROW_MAX_BLOCKS_PER_ROW = 7;
-static const int IM2ROW_STRIP_WIDTH = 6;
+#include "config.h"
 
 // 对称八位有符号量化激活，数值0既是量化零点，也是卷积 Padding 的填充值。
-// 独立保留位宽常量，供模块内部构造完整通道打包字，避免重复硬编码。
-static const int ACTIVATION_BITS = 8;
 typedef ap_int<ACTIVATION_BITS> activation_t;
 
 // Systolic 第一版固定使用 8 位有符号权重和 32 位有符号累加器。虽然当前
 // IM2ROW_P 与输出通道并行度都为4，但二者在概念上独立，避免后续将空间
 // 并行度变化无意传递为 Cout 并行度变化。
-typedef ap_int<ACTIVATION_BITS> weight_t;
-typedef ap_int<32> acc_t;
-
-// 固定 MNIST 全连接层：Pool2 的 7x7x16 输出按 NHWC 展开为784个输入。
-// 一个 channel_pack_t 含8个连续通道，因此输入流固定为98个 Pack；物理计算
-// 阵列每拍处理8个输入通道和5个输出通道，10个 logit 分为两个输出 Tile。
-static const int FC_INPUT_PACKS = 98;
-static const int FC_CIN_PAR = 8;
-static const int FC_COUT_PAR = 5;
-static const int FC_OUT_TILES = 2;
-static const int FC_OUTPUTS = 10;
+typedef ap_int<WEIGHT_BITS> weight_t;
+typedef ap_int<ACCUMULATOR_BITS> acc_t;
 
 // 一个 FC 权重事务对应一个 out_tile 和一个8通道输入 token，逻辑位宽为
 // 5 x 8 x 8 = 320 bit。流顺序固定为 out_tile -> token。
@@ -75,13 +39,6 @@ typedef ap_int<ACTIVATION_BITS> logit_t;
 struct logits_pack_t {
     logit_t value[FC_OUTPUTS];
 };
-
-static const int SYSTOLIC_SPATIAL_PAR = 4;
-static const int SYSTOLIC_COUT_PAR = 4;
-static const int SYSTOLIC_CIN_PAR = 8;
-static const int SYSTOLIC_KERNEL_TOKENS = IM2ROW_KERNEL * IM2ROW_KERNEL;
-static const int SYSTOLIC_MAX_COUT_TILES = 4;
-static const int SYSTOLIC_WEIGHT_BUFFER_DEPTH = 36;
 
 // 一个 pixel_t 表示一个空间位置的全部8个物理输入通道。
 // Im2Row 在输入读取时完成规范化：Conv1 仅 channel0 有效，Conv2 使用全部通道。

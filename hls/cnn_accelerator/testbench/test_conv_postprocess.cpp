@@ -86,9 +86,12 @@ static postprocess_param_pack_t make_param(int cout_tile) {
     return param;
 }
 
-static int run_layer(int Cout, const char* name, const std::string& directory) {
-    const int spatial_tiles = Cout == CNN_CONV2_COUT ? 56 : 196;
-    const int cout_tiles = Cout / SYSTOLIC_COUT_PAR;
+static int run_layer(layer_mode_t layer_mode, const char* name,
+                     const std::string& directory) {
+    const bool conv2 = (layer_mode == LAYER2_MODE);
+    const int spatial_tiles = conv2 ? CNN_CONV2_SPATIAL_TILES : CNN_CONV1_SPATIAL_TILES;
+    const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
+    const int cout_tiles = conv2 ? CNN_CONV2_COUT_TILES : CNN_CONV1_COUT_TILES;
     const int expected_transactions = spatial_tiles * cout_tiles;
     hls::stream<acc_tile_t> input_stream;
     hls::stream<postprocess_param_pack_t> param_stream;
@@ -121,8 +124,9 @@ static int run_layer(int Cout, const char* name, const std::string& directory) {
 
     int inputs_written = 0;
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
-        const int valid_mask = (Cout == CNN_CONV2_COUT &&
-                                spatial_tile % 4 == 3) ? 0x3 : 0xf;
+        const int valid_mask = (conv2 &&
+                                spatial_tile % tiles_per_row == CNN_CONV2_LAST_TILE_X)
+            ? CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
         for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
             acc_tile_t input;
             input.spatial_valid = valid_mask;
@@ -143,13 +147,14 @@ static int run_layer(int Cout, const char* name, const std::string& directory) {
         }
     }
 
-    conv_postprocess(input_stream, param_stream, output_stream, Cout);
+    conv_postprocess(input_stream, param_stream, output_stream, layer_mode);
     int errors = 0;
     int comparisons = 0;
     int outputs_read = 0;
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
-        const int expected_valid = (Cout == CNN_CONV2_COUT &&
-                                    spatial_tile % 4 == 3) ? 0x3 : 0xf;
+        const int expected_valid = (conv2 &&
+                                    spatial_tile % tiles_per_row == CNN_CONV2_LAST_TILE_X)
+            ? CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
         for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
             const activation_tile_t actual_tile = output_stream.read();
             const int actual_valid = actual_tile.spatial_valid.to_uint();
@@ -177,7 +182,7 @@ static int run_layer(int Cout, const char* name, const std::string& directory) {
                     const bool match = valid_match && actual == expected;
                     output_csv << outputs_read << ',' << spatial_tile << ','
                                << cout_tile << ",-1," << lane << ',' << cout_lane
-                               << ',' << (cout_tile * 4 + cout_lane) << ','
+                               << ',' << (cout_tile * SYSTOLIC_COUT_PAR + cout_lane) << ','
                                << expected_valid << ',' << actual_valid << ','
                                << valid_match << ',' << expected << ',' << actual
                                << ',' << match << '\n';
@@ -224,8 +229,8 @@ int main() {
         return 1;
     }
     int errors = 0;
-    errors += run_layer(CNN_CONV1_COUT, "conv1", directory);
-    errors += run_layer(CNN_CONV2_COUT, "conv2", directory);
+    errors += run_layer(LAYER1_MODE, "conv1", directory);
+    errors += run_layer(LAYER2_MODE, "conv2", directory);
     std::cout << "ConvPostProcess CSV保存路径=" << directory << std::endl;
     return errors ? 1 : 0;
 }

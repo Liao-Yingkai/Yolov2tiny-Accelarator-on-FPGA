@@ -190,31 +190,36 @@ int bottom_first_strip_column(int tile_x) {
     return (tile_x == 0) ? 1 : 2;
 }
 
-// 两种固定网络模式下各 Tile 的 Bottom 输入数量。Conv1：5/4/4/4/4/4/3；
-// Conv2：5/4/4/1。Bottom 输入只在不是最后输出行时读取。
+// 两种固定网络模式下各 Tile 的 Bottom 输入数量。首Tile需P+1个真实列；
+// 最后Tile从固定几何派生剩余列数，其他Tile需P个。Bottom输入只在不是最后输出行时读取。
 int bottom_load_count(bool is_conv2, int tile_x) {
 #pragma HLS INLINE
     if (tile_x == 0) {
-        return 5;
+        return IM2ROW_P + 1;
     }
-    return (is_conv2 && tile_x == 3) ? 1 :
-           ((!is_conv2 && tile_x == 6) ? 3 : 4);
+    return (is_conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
+        ? CNN_CONV2_LAST_BOTTOM_LOADS
+        : ((!is_conv2 && tile_x == CNN_CONV1_LAST_TILE_X)
+            ? CNN_CONV1_LAST_BOTTOM_LOADS : IM2ROW_P);
 }
 
 // Conv1 的7个 Tile 均为4个真实空间位置；Conv2 的末 Tile 只有 lane0、1有效。
 ap_uint<IM2ROW_P> make_spatial_valid(bool is_conv2, int tile_x) {
 #pragma HLS INLINE
-    return (is_conv2 && tile_x == 3) ? ap_uint<IM2ROW_P>(0x3) :
-                                        ap_uint<IM2ROW_P>(0xf);
+    return (is_conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
+        ? ap_uint<IM2ROW_P>(CNN_CONV2_TAIL_SPATIAL_VALID_MASK)
+        : ap_uint<IM2ROW_P>(CNN_FULL_SPATIAL_VALID_MASK);
 }
 
 // 同行预取下一 Tile 的4个新列。仅为即将到来的最后 Tile 需要屏蔽越界列：
-// Conv1 当前 tile5 -> mask 0111；Conv2 当前 tile2 -> mask 0001。
+// Conv1、Conv2均仅在当前Tile是倒数第二个时屏蔽越界的新列。
 ap_uint<IM2ROW_P> next_new_column_valid(bool is_conv2, int tile_x) {
 #pragma HLS INLINE
-    return (is_conv2 && tile_x == 2) ? ap_uint<IM2ROW_P>(0x1) :
-           ((!is_conv2 && tile_x == 5) ? ap_uint<IM2ROW_P>(0x7) :
-                                         ap_uint<IM2ROW_P>(0xf));
+    return (is_conv2 && tile_x == CNN_CONV2_PRELAST_TILE_X)
+        ? ap_uint<IM2ROW_P>(CNN_CONV2_PRELAST_NEW_COLUMN_VALID_MASK)
+        : ((!is_conv2 && tile_x == CNN_CONV1_PRELAST_TILE_X)
+            ? ap_uint<IM2ROW_P>(CNN_CONV1_PRELAST_NEW_COLUMN_VALID_MASK)
+            : ap_uint<IM2ROW_P>(CNN_FULL_SPATIAL_VALID_MASK));
 }
 
 }  // 匿名命名空间
@@ -226,22 +231,16 @@ ap_uint<IM2ROW_P> next_new_column_valid(bool is_conv2, int tile_x) {
 void im2row(
     hls::stream<pixel_t>& input_stream,
     hls::stream<activation_pack_t>& output_stream,
-    int H,
-    int W,
-    int Cin
+    layer_mode_t layer_mode
 ) {
-    const bool is_conv2 = (Cin == CNN_CONV2_CIN);
-#ifndef __SYNTHESIS__
-    assert((H == CNN_CONV1_H && W == CNN_CONV1_W &&
-            Cin == CNN_CONV1_CIN) ||
-           (H == CNN_CONV2_H && W == CNN_CONV2_W &&
-            Cin == CNN_CONV2_CIN));
-#endif
-    // 综合态只由 Cin 选择固定网络模式；H/W 不进入核心调度。调用方必须遵守接口契约。
+    const bool is_conv2 = (layer_mode == LAYER2_MODE);
+    // mode在调用期间保持稳定；所有尺寸均由固定网络配置派生。
     const int feature_height = is_conv2 ? CNN_CONV2_H : CNN_CONV1_H;
     const int feature_width = is_conv2 ? CNN_CONV2_W : CNN_CONV1_W;
-    const int last_tile_x = is_conv2 ? 3 : 6;
-    const int total_tokens = is_conv2 ? 504 : 1764;
+    const int last_tile_x = is_conv2 ? CNN_CONV2_LAST_TILE_X :
+                                        CNN_CONV1_LAST_TILE_X;
+    const int total_tokens = is_conv2 ? CNN_CONV2_IM2ROW_TOKENS :
+                                        CNN_CONV1_IM2ROW_TOKENS;
 
     // Line Buffer 的三个维度依次表示：2个循环行 Bank、P个按列取模的独立列 Bank、
     // 每个列 Bank 内的块地址。每个元素是包含全部 C_PAR 通道的无符号打包字，读写始终覆盖整字；

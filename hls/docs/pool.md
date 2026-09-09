@@ -7,17 +7,17 @@
 ```cpp
 void maxpool(hls::stream<activation_tile_t>& input_stream,
              hls::stream<channel_pack_t>& output_stream,
-             int H, int W, int Cout);
+             layer_mode_t layer_mode);
 ```
 
-接口只支持两组完整配置：
+接口只支持两种固定模式；具体形状、事务数、Line Buffer深度和channel-pack数由`src/config.h`的编译期表达式生成：
 
 | 模式 | 输入 `(H,W,Cout)` | 输入 Tile | 输出尺寸 | 输出 pack |
 |---|---:|---:|---:|---:|
-| Pool1 | `(28,28,8)` | `28×7×2 = 392` | `14×14×8` | `196` |
-| Pool2 | `(14,14,16)` | `14×4×4 = 224` | `7×7×16` | `98` |
+| Pool1 | `LAYER1_MODE`，`28×28×8` | `28×7×2 = 392` | `14×14×8` | `196` |
+| Pool2 | `LAYER2_MODE`，`14×14×16` | `14×4×4 = 224` | `7×7×16` | `98` |
 
-综合态由 `Cout==16` 选择 Pool2，否则采用 Pool1 固定调度；非综合构建断言完整三元组，防止错误调用。`channel_pack_t` 是 `pixel_t` 的类型别名，一个输出事务表示一个空间位置的连续8个物理通道。
+综合态由调用级`layer_mode`选择Pool1或Pool2，模式在单次层调用中保持稳定且不进入stream事务。`channel_pack_t`是`pixel_t`的类型别名，一个输出事务表示一个空间位置的连续8个物理通道。
 
 ## 数据顺序与有效位
 

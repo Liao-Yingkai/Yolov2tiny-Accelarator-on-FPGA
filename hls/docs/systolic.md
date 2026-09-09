@@ -72,7 +72,7 @@ Cout lane：当前 Cout tile 中连续的 4 个输出通道
 | Conv1 | 28×28 | 1 | 8 | `28×ceil(28/4)=196` | 2 |
 | Conv2 | 14×14 | 8 | 16 | `14×ceil(14/4)=56` | 4 |
 
-函数签名保留 `H/W/Cin/Cout`，但综合态只以 `Cin==8` 形成一位 `is_conv2` 选择：Conv1 的 `spatial_tiles=196、cout_tiles=2`，Conv2 的 `spatial_tiles=56、cout_tiles=4`。完整四元组只在非综合构建中断言；综合态不保留通用拒绝路径。Cout tail 不支持，Conv2 的空间 tail 继续使用 `spatial_valid=0011`。
+函数接口只接收调用级一位`layer_mode`：`LAYER1_MODE`选择Conv1，`LAYER2_MODE`选择Conv2。固定H/W/Cin/Cout、Tile数和Weight Buffer深度都由`src/config.h`的编译期常量派生；不保留通用运行时尺寸端口或拒绝路径。Cout tail不支持，Conv2的空间tail继续使用`spatial_valid=0011`。
 
 ## 4. Activation 接口契约
 
