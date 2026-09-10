@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。当前 Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool 与独立FC MAC/后处理已完成第一版源码；顶层控制将在后续阶段实现。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool、独立FC MAC/后处理以及两阶段Top控制均已完成第一版源码；当前阶段只完成静态审阅，尚未运行Top级仿真或综合。
 
 ## 工程原则
 
@@ -29,7 +29,7 @@ Im2Row ── P 路 activation_pack_t ──► 广播型 P×P Systolic
 
 ## 单物理卷积流水引擎
 
-系统目标是只实例化一套物理 Im2Row、Systolic、ConvPostProcess 和 Pool。Conv1、Conv2 不并发，而是分两个阶段顺序复用同一套模块；每个卷积层内部仍通过 `hls::stream<>` 形成模块间流水：
+系统目标是只实例化一套物理 Im2Row、Systolic、ConvPostProcess 和 Pool。Conv1、Conv2 不并发，而是由顶层固定两次顺序调用同一个`run_layer_phase()`；每次调用内部通过 `hls::stream<>` 形成模块间流水：
 
 ```text
 阶段 1：
@@ -39,7 +39,7 @@ Input → Im2Row → Systolic → ConvPostProcess → Pool → Pool1 Feature Buf
 Pool1 Feature Buffer → Im2Row → Systolic → ConvPostProcess → Pool → 独立 FC
 ```
 
-Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。其属于顶层阶段间缓冲，因为Conv1和Conv2复用同一卷积流水硬件。Pool2默认直接流入独立FC；FC在第一个输出 Tile 消费 Pool2 的98个8-channel Pack，并写入自身的98x64-bit BRAM，供第二个输出 Tile 回放。具体顶层调度仍在后续阶段设计。
+Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。其属于顶层阶段间缓冲，因为Conv1和Conv2复用同一卷积流水硬件。Pool2直接流入独立FC；FC在第一个输出 Tile 消费 Pool2 的98个8-channel Pack，并写入自身的98x64-bit BRAM，供第二个输出 Tile 回放。Top的具体接口、Barrier和尚待工具验证的风险见 [Top 初版设计](top.md)。
 
 `src/config.h` 是固定网络、并行度及派生事务数量的唯一编译期来源。卷积相关模块只接收一个调用级模式：`LAYER1_MODE=false` 选择 Conv1/Pool1，`LAYER2_MODE=true` 选择 Conv2/Pool2；模式不进入每个stream事务。
 

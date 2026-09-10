@@ -55,10 +55,18 @@ static const int CNN_CONV2_SPATIAL_TILES =
     CNN_CONV2_H * CNN_CONV2_TILES_PER_ROW;
 static const int CNN_CONV1_COUT_TILES = CNN_CONV1_COUT / SYSTOLIC_COUT_PAR;
 static const int CNN_CONV2_COUT_TILES = CNN_CONV2_COUT / SYSTOLIC_COUT_PAR;
+static const int CNN_CONV1_INPUT_TRANSACTIONS = CNN_CONV1_H * CNN_CONV1_W;
+static const int CNN_CONV2_INPUT_TRANSACTIONS = CNN_CONV2_H * CNN_CONV2_W;
 static const int CNN_CONV1_IM2ROW_TOKENS =
     CNN_CONV1_SPATIAL_TILES * SYSTOLIC_KERNEL_TOKENS;
 static const int CNN_CONV2_IM2ROW_TOKENS =
     CNN_CONV2_SPATIAL_TILES * SYSTOLIC_KERNEL_TOKENS;
+static const int CNN_CONV1_WEIGHT_TRANSACTIONS =
+    CNN_CONV1_COUT_TILES * SYSTOLIC_KERNEL_TOKENS;
+static const int CNN_CONV2_WEIGHT_TRANSACTIONS =
+    CNN_CONV2_COUT_TILES * SYSTOLIC_KERNEL_TOKENS;
+static const int CNN_CONV1_PARAM_TRANSACTIONS = CNN_CONV1_COUT_TILES;
+static const int CNN_CONV2_PARAM_TRANSACTIONS = CNN_CONV2_COUT_TILES;
 static const int CNN_CONV1_LAST_TILE_X = CNN_CONV1_TILES_PER_ROW - 1;
 static const int CNN_CONV2_LAST_TILE_X = CNN_CONV2_TILES_PER_ROW - 1;
 static const int CNN_CONV1_PRELAST_TILE_X = CNN_CONV1_LAST_TILE_X - 1;
@@ -131,6 +139,15 @@ static const int FC_SUM2_BITS = PRODUCT_BITS + 1;
 static const int FC_SUM4_BITS = PRODUCT_BITS + 2;
 static const int FC_DOT_BITS = PRODUCT_BITS + 3;
 
+// Top 固定执行 Conv1 与 Conv2 两个顺序阶段。阶段内所有 hls::stream
+// 均显式采用同一初始 FIFO 深度；性能调优留待顶层综合和协同仿真阶段。
+static const int TOP_PHASE_COUNT = 2;
+static const int TOP_STREAM_DEPTH = 2;
+static const int TOP_POOL1_FEATURE_BUFFER_DEPTH =
+    CNN_POOL1_OUTPUT_TRANSACTIONS;
+static const int TOP_POOL1_FEATURE_BUFFER_WORD_BITS =
+    IM2ROW_MAX_CHANNELS * ACTIVATION_BITS;
+
 // 调用级模式，不是per-token字段。卷积模块把LAYER2_MODE解释为Conv2，
 // MaxPool把它解释为Pool2。
 typedef bool layer_mode_t;
@@ -172,5 +189,14 @@ static_assert(POOL_LINE_BUFFER_DEPTH >=
               POOL_LINE_BUFFER_DEPTH >=
               CNN_CONV2_TILES_PER_ROW * CNN_CONV2_COUT_TILES,
               "Pool line buffer must hold one complete input row");
+static_assert(TOP_PHASE_COUNT == 2,
+              "Top must execute exactly the two fixed convolution phases");
+static_assert(TOP_STREAM_DEPTH >= 2,
+              "Top FIFO depth must preserve the selected initial setting");
+static_assert(TOP_POOL1_FEATURE_BUFFER_DEPTH ==
+              CNN_POOL1_H * CNN_POOL1_W * CNN_POOL1_CHANNEL_PACKS,
+              "Pool1 feature buffer must hold every pooled channel pack");
+static_assert(TOP_POOL1_FEATURE_BUFFER_WORD_BITS == 64,
+              "Pool1 feature buffer word must pack eight INT8 channels");
 
 #endif  // CNN_ACCELERATOR_CONFIG_H_
