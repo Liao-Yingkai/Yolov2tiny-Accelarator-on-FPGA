@@ -201,25 +201,30 @@ void maxpool(hls::stream<activation_tile_t>& input_stream,
                     ++line_address;
                 }
 
-                // Cout%8是pack完整性的实际固定约束。Pool1有一个pack，Pool2
-                // 有两个；对每个有效pooled位置，pack顺序总是低Cout组在前。
+                // Cout%8是pack完整性的实际固定约束。单一output_slot循环
+                // 保持position -> pack顺序，且每次迭代最多执行一次stream write。
+                // Pool1有一个pack，Pool2有两个；每个位置总是低Cout组在前。
                 const int channel_packs = is_pool2 ? CNN_POOL2_CHANNEL_PACKS :
                                                      CNN_POOL1_CHANNEL_PACKS;
-                for (int pooled_position = 0; pooled_position < 2;
-                     ++pooled_position) {
+                const int output_slots = 2 * channel_packs;
+                for (int output_slot = 0; output_slot < output_slots;
+                     ++output_slot) {
+#pragma HLS PIPELINE II=1
+                    // 固定网络中Pool1每位置1个pack、Pool2每位置2个pack。
+                    // 显式使用移位和掩码，避免共享Pool实例在运行时mode下
+                    // 从“除以1或2”表达式推导出不必要的可变除法/取模逻辑。
+                    const int pooled_position =
+                        is_pool2 ? (output_slot >> 1) : output_slot;
+                    const int pack_index = is_pool2 ? (output_slot & 1) : 0;
                     if (pool_valid[pooled_position]) {
-                        for (int pack_index = 0; pack_index < channel_packs;
-                             ++pack_index) {
-                            const int low_cout_tile = pack_index * 2;
-                            const channel_pack_t output = make_channel_pack(
-                                pooled_half[pooled_position][low_cout_tile],
-                                pooled_half[pooled_position]
-                                           [low_cout_tile + 1]);
-                            output_stream.write(output);
+                        const int low_cout_tile = pack_index * 2;
+                        const channel_pack_t output = make_channel_pack(
+                            pooled_half[pooled_position][low_cout_tile],
+                            pooled_half[pooled_position][low_cout_tile + 1]);
+                        output_stream.write(output);
 #ifndef __SYNTHESIS__
-                            ++output_write_count;
+                        ++output_write_count;
 #endif
-                        }
                     }
                 }
             }

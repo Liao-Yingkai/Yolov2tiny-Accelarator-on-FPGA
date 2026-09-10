@@ -55,7 +55,7 @@ word[(spatial_lane * 4 + cout_lane) * 8 +: 8]
 
 每个字保存INT8的二进制补码位型；读出后先恢复 `activation_t`，再进行有符号比较。Pool1使用地址`0..13`，Pool2使用`0..15`。偶数行只读输入流并写BRAM，紧随的奇数行只读BRAM并读取输入流，因此设计请求 `ram_1p` 单端口BRAM，且不会在同一控制分支提出读写同端口请求。
 
-每个奇数行输入事务同时生成两个 `ap_uint<32>` half：每个half包含一个pooled位置、当前Cout tile的4个结果。`pooled_half[2][4]` 完全分区；所有Cout tile完成后，Cout tile `0+1` 合成第一个8-channel pack，Pool2的 `2+3` 合成第二个pack。每个pool结果采用平衡的两级有符号比较树。
+每个奇数行输入事务同时生成两个 `ap_uint<32>` half：每个half包含一个pooled位置、当前Cout tile的4个结果。`pooled_half[2][4]` 完全分区；所有Cout tile完成后，Cout tile `0+1` 合成第一个8-channel pack，Pool2的 `2+3` 合成第二个pack。输出使用一个按`position -> pack`映射的固定`output_slot`循环，目标`II=1`，每次迭代最多写出一个channel pack；无效position的slot只跳过写操作，不产生占位事务。每个pool结果采用平衡的两级有符号比较树。
 
 ## 层间连接
 
