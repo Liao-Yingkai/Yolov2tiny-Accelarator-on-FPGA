@@ -27,15 +27,15 @@ Bias / Requant / ReLU
 
 ```text
 阶段 1：Conv1
-Input → Im2Row → Systolic → ConvPostProcess → Pool → Pool1 Feature Buffer
+Input → Im2Row → Systolic → ConvPostProcess → Pool → Pool1 Feature FIFO
 
 阶段 2：Conv2
-Pool1 Feature Buffer → Im2Row → Systolic → ConvPostProcess → Pool → FC
+Pool1 Feature FIFO → Im2Row → Systolic → ConvPostProcess → Pool → FC
 ```
 
-每个卷积层内部的模块通过 `hls::stream<>` 连接，并计划在上层形成 DATAFLOW。Conv1 和 Conv2 之间不并发；Pool1 的完整输出必须先写入片上 Feature Buffer，再作为 Conv2 的输入。
+每个卷积层内部的模块通过 `hls::stream<>` 连接，并计划在上层形成 DATAFLOW。Conv1 和 Conv2 之间不并发；Pool1 的完整输出必须先写入片上深度196的BRAM FIFO，再按原顺序作为 Conv2 的输入。
 
-Pool1 Feature Buffer 的有效数据量为：
+Pool1 Feature FIFO 的有效数据量为：
 
 ```text
 14 × 14 × 8 × 8 bit = 12,544 bit = 1,568 Byte

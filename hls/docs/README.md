@@ -33,13 +33,16 @@ Im2Row ── P 路 activation_pack_t ──► 广播型 P×P Systolic
 
 ```text
 阶段 1：
-Input → Im2Row → Systolic → ConvPostProcess → Pool → Pool1 Feature Buffer
+Input → Im2Row → Systolic → ConvPostProcess → Pool → Pool1 Feature FIFO
 
 阶段 2：
-Pool1 Feature Buffer → Im2Row → Systolic → ConvPostProcess → Pool → 独立 FC
+Pool1 Feature FIFO → Im2Row → Systolic → ConvPostProcess → Pool → 独立 FC
 ```
 
-Pool1 Feature Buffer 保存 `14×14×8` 个 INT8 activation，逻辑容量为 1,568 Byte。其属于顶层阶段间缓冲，因为Conv1和Conv2复用同一卷积流水硬件。Pool2直接流入独立FC；FC在第一个输出 Tile 消费 Pool2 的98个8-channel Pack，并写入自身的98x64-bit BRAM，供第二个输出 Tile 回放。Top的具体接口、Barrier和尚待工具验证的风险见 [Top 初版设计](top.md)。
+Pool1 Feature FIFO保存 `14×14×8` 个 INT8 activation，逻辑容量为1,568 Byte。它是
+`run_layer_phase()`内持久的`static hls::stream<channel_pack_t>`，深度固定为196并约束为
+BRAM FIFO：Layer1由Output Router写满，Layer2由Input Router按原顺序读空。由于Input Router
+在源码中先于Output Router调用，普通C++语义也符合两phase先写后读的顺序。Pool2直接流入独立FC；FC在第一个输出 Tile 消费 Pool2 的98个8-channel Pack，并写入自身的98x64-bit BRAM，供第二个输出 Tile 回放。Top的具体接口、Barrier和尚待工具验证的反馈通道风险见 [Top 初版设计](top.md)。
 
 `src/config.h` 是固定网络、并行度及派生事务数量的唯一编译期来源。卷积相关模块只接收一个调用级模式：`LAYER1_MODE=false` 选择 Conv1/Pool1，`LAYER2_MODE=true` 选择 Conv2/Pool2；模式不进入每个stream事务。
 
@@ -89,7 +92,7 @@ Pool固定实现2×2、stride=2的INT8有符号MaxPool，消费ConvPostProcess�
 Buffer，奇数行读取上一行并完成四值有符号最大值；之后按 `pooled_H -> pooled_W
 -> channel_pack` 紧密输出。Pool1产生196个8-channel pack，Pool2产生98个。
 
-Pool1的输出由顶层写入阶段间Feature Buffer供Conv2使用；Pool2默认直连独立FC，
+Pool1的输出由顶层写入阶段间Feature FIFO供Conv2使用；Pool2默认直连独立FC，
 不复用当前Systolic，也不要求Pool侧FC Input Buffer。详细设计见
 [Pool 模块详细设计](pool.md)。本阶段仅完成源码与静态检查，尚未进行C仿真、协同仿真或综合；BRAM、II、时序和资源结论待验证。
 

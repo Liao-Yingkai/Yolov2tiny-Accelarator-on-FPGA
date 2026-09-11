@@ -13,93 +13,10 @@
 
 namespace {
 
-typedef ap_uint<TOP_POOL1_FEATURE_BUFFER_WORD_BITS> pool1_feature_word_t;
-
-// channel[c]固定映射bits[8*c+7:8*c]；位段复制保留INT8补码，不依赖
-// channel_pack_t或pixel_t的C++对象布局。
-pool1_feature_word_t pack_pool1_channel_pack(const channel_pack_t& input) {
-#pragma HLS INLINE
-    pool1_feature_word_t word = 0;
-    for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
-#pragma HLS UNROLL
-        const int low_bit = channel * ACTIVATION_BITS;
-        word.range(low_bit + ACTIVATION_BITS - 1, low_bit) =
-            input.channel[channel].range(ACTIVATION_BITS - 1, 0);
-    }
-    return word;
-}
-
-pixel_t unpack_pool1_pixel(const pool1_feature_word_t& word) {
-#pragma HLS INLINE
-    pixel_t output;
-    for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
-#pragma HLS UNROLL
-        const int low_bit = channel * ACTIVATION_BITS;
-        output.channel[channel].range(ACTIVATION_BITS - 1, 0) =
-            word.range(low_bit + ACTIVATION_BITS - 1, low_bit);
-    }
-    return output;
-}
-
-// 唯一的阶段间Feature Buffer进程。数组不作为DATAFLOW进程之间的参数传递：
-// Layer1只从buffer_write_stream写入，Layer2只向buffer_read_stream读出。
-void feature_buffer_process(
-    hls::stream<channel_pack_t>& buffer_write_stream,
-    hls::stream<pixel_t>& buffer_read_stream,
-    layer_mode_t layer_mode
-) {
-    static pool1_feature_word_t
-        pool1_feature_buffer[TOP_POOL1_FEATURE_BUFFER_DEPTH];
-#pragma HLS BIND_STORAGE variable=pool1_feature_buffer type=ram_1p impl=bram
-
-#ifndef __SYNTHESIS__
-    int write_stream_read_count = 0;
-    int buffer_write_count = 0;
-    int buffer_read_count = 0;
-    int read_stream_write_count = 0;
-#endif
-
-    if (layer_mode == LAYER1_MODE) {
-        for (int index = 0; index < CNN_POOL1_OUTPUT_TRANSACTIONS; ++index) {
-#pragma HLS PIPELINE II=1
-            pool1_feature_buffer[index] =
-                pack_pool1_channel_pack(buffer_write_stream.read());
-#ifndef __SYNTHESIS__
-            ++write_stream_read_count;
-            ++buffer_write_count;
-#endif
-        }
-    } else {
-        for (int index = 0; index < CNN_CONV2_INPUT_TRANSACTIONS; ++index) {
-#pragma HLS PIPELINE II=1
-            buffer_read_stream.write(
-                unpack_pool1_pixel(pool1_feature_buffer[index]));
-#ifndef __SYNTHESIS__
-            ++buffer_read_count;
-            ++read_stream_write_count;
-#endif
-        }
-    }
-
-#ifndef __SYNTHESIS__
-    if (layer_mode == LAYER1_MODE) {
-        assert(write_stream_read_count == CNN_POOL1_OUTPUT_TRANSACTIONS);
-        assert(buffer_write_count == CNN_POOL1_OUTPUT_TRANSACTIONS);
-        assert(buffer_read_count == 0);
-        assert(read_stream_write_count == 0);
-    } else {
-        assert(write_stream_read_count == 0);
-        assert(buffer_write_count == 0);
-        assert(buffer_read_count == CNN_CONV2_INPUT_TRANSACTIONS);
-        assert(read_stream_write_count == CNN_CONV2_INPUT_TRANSACTIONS);
-    }
-#endif
-}
-
-// 唯一输入Router。Layer1使用外部图像；Layer2只使用Feature Buffer输出。
+// 唯一输入Router。Layer1使用外部图像；Layer2直接消费跨阶段Pool1 FIFO。
 void input_router(
     hls::stream<pixel_t>& image_stream,
-    hls::stream<pixel_t>& buffer_read_stream,
+    hls::stream<channel_pack_t>& pool1_feature_fifo,
     hls::stream<pixel_t>& conv_input_stream,
     layer_mode_t layer_mode
 ) {
@@ -113,7 +30,7 @@ void input_router(
     for (int index = 0; index < transaction_count; ++index) {
 #pragma HLS PIPELINE II=1
         const pixel_t input = (layer_mode == LAYER1_MODE)
-            ? image_stream.read() : buffer_read_stream.read();
+            ? image_stream.read() : pool1_feature_fifo.read();
         conv_input_stream.write(input);
 #ifndef __SYNTHESIS__
         ++input_read_count;
@@ -189,16 +106,16 @@ void conv_param_router(
 #endif
 }
 
-// 唯一输出Router。Layer1只写入Feature Buffer路径；Layer2只送入FC。
+// 唯一输出Router。Layer1直接写入跨阶段Pool1 FIFO；Layer2只送入FC。
 void output_router(
     hls::stream<channel_pack_t>& pool_output_stream,
-    hls::stream<channel_pack_t>& buffer_write_stream,
+    hls::stream<channel_pack_t>& pool1_feature_fifo,
     hls::stream<channel_pack_t>& fc_input_stream,
     layer_mode_t layer_mode
 ) {
 #ifndef __SYNTHESIS__
     int pool_read_count = 0;
-    int buffer_write_count = 0;
+    int feature_fifo_write_count = 0;
     int fc_write_count = 0;
 #endif
 
@@ -208,9 +125,9 @@ void output_router(
 #pragma HLS PIPELINE II=1
         const channel_pack_t output = pool_output_stream.read();
         if (layer_mode == LAYER1_MODE) {
-            buffer_write_stream.write(output);
+            pool1_feature_fifo.write(output);
 #ifndef __SYNTHESIS__
-            ++buffer_write_count;
+            ++feature_fifo_write_count;
 #endif
         } else {
             fc_input_stream.write(output);
@@ -226,10 +143,10 @@ void output_router(
 #ifndef __SYNTHESIS__
     assert(pool_read_count == transaction_count);
     if (layer_mode == LAYER1_MODE) {
-        assert(buffer_write_count == CNN_POOL1_OUTPUT_TRANSACTIONS);
+        assert(feature_fifo_write_count == CNN_POOL1_OUTPUT_TRANSACTIONS);
         assert(fc_write_count == 0);
     } else {
-        assert(buffer_write_count == 0);
+        assert(feature_fifo_write_count == 0);
         assert(fc_write_count == CNN_POOL2_OUTPUT_TRANSACTIONS);
     }
 #endif
@@ -273,7 +190,10 @@ void run_layer_phase(
     layer_mode_t layer_mode
 ) {
 #pragma HLS INLINE off
-    hls::stream<pixel_t> buffer_read_stream("buffer_read_stream");
+    // static 保证Pool1写入的196个pack跨phase调用保留；Layer2会按原顺序
+    // 全部读出，因此连续Top调用的FIFO初始状态仍为空。
+    static hls::stream<channel_pack_t> pool1_feature_fifo(
+        "pool1_feature_fifo");
     hls::stream<pixel_t> conv_input_stream("conv_input_stream");
     hls::stream<activation_pack_t> activation_stream("activation_stream");
     hls::stream<weight_pack_t> conv_weight_stream("conv_weight_stream");
@@ -282,11 +202,11 @@ void run_layer_phase(
         "conv_param_stream");
     hls::stream<activation_tile_t> post_output_stream("post_output_stream");
     hls::stream<channel_pack_t> pool_output_stream("pool_output_stream");
-    hls::stream<channel_pack_t> buffer_write_stream("buffer_write_stream");
     hls::stream<channel_pack_t> fc_input_stream("fc_input_stream");
     hls::stream<fc_acc_pack_t> fc_acc_stream("fc_acc_stream");
 
-#pragma HLS STREAM variable=buffer_read_stream depth=TOP_STREAM_DEPTH
+#pragma HLS STREAM variable=pool1_feature_fifo depth=TOP_POOL1_FEATURE_FIFO_DEPTH
+#pragma HLS BIND_STORAGE variable=pool1_feature_fifo type=fifo impl=bram
 #pragma HLS STREAM variable=conv_input_stream depth=TOP_STREAM_DEPTH
 #pragma HLS STREAM variable=activation_stream depth=TOP_STREAM_DEPTH
 #pragma HLS STREAM variable=conv_weight_stream depth=TOP_STREAM_DEPTH
@@ -294,13 +214,11 @@ void run_layer_phase(
 #pragma HLS STREAM variable=conv_param_stream depth=TOP_STREAM_DEPTH
 #pragma HLS STREAM variable=post_output_stream depth=TOP_STREAM_DEPTH
 #pragma HLS STREAM variable=pool_output_stream depth=TOP_STREAM_DEPTH
-#pragma HLS STREAM variable=buffer_write_stream depth=TOP_STREAM_DEPTH
 #pragma HLS STREAM variable=fc_input_stream depth=TOP_STREAM_DEPTH
 #pragma HLS STREAM variable=fc_acc_stream depth=TOP_STREAM_DEPTH
 
 #pragma HLS DATAFLOW
-    feature_buffer_process(buffer_write_stream, buffer_read_stream, layer_mode);
-    input_router(image_stream, buffer_read_stream, conv_input_stream,
+    input_router(image_stream, pool1_feature_fifo, conv_input_stream,
                  layer_mode);
     conv_weight_router(conv1_weight_stream, conv2_weight_stream,
                        conv_weight_stream, layer_mode);
@@ -311,7 +229,7 @@ void run_layer_phase(
     conv_postprocess(acc_stream, conv_param_stream, post_output_stream,
                      layer_mode);
     maxpool(post_output_stream, pool_output_stream, layer_mode);
-    output_router(pool_output_stream, buffer_write_stream, fc_input_stream,
+    output_router(pool_output_stream, pool1_feature_fifo, fc_input_stream,
                   layer_mode);
     fully_connected_guard(fc_input_stream, fc_weight_stream, fc_acc_stream,
                           layer_mode);

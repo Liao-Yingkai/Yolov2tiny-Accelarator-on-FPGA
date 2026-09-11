@@ -59,7 +59,7 @@ word[(spatial_lane * 4 + cout_lane) * 8 +: 8]
 
 ## 层间连接
 
-Pool1输出仍由顶层写入 `14×14×8` Feature Buffer，之后作为Conv2 Im2Row的输入。这是因为两层卷积共享同一套物理卷积流水硬件，两个阶段顺序执行。
+Pool1输出由顶层顺序写入深度196的 `hls::stream<channel_pack_t>` BRAM FIFO，之后按原顺序作为Conv2 Im2Row的输入。这是因为两层卷积共享同一套物理卷积流水硬件，两个阶段顺序执行。
 
 Pool2默认直接连接独立FC模块。若FC为多个输出tile回放784个activation，其输入缓存属于FC内部；Pool不要求、更不强制顶层设置FC Input Buffer。FC不复用当前Systolic。
 
