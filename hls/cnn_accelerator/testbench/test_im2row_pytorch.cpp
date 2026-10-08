@@ -2,7 +2,7 @@
 
 // 临时使用绝对路径读取 PyTorch dump_trace.py 生成的单图 golden trace。
 // 后续系统集成时可改为由构建脚本传入的相对 include 路径。
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data.h"
+#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0000.h"
 
 #include <errno.h>
 #include <sys/stat.h>

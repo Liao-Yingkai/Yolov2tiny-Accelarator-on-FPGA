@@ -34,6 +34,8 @@ struct fc_param_pack_t {
 };
 
 typedef ap_int<ACTIVATION_BITS> logit_t;
+// MNIST 的类别索引范围为0..9，4 bit足以表达全部类别。
+typedef ap_uint<4> class_index_t;
 
 // FC 最终只写出一个完整的10类 signed INT8 logit Pack。
 struct logits_pack_t {

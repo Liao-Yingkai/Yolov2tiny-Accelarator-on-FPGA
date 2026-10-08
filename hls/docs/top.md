@@ -1,7 +1,8 @@
 # Top 初版设计
 
 - 对应源码：`cnn_accelerator/src/top.cpp`、`cnn_accelerator/src/cnn_accel.h`。
-- 本阶段只完成源码和静态检查；不运行Top Testbench、C Simulation、RTL Co-simulation或C Synthesis。
+- Top C Simulation 已完成三图连续调用检查：30 路 logits 全部通过、错误数为0；RTL
+  Co-simulation 与 C Synthesis 尚未运行。
 
 ## 顶层接口与阶段顺序
 
@@ -27,6 +28,22 @@ phase 1: Pool1 Feature FIFO → Conv2 → Pool2 → FC → FCPost → logits
 该顶层phase循环不添加`UNROLL`、`PIPELINE`或`DATAFLOW`。每次
 `run_layer_phase()`返回意味着该次唯一DATAFLOW区域已drain；因此不需要额外的done、busy、
 watermark或跨层ping-pong控制。
+
+## Top Testbench 的三图连续调用
+
+`cnn_accelerator/testbench/test_top.cpp` 同时 include
+`trace_data_0000.h`、`trace_data_0001.h` 和 `trace_data_0002.h`。三个生成 header
+仍保持相同的 `trace_*` 数组名；testbench 在全局 include `stdint.h` 后，分别用
+`trace_data_0000`、`trace_data_0001`、`trace_data_0002` namespace 包裹 include，
+因此不需要修改 Python 导出的 header，也保留现有绝对 include 路径。
+
+`main` 只创建一组外部 stream，并按 0000 → 0001 → 0002 顺序连续调用顶层三次。
+每次调用前重新写入完整的784个输入事务、两层卷积权重/参数和 FC 权重/参数；调用
+返回后逐 lane 精确比较10个 INT8 logits，并检查7条输入/参数 stream 与1条 logits
+stream 均已清空。`input.csv` 的列为 `sample,y,x,channel,value`，`output.csv`
+的列为 `sample,output,expected,actual,match`；写入 CSV 的 INT8 值先提升为 `int`，
+避免 `signed char` 被输出为字符。本次 C Simulation 已验证三次调用的顺序和守恒；RTL
+Co-simulation 与综合仍按后续验证流程执行。
 
 ## 单一DATAFLOW区域
 
@@ -73,6 +90,6 @@ Layer1的FC路径均为零事务；Router在非综合构建中对此执行事务
   识别为反馈通道，需确认不会引入死锁、跨调用FIFO生命周期限制或不支持的实现；
 - RTL hierarchy是否只生成一套Im2Row、Systolic、ConvPostProcess和Pool；
 - 层内depth=2 FIFO及196-depth阶段间FIFO的死锁、stall、资源和时序；
-- 连续两次Top调用的Pool1 FIFO清空、覆盖与结果独立性。
+- 连续三次Top调用的Pool1 FIFO清空、覆盖与结果独立性。
 
 DDR、DMA、AXI master、权重加载和FIFO性能调优均不属于本初版。

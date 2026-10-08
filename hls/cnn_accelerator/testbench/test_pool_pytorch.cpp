@@ -1,6 +1,6 @@
 #include "../src/pool/pool.h"
 
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data.h"
+#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0000.h"
 
 #include <errno.h>
 #include <sys/stat.h>

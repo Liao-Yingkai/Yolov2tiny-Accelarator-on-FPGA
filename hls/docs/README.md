@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool、独立FC MAC/后处理以及两阶段Top控制均已完成第一版源码；当前阶段只完成静态审阅，尚未运行Top级仿真或综合。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool、独立FC MAC/后处理以及两阶段Top控制均已完成第一版源码；Top C Simulation 已通过三图连续调用检查（30 路 logits 全部通过），RTL Co-simulation 与综合尚未运行。
 
 ## 工程原则
 
@@ -120,6 +120,10 @@ shift；首个 spatial tile 读取并缓存所有 Cout tile 的参数，之后�
 
 FC MAC 后使用 `src/postprocess/fc_postprocess.*` 的独立后处理：每组5 lane 串行复用一套32x32 signed requant数据通路，执行 bias、INT64乘法、直接算术右移和 `[-128,127]` 双向饱和，不做 ReLU 或额外 rounding。输出一次完整10路 logit Pack。FC 与卷积 Systolic 的滑窗/空间并行计算不同，既不复用其阵列也不复用其权重缓存。详细接口、缓冲和未验证项见 [独立 FC 设计](fc.md)；本阶段未运行C仿真、协同仿真或综合。
 
+## 独立 logits Argmax
+
+独立 `src/postprocess/logits_argmax.*` 每调用消费一个10路 signed INT8 logits Pack，输出一个 `ap_uint<4>` 类别索引；并列最大值选择最小索引。比较采用完整展开和分区的 `10 -> 5 -> 3 -> 2 -> 1` 平衡树，共9个 signed 比较器、4层比较深度，避免串行逐项扫描。独立 C Simulation 通过；在 `xc7z020-clg400-2`、10 ns 约束下综合 latency 为2 cycles、interval为3 cycles，估算时钟6.826 ns，资源为59 FF、183 LUT、0 BRAM、0 DSP。它保留独立接口，之后可接到 FCPostProcess 之后；当前不改动 Top 或 logits 接口。详细结果和综合报告见 [独立 logits Argmax 设计](argmax.md)。
+
 ## 相对 dev 通用实现的固定网络化
 
 | 内容 | 本分支变化 | 保持不变 |
@@ -136,8 +140,14 @@ FC MAC 后使用 `src/postprocess/fc_postprocess.*` 的独立后处理：每组5
 
 `cnn_accelerator/testbench/` 保留两组独立的模块 testbench：原有 `test_*.cpp`
 使用确定性程序数据，新增 `test_*_pytorch.cpp` 直接读取 Python exporter 和
-`dump_trace.py` 的单图 golden 数据。后者每个文件只调用一个 DUT top，输入直接来自
-PyTorch 的对应上游边界，不将多个 HLS 模块串接；输出按硬件 stream 顺序恢复坐标后逐项
-比较，不缓存完整 feature map 做重排。运行时 CSV 位于
-`simulation_data/pytorch/<module>/`。当前 Python header 使用绝对路径 include，替换
-trace 或模型结构后须同步检查 shape 断言和索引映射。
+`dump_trace.py` 的 golden 数据。模块 testbench 输入直接来自 PyTorch 的对应上游边界，
+不将多个 HLS 模块串接；输出按硬件 stream 顺序恢复坐标后逐项比较，不缓存完整 feature
+map 做重排。运行时 CSV 位于 `simulation_data/pytorch/<module>/`。当前 Python header
+使用绝对路径 include，替换 trace 或模型结构后须同步检查 shape 断言和索引映射。
+
+Top 级 `test_top.cpp` 是连续多图例外：它同时 include
+`trace_data_0000.h`、`trace_data_0001.h`、`trace_data_0002.h`，在 testbench 内用
+三个独立 namespace 隔离同名数组；同一组 stream 连续调用 `cnn_accelerator` 三次，
+每次完整重灌输入、两层卷积参数和 FC 参数，并逐图比较10路 logits、检查 stream 守恒。
+其 `input.csv`/`output.csv` 均带 `sample` 列，以区分三张图；三组 input/logits 的
+元素数量均有编译期 shape 断言。
