@@ -92,4 +92,9 @@ Layer1的FC路径均为零事务；Router在非综合构建中对此执行事务
 - 层内depth=2 FIFO及196-depth阶段间FIFO的死锁、stall、资源和时序；
 - 连续三次Top调用的Pool1 FIFO清空、覆盖与结果独立性。
 
-DDR、DMA、AXI master、权重加载和FIFO性能调优均不属于本初版。
+原 stream Top 本身不含 DDR、DMA 或 AXI master。新增外层
+`cnn_accelerator_ddr` 保留本 Top 接口/循环，负责独立 DDR loaders、logits
+分流/argmax 与16字节结果 writer（10个 logits、2个保留字节、uint32类别）；
+详见 [DDR Wrapper 设计](ddr_wrapper.md)。
+Wrapper 的外层 DATAFLOW 与本层 phase barrier/共享 FIFO 是否保持预期层次和
+有限深度反压行为，仍待综合与 RTL Co-simulation 确认。

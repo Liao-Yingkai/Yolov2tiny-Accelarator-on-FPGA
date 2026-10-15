@@ -132,6 +132,21 @@ FC MAC 后使用 `src/postprocess/fc_postprocess.*` 的独立后处理：每组5
 | Im2Row 边界 | 固定 Conv1/Conv2 的 Tile 数、tail valid、Bottom load 和预取 mask；输入读出后立即完成 Conv1 通道零填充 | 2-row circular line buffer、4-way banking、双 Strip、9-token 顺序和 write-first 反压语义 |
 | Systolic 调度 | `row × tile_x` 合并成固定数量的 `spatial_tile`；Cout tile 固定为2或4 | 唯一 `4×4×8` PE、activation/weight replay BRAM、dot tree、累加和输出顺序 |
 
+## DDR Wrapper
+
+新增 `cnn_accelerator_ddr` 将 DDR image/weights/params 加载为现有 core 的
+stream，并通过独立 logits 分流/argmax 写出两个64-bit结果 word（16字节：
+10个 logits、2个保留字节、uint32类别）。参数每层按完整 bias/multiplier/shift
+数组连续保存，独立 params AXI 的 widening 上限为32 bit。原 stream
+Top 与计算模块保持不变。接口布局、PS 打包、缓存维护及有限 FIFO/层次待验证项见
+[DDR Wrapper 设计](ddr_wrapper.md)。本次布局改版的 GCC 11 与系统 Clang 14
+静态语法检查通过；Vitis HLS 2022.2
+C Simulation 仅运行一次，三图30个 logits、3个类别、守卫及只读区检查全部通过，
+错误数0，input/output CSV 含表头分别2353/34行，日志无 WARNING/ERROR。报告见
+[Wrapper C Simulation 日志](../../build/hls/ddr_layout_verify_16byte/project/solution1/csim/report/cnn_accelerator_ddr_csim.log)。
+本阶段未运行 wrapper 综合、RTL Co-simulation 或上板验证，未实施 PS 实际打包
+程序；C Simulation 不验证有限深度 FIFO、AXI、HLS pragma 或缓存维护行为。
+
 ## 生成物目录
 
 今后的 csynth/csim/cosim 工程与日志统一写入仓库根目录 `build/hls/<run-name>/`，不要写入 `hls` 源码树；该目录由 Git 忽略。
