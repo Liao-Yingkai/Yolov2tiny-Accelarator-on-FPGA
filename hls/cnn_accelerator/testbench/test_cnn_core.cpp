@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#include "../src/cnn_accel.h"
+#include "../src/core/cnn_core.h"
 
 // 生成 header 保持每个文件内部符号同名；先在全局引入 stdint.h，再将
 // 三次 include 分别包进 namespace，避免同名 trace 数组互相冲突。

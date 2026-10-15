@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行。Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool、独立FC MAC/后处理以及两阶段Top控制均已完成第一版源码；Top C Simulation 已通过三图连续调用检查（30 路 logits 全部通过），RTL Co-simulation 与综合尚未运行。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行，提供 stream 计算核心 `cnn_accelerator` 与 DDR 系统顶层 `cnn_accelerator_ddr` 两种入口。Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool、独立 FC MAC/后处理及两阶段控制均已实现。本轮结构重构后的验证记录见下方目录与验证章节；当前 DDR Top 尚未完成综合或 RTL 验证，不能由计算核心或独立模块的历史结果推断其硬件状态。
 
 ## 工程原则
 
@@ -42,7 +42,7 @@ Pool1 Feature FIFO → Im2Row → Systolic → ConvPostProcess → Pool → 独�
 Pool1 Feature FIFO保存 `14×14×8` 个 INT8 activation，逻辑容量为1,568 Byte。它是
 `run_layer_phase()`内持久的`static hls::stream<channel_pack_t>`，深度固定为196并约束为
 BRAM FIFO：Layer1由Output Router写满，Layer2由Input Router按原顺序读空。由于Input Router
-在源码中先于Output Router调用，普通C++语义也符合两phase先写后读的顺序。Pool2直接流入独立FC；FC在第一个输出 Tile 消费 Pool2 的98个8-channel Pack，并写入自身的98x64-bit BRAM，供第二个输出 Tile 回放。Top的具体接口、Barrier和尚待工具验证的反馈通道风险见 [Top 初版设计](top.md)。
+在源码中先于Output Router调用，普通C++语义也符合两phase先写后读的顺序。Pool2直接流入独立FC；FC在第一个输出 Tile 消费 Pool2 的98个8-channel Pack，并写入自身的98x64-bit BRAM，供第二个输出 Tile 回放。Top的具体接口、Barrier和尚待工具验证的反馈通道风险见 [Stream 计算核心设计](top.md)。
 
 `src/config.h` 是固定网络、并行度及派生事务数量的唯一编译期来源。卷积相关模块只接收一个调用级模式：`LAYER1_MODE=false` 选择 Conv1/Pool1，`LAYER2_MODE=true` 选择 Conv2/Pool2；模式不进入每个stream事务。
 
@@ -147,6 +147,53 @@ C Simulation 仅运行一次，三图30个 logits、3个类别、守卫及只读
 本阶段未运行 wrapper 综合、RTL Co-simulation 或上板验证，未实施 PS 实际打包
 程序；C Simulation 不验证有限深度 FIFO、AXI、HLS pragma 或缓存维护行为。
 
+## 源码分层与两个入口
+
+```text
+cnn_accelerator/
+├── src/
+│   ├── core/cnn_core.{h,cpp}        流式计算核心
+│   ├── top/cnn_accel_ddr.{h,cpp}    DDR 系统顶层
+│   ├── axi/ddr_io.{h,cpp}          DDR 加载、分流与写回
+│   ├── axi/ddr_layout.h            共享 DDR 布局
+│   ├── im2row/ systolic/ pool/ fc/ postprocess/
+│   └── config.h types.h
+├── testbench/test_cnn_core.cpp
+├── testbench/test_cnn_accel_ddr.cpp
+└── script/hls_core.tcl hls_ddr.tcl
+```
+
+`core/cnn_core.cpp` 的 `cnn_accelerator` 是普通 stream 计算入口，独立验证时不依赖
+DDR 搬运或 argmax；`top/cnn_accel_ddr.cpp` 的 `cnn_accelerator_ddr` 是四指针 DDR
+系统入口，通过 `ddr_io` actor 调用同一个计算核心并输出 logits 与类别。目录与文件
+更名不改变函数名、计算、接口、DDR 布局、FIFO 深度或调度顺序。
+
+## C Simulation 入口与历史验证
+
+在安装并配置好 Vitis HLS 2022.2 的环境中，用 `vitis_hls -f` 分别运行
+`cnn_accelerator/script/hls_core.tcl` 或 `cnn_accelerator/script/hls_ddr.tcl`；
+脚本可从任意工作目录调用，分别选取唯一对应 testbench，使用
+`xc7z020-clg400-2`、10 ns 约束，仅执行 C Simulation 并退出。
+Vitis HLS 启动日志仍写入启动工作目录，建议先进入仓库根目录的
+`build/hls/structure_refactor_verify/` 等生成物目录，再通过脚本的绝对路径
+运行 `vitis_hls -f`；不要从 `hls` 源码目录启动工具。脚本的路径解析能力
+不代表工具启动日志会自动重定向。
+工程分别写入仓库根目录的 `build/hls/cnn_core_csim/` 和
+`build/hls/cnn_ddr_csim/`，不重置或覆盖其他工程。不自动综合、协同仿真或导出；
+需要时可自行追加相应命令，或在图形界面中设置。
+
+上文归档日志属于结构迁移前的历史验证，保留原链接与原始文件。本轮迁移后，
+GCC 11 与系统 Clang 14 对全部25个源码及 testbench `.cpp` 的静态检查通过。
+修正 Vitis HLS 2022.2 的工程打开路径兼容性后，两个新脚本各完成一次 C Simulation：
+
+- `hls_core.tcl`：三图30路 logits 与 stream 守恒全部通过，0 errors，无 WARNING；
+  input/output CSV 含表头分别2353/31行，见 [核心 C Simulation 报告](../../build/hls/cnn_core_csim/solution1/csim/report/cnn_accelerator_csim.log)。
+- `hls_ddr.tcl`：三图30路 logits、3个类别、守卫与只读区检查全部通过，0 errors，无 WARNING；
+  input/output CSV 含表头分别2353/34行，见 [DDR C Simulation 报告](../../build/hls/cnn_ddr_csim/solution1/csim/report/cnn_accelerator_ddr_csim.log)。
+
+本轮未运行综合或 RTL Co-simulation；DDR 系统入口的综合、RTL 反压和硬件验证仍待后续。
+核心或独立模块的历史结果不代表 DDR 系统入口已经综合。
+
 ## 生成物目录
 
 今后的 csynth/csim/cosim 工程与日志统一写入仓库根目录 `build/hls/<run-name>/`，不要写入 `hls` 源码树；该目录由 Git 忽略。
@@ -160,7 +207,7 @@ C Simulation 仅运行一次，三图30个 logits、3个类别、守卫及只读
 map 做重排。运行时 CSV 位于 `simulation_data/pytorch/<module>/`。当前 Python header
 使用绝对路径 include，替换 trace 或模型结构后须同步检查 shape 断言和索引映射。
 
-Top 级 `test_top.cpp` 是连续多图例外：它同时 include
+Top 级 `test_cnn_core.cpp` 是连续多图例外：它同时 include
 `trace_data_0000.h`、`trace_data_0001.h`、`trace_data_0002.h`，在 testbench 内用
 三个独立 namespace 隔离同名数组；同一组 stream 连续调用 `cnn_accelerator` 三次，
 每次完整重灌输入、两层卷积参数和 FC 参数，并逐图比较10路 logits、检查 stream 守恒。

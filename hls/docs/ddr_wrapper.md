@@ -1,10 +1,14 @@
 # DDR Loader / Writer Wrapper
 
-源码为 `cnn_accelerator/src/axi/cnn_accel_ddr.{h,cpp}`，HLS top 选择
+源码为 `cnn_accelerator/src/top/cnn_accel_ddr.{h,cpp}`，HLS top 选择
 `cnn_accelerator_ddr`。固定一次调用处理一张图像；原 `cnn_accelerator` 的
 stream 接口、计算循环、两阶段 barrier 和 Pool1 FIFO 保持不变。
 本阶段提供源码、独立 testbench 与接口约定，不包含 PS 软件、export 脚本或 BD；
-本次参数与16字节结果布局的独立静态检查及三图 C Simulation 已通过；
+迁移前参数与16字节结果布局的独立静态检查及三图 C Simulation 已通过；
+迁移后 GCC 11 与系统 Clang 14 的全25个源码及 testbench 静态检查通过，
+`hls_ddr.tcl` 再次通过三图30路 logits、3个类别、守卫与只读区检查，
+0 errors、无 WARNING；input/output CSV 含表头分别2353/34行，见
+[迁移后 DDR C Simulation 报告](../../build/hls/cnn_ddr_csim/solution1/csim/report/cnn_accelerator_ddr_csim.log)。
 未完成 wrapper 综合、RTL
 Co-simulation 或上板验证，尚未实施 PS 实际数据打包程序。
 
@@ -129,6 +133,12 @@ INT8 解释。类别采用现有 logits_argmax 的 signed 比较，平局选择�
 
 ## DATAFLOW 与调度边界
 
+`src/top/cnn_accel_ddr.cpp` 只保留外层接口、stream、DATAFLOW 编排及匿名命名空间
+内的 compute_runner / argmax_runner。五个搬运与分流 actor 位于
+`src/axi/ddr_io.cpp` 的 `ddr_io` 命名空间，公共签名由 `src/axi/ddr_io.h` 声明；
+load_conv_weights 和模板 load_params 留在该实现文件的匿名命名空间内并保留内联约束。
+共享 DDR 布局仍为 `src/axi/ddr_layout.h`，不随系统入口移动。
+
 外层无条件调用七个 `INLINE off` actor：image_loader、weight_loader、
 param_loader、compute_runner、logits_split、argmax_runner、result_writer。
 argmax_runner 调用现有 logits_argmax，避免改变其独立模块源码。
@@ -149,7 +159,7 @@ C Simulation 的无限深 stream 行为断言有限深度 DATAFLOW 不死锁。
 
 ## 独立 testbench
 
-`testbench/test_ddr_wrapper.cpp` 用 namespace include 三个绝对路径 trace
+`testbench/test_cnn_accel_ddr.cpp` 用 namespace include 三个绝对路径 trace
 header 和现有模型 header。软件侧独立使用权重索引公式构造 DDR 数据；参数
 按输出通道直接将三个完整 header 数组拷贝到各层 bias/multiplier/shift 区，
 不照抄 DUT 的 pack/field/lane 地址循环。模型

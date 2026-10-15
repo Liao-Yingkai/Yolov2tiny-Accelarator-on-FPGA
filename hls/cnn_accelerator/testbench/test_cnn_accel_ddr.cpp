@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "../src/axi/cnn_accel_ddr.h"
+#include "../src/top/cnn_accel_ddr.h"
 #include <errno.h>
 #include <sys/stat.h>
 #include <fstream>

@@ -1,8 +1,13 @@
-# Top 初版设计
+# 流式计算核心设计
 
-- 对应源码：`cnn_accelerator/src/top.cpp`、`cnn_accelerator/src/cnn_accel.h`。
-- Top C Simulation 已完成三图连续调用检查：30 路 logits 全部通过、错误数为0；RTL
-  Co-simulation 与 C Synthesis 尚未运行。
+- 对应源码：`cnn_accelerator/src/core/cnn_core.cpp`、`cnn_accelerator/src/core/cnn_core.h`。
+- 迁移后 `hls_core.tcl` 已完成三图连续调用检查：30 路 logits 与 stream 守恒全部通过，
+  错误数为0、无 WARNING；input/output CSV 含表头分别2353/31行，见
+  [核心 C Simulation 报告](../../build/hls/cnn_core_csim/solution1/csim/report/cnn_accelerator_csim.log)。
+- 本轮未运行 RTL Co-simulation 或 C Synthesis，不覆盖历史工程的验证记录。
+
+流式核心入口仍为 `cnn_accelerator`，DDR 系统入口为 `cnn_accelerator_ddr`，见
+[DDR Wrapper](ddr_wrapper.md)。
 
 ## 顶层接口与阶段顺序
 
@@ -31,7 +36,7 @@ watermark或跨层ping-pong控制。
 
 ## Top Testbench 的三图连续调用
 
-`cnn_accelerator/testbench/test_top.cpp` 同时 include
+`cnn_accelerator/testbench/test_cnn_core.cpp` 同时 include
 `trace_data_0000.h`、`trace_data_0001.h` 和 `trace_data_0002.h`。三个生成 header
 仍保持相同的 `trace_*` 数组名；testbench 在全局 include `stdint.h` 后，分别用
 `trace_data_0000`、`trace_data_0001`、`trace_data_0002` namespace 包裹 include，

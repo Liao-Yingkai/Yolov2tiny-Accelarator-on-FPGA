@@ -1,11 +1,11 @@
-#include "cnn_accel.h"
+#include "cnn_core.h"
 
-#include "fc/fc.h"
-#include "im2row/im2row.h"
-#include "pool/pool.h"
-#include "postprocess/conv_postprocess.h"
-#include "postprocess/fc_postprocess.h"
-#include "systolic/systolic.h"
+#include "../fc/fc.h"
+#include "../im2row/im2row.h"
+#include "../pool/pool.h"
+#include "../postprocess/conv_postprocess.h"
+#include "../postprocess/fc_postprocess.h"
+#include "../systolic/systolic.h"
 
 #ifndef __SYNTHESIS__
 #include <assert.h>
