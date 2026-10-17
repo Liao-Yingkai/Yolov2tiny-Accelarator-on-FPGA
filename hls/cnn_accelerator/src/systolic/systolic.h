@@ -11,6 +11,8 @@
 // output_stream：保持 Im2Row 等价的 spatial_tile(row -> tile_x) -> cout_tile 顺序输出 INT32 累加 Tile。
 //
 // layer_mode在一次完整层调用中保持稳定：LAYER1_MODE选择Conv1，LAYER2_MODE选择Conv2。
+// Conv1仅channel0参与点积，无效Cin允许非零；Conv2全部8路参与。
+// 物理stream宽度与replay格式不变，spatial_valid仍按既有契约透传。
 void systolic(hls::stream<activation_pack_t>& activation_stream,
               hls::stream<weight_pack_t>& weight_stream,
               hls::stream<acc_tile_t>& output_stream,

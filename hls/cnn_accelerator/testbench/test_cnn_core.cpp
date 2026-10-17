@@ -39,9 +39,9 @@ namespace trace_data_0002 {
  * 输入图像依次取 dump_trace.py 导出的三个 HWC INT8 trace。三个 header 的
  * 数组使用同名符号，并由本文件的 include wrapper 分别放入
  * trace_data_0000/0001/0002 namespace，因而可以在同一个编译单元内同时
- * include。Conv 权重 header 为 [K, OC]，
+ * include。v2 Conv 权重 header 为 [cout_tile][kh][kw][cout_lane][实际Cin]，
  * 按 cout_tile -> token 事务顺序打包；FC 权重已经离线变换为
- * [HWC_flatten, OC]，按 out_tile -> token 事务顺序打包。每一次顶层调用前，
+ * [out_tile][token][cout_lane][cin_lane]，按 out_tile -> token 装入。每一次顶层调用前，
  * 都重新写入一张图像以及完整的 Conv/FC 权重和参数流。DUT 完整执行两层
  * 卷积、两次池化和 FC 后，将十路 signed INT8 logits pack 与对应 trace 的
  * trace_fc_requant_int8 逐 lane 精确比较。
@@ -53,6 +53,8 @@ namespace trace_data_0002 {
  * DATAFLOW实现、死锁和跨调用FIFO状态。
  */
 namespace {
+static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION == 2 &&
+              FC_WEIGHT_LAYOUT_VERSION == 2, "requires blocked weight headers v2");
 
 static bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
@@ -97,12 +99,14 @@ static void write_image(const trace_sample_t& trace,
 }
 
 static int conv_weight_value(bool conv2, int token, int channel, int output) {
+    // v2 卷积头：[cout_tile][kh*3+kw][cout_lane][实际 Cin]。
+    const int pack_lane = ((output / SYSTOLIC_COUT_PAR) * SYSTOLIC_KERNEL_TOKENS + token)
+                          * SYSTOLIC_COUT_PAR + output % SYSTOLIC_COUT_PAR;
     if (!conv2) {
         return channel == 0
-            ? conv1_weight[token * CNN_CONV1_COUT + output] : 0;
+            ? conv1_weight[pack_lane] : 37;
     }
-    return conv2_weight[(token * CNN_CONV2_CIN + channel) * CNN_CONV2_COUT +
-                        output];
+    return conv2_weight[pack_lane * CNN_CONV2_CIN + channel];
 }
 
 static void write_conv_weights(bool conv2,
@@ -156,11 +160,9 @@ static void write_fc_weights(hls::stream<fc_weight_pack_t>& weight_stream) {
         for (int token = 0; token < FC_INPUT_PACKS; ++token) {
             fc_weight_pack_t weight;
             for (int cout_lane = 0; cout_lane < FC_COUT_PAR; ++cout_lane) {
-                const int output = out_tile * FC_COUT_PAR + cout_lane;
                 for (int cin_lane = 0; cin_lane < FC_CIN_PAR; ++cin_lane) {
-                    const int input = token * FC_CIN_PAR + cin_lane;
                     weight.value[cout_lane][cin_lane] =
-                        fc_weight[input * FC_OUTPUTS + output];
+                        fc_weight[((out_tile * FC_INPUT_PACKS + token) * FC_COUT_PAR + cout_lane) * FC_CIN_PAR + cin_lane];
                 }
             }
             weight_stream.write(weight);

@@ -40,7 +40,7 @@ watermark或跨层ping-pong控制。
 `trace_data_0000.h`、`trace_data_0001.h` 和 `trace_data_0002.h`。三个生成 header
 仍保持相同的 `trace_*` 数组名；testbench 在全局 include `stdint.h` 后，分别用
 `trace_data_0000`、`trace_data_0001`、`trace_data_0002` namespace 包裹 include，
-因此不需要修改 Python 导出的 header，也保留现有绝对 include 路径。
+因此 trace 数组名称和绝对 include 路径保持不变。权重 header 则使用新版紧凑分块布局（版本2），testbench 按该布局装入原有 weight stream；不再从 `[K,Cout]` header 重排。Im2Row 的 `pixel_t` 输入、两阶段调度及事务数不变。
 
 `main` 只创建一组外部 stream，并按 0000 → 0001 → 0002 顺序连续调用顶层三次。
 每次调用前重新写入完整的784个输入事务、两层卷积权重/参数和 FC 权重/参数；调用

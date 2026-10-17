@@ -15,11 +15,12 @@
  *
  * Pool2 trace 是 [7][7][16] NHWC。它被直接写成 98 个 channel_pack_t：每个
  * 空间位置先 c0..c7，后 c8..c15，因此 token * 8 + cin_lane 正是 exporter
- * 已离线转换的 HWC flatten 输入下标。FC 权重 header 为 [784][10]，流顺序为
+ * 已离线转换的 HWC flatten 输入下标。v2 FC 权重 header 为 [2][98][5][8]，流顺序为
  * out_tile -> token。DUT 的两个 fc_acc_pack_t 直接对照十路 int32 systolic
  * trace；本 TB 不调用 Pool 或 FC PostProcess。
  */
 namespace {
+static_assert(FC_WEIGHT_LAYOUT_VERSION == 2, "requires blocked FC weight header v2");
 
 static bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
@@ -78,7 +79,7 @@ static int run_fc(hls::stream<channel_pack_t>& input_stream,
                 const int output = out_tile * FC_COUT_PAR + cout_lane;
                 for (int cin_lane = 0; cin_lane < FC_CIN_PAR; ++cin_lane) {
                     const int input = token * FC_CIN_PAR + cin_lane;
-                    const int value = fc_weight[input * FC_OUTPUTS + output];
+                    const int value = fc_weight[((out_tile * FC_INPUT_PACKS + token) * FC_COUT_PAR + cout_lane) * FC_CIN_PAR + cin_lane];
                     weight.value[cout_lane][cin_lane] = value;
                     weight_csv << weights_written << ',' << out_tile << ','
                                << token << ',' << cout_lane << ',' << cin_lane

@@ -3,14 +3,16 @@
 源码为 `cnn_accelerator/src/top/cnn_accel_ddr.{h,cpp}`，HLS top 选择
 `cnn_accelerator_ddr`。固定一次调用处理一张图像；原 `cnn_accelerator` 的
 stream 接口、计算循环、两阶段 barrier 和 Pool1 FIFO 保持不变。
-本阶段提供源码、独立 testbench 与接口约定，不包含 PS 软件、export 脚本或 BD；
+本轮同步 Python exporter、HLS/testbench 与 Vitis 裸机应用，Vivado/IP 导出与 bitstream 不修改。
+权重 header 布局版本为2，Python metadata 为5；旧权重布局不能与新版 loader 混用。
+以下历史结果不证明本轮新布局已完成 RTL 验证：
 迁移前参数与16字节结果布局的独立静态检查及三图 C Simulation 已通过；
 迁移后 GCC 11 与系统 Clang 14 的全25个源码及 testbench 静态检查通过，
 `hls_ddr.tcl` 再次通过三图30路 logits、3个类别、守卫与只读区检查，
 0 errors、无 WARNING；input/output CSV 含表头分别2353/34行，见
 [迁移后 DDR C Simulation 报告](../../build/hls/cnn_ddr_csim/solution1/csim/report/cnn_accelerator_ddr_csim.log)。
-未完成 wrapper 综合、RTL
-Co-simulation 或上板验证，尚未实施 PS 实际数据打包程序。
+本轮统一 Loader 已完成 wrapper 综合与三图 RTL Co-simulation，结果见文末；尚未上板或更新 Vivado 生成物。PS 应用位于
+`vivado/cnn_accel_ddr/vitis/cnn_accel_ddr/src/main.c`，仅直接复制新 header 到 DDR。
 
 ## 控制与 AXI 接口
 
@@ -29,7 +31,7 @@ void cnn_accelerator_ddr(const ap_uint<64>* image,
 | 指针 | 元素 | m_axi bundle | depth / 有效字节 |
 |---|---|---|---|
 | image | unsigned 64 bit | gmem_io | 98 / 784 |
-| weights | unsigned 64 bit | gmem_weights | 1196 / 9568 |
+| weights | unsigned 64 bit | gmem_weights | 1133 / 9064 |
 | params | signed 32 bit | gmem_params | 102 / 408 |
 | result | unsigned 64 bit | gmem_io | 2 / 16 |
 
@@ -58,29 +60,27 @@ header。所有 offset 都是相应指针的元素 offset，而非 byte offset�
 
 image 按 `y -> x` raster 紧密保存784个 signed INT8：pixel index p 对应
 `image[p/8]` 的 byte `p%8`。每个 word 只读取一次，随后连续发出8个 pixel；
-`pixel.channel[0]` 是图像值，其余物理通道均为0。
+`pixel.channel[0]` 是图像值；其余物理通道透传当前已读 word 的字节作为确定的无效字段，不补零、不另读 DDR。Im2Row 按原契约只保留 Conv1 的 channel 0，内部清零其余通道；Systolic 同时自行保证只有 channel 0 参与 Conv1 点积。
 
-### 权重：按硬件消费顺序离线预排
+### 权重：header 直接采用紧凑硬件顺序
 
-| 层 | word offset | Pack 数 | words/Pack | 总 words |
+| 层 | word offset | stream Pack 数 | DDR words/Pack | 总 words |
 |---|---:|---:|---:|---:|
-| Conv1 | 0 | 18 | 4 | 72 |
-| Conv2 | 72 | 36 | 4 | 144 |
-| FC | 216 | 196 | 5 | 980 |
+| Conv1 | 0 | 18 | 1/2 | 9 |
+| Conv2 | 9 | 36 | 4 | 144 |
+| FC | 153 | 196 | 5 | 980 |
 
-Conv 按 `cout_tile -> token(kh*3+kw) -> cout_lane -> cin_byte`。
-令 T 为 Cout tile，t 为 kernel token，L 为 Cout lane，c 为 Cin byte：
+Conv header 按 `[CoutTile][Kh][Kw][CoutLane][logical_Cin]` 紧密排列，不为 Conv1 加入无效权重。令 T 为 Cout tile，t 为 kernel token，L 为 Cout lane，c 为有效 Cin：
 
-- DDR word index = `layer_offset + (T*9+t)*4+L`；
-- 输出通道 o = `T*4+L`；
-- 原 Conv1 `[K,Cout]` 数组值为 `conv1_weight[t*8+o]`，只有 byte0 有效，byte1..7 为0；
-- 原 Conv2 `[K,Cout]` 的 K 为 `t*8+c`，值为 `conv2_weight[(t*8+c)*16+o]`。
+- header 字节索引 = `((T*9+t)*4+L)*logical_Cin+c`；
+- DDR word 索引 = `layer_offset + header_byte_index/8`，字节位置 = `header_byte_index%8`；
+- Conv1 每个 Pack 只含4个真实权重字节，一个 DDR word 包含两个 Pack。两个 Cout tile 各有9个 token，word 缓存必须跨 tile 连续使用，不能在 tile 边界丢弃剩余半个 word；
+- Conv1 解包后各 Cout lane 仅 channel 0 有效；channel 1..7 透传当前 word 的确定字节，Systolic 按模式忽略，loader 不生成零填充；
+- Conv2 每个 Pack 含32个真实字节，各 lane 的完整8路 Cin 正好占一个 word。
 
-FC 按 `out_tile -> token -> cout_lane -> cin_byte`。令 T 为 out tile、t 为
-输入 token、L 为输出 lane、c 为输入 byte：DDR word index 为
-`FC_WEIGHT_OFFSET+(T*FC_INPUT_PACKS+t)*FC_COUT_PAR+L`；原 `[784,10]`
-数组值为 `fc_weight[(t*8+c)*10+(T*5+L)]`。784 输入已经是 Pool2 的 NHWC
-flatten 顺序，不应再次转回 NCHW。
+FC header 按 `[2][98][5][8]` 排列，字节索引为 `((T*98+t)*5+L)*8+c`；DDR word 索引为 `FC_WEIGHT_OFFSET+(T*98+t)*5+L`。784输入的 NHWC flatten 语义不变，不转回 NCHW。
+
+三个 header 的原始字节依次拼接为 DDR 权重区，PS 仅 `memcpy`，不进行重排或逻辑通道补零。Python 数学矩阵/NPY 仍为 `[K_HWC,Cout]`（FC 为 `[784,10]`），golden model 根据新版 metadata 将硬件 header 还原成数学矩阵计算；header 与 NPY 不再具有相同线性排列。数据头和应用均检查 weight header 布局版本2，拒绝旧 header。
 
 ### 参数：每层完整字段连续
 
@@ -136,7 +136,7 @@ INT8 解释。类别采用现有 logits_argmax 的 signed 比较，平局选择�
 `src/top/cnn_accel_ddr.cpp` 只保留外层接口、stream、DATAFLOW 编排及匿名命名空间
 内的 compute_runner / argmax_runner。五个搬运与分流 actor 位于
 `src/axi/ddr_io.cpp` 的 `ddr_io` 命名空间，公共签名由 `src/axi/ddr_io.h` 声明；
-load_conv_weights 和模板 load_params 留在该实现文件的匿名命名空间内并保留内联约束。
+两层卷积共用一个 `load_conv_weights()`，与模板 load_params 一同留在该实现文件的匿名命名空间内并保留内联约束。`weight_loader()` 以两次顺序迭代、唯一调用点处理 Conv1/Conv2，不展开或流水化该层循环；通用函数内部按层模式选择地址、事务数和输出流，不使用动态 stream 引用。
 共享 DDR 布局仍为 `src/axi/ddr_layout.h`，不随系统入口移动。
 
 外层无条件调用七个 `INLINE off` actor：image_loader、weight_loader、
@@ -152,15 +152,16 @@ loader 停在 Conv2/FC，而 core 又等待 Conv1 参数，构成等待环。
 Pool1 FIFO 不变。logits_split 读一次结果，分别发送给 writer 与 argmax；
 writer 等待两路，保留原10个 logits，不只写类别。
 
-DDR 权重 word 循环不展开，每周期目标最多一次64-bit读，byte恢复展开；
-因此 Conv Pack 至少4拍、FC Pack至少5拍，FC 将因权重供应速度而 stall。
+通用卷积 Loader 使用 `Pack → Cout lane` 循环，lane loop 目标 II=1，不展开 Cout lane。每个 lane 都完整定义8个物理通道；Conv1 的 channel0 按3-bit字节游标取值，其余字段透传已读 word。Conv1 每 lane 消费1字节，游标绕回0才读取新 word；Conv2 每 lane 消费8字节，游标保持0，每次读取新 word。64-bit缓存与字节游标在完整层内连续，层调用结束必须正好耗尽。
+
+Conv1 仍以一个缓存 word 提供两个 Pack，但每个 Pack 现在经过4次 lane 迭代，不再采用原专用函数的并行快路径。此取舍减少重复实现，只影响首个 spatial tile 的装载，后续 Systolic 权重回放方式不变。Conv2 每 Pack 仍读取4个 word，FC 每 Pack 读取5个 word。循环 II、控制开销和实际吞吐由本轮综合/协同仿真报告确认。
 同一 HP0 的竞争会增加停顿，目标 II=1 不代表端到端吞吐保证。不能据普通
 C Simulation 的无限深 stream 行为断言有限深度 DATAFLOW 不死锁。
 
 ## 独立 testbench
 
 `testbench/test_cnn_accel_ddr.cpp` 用 namespace include 三个绝对路径 trace
-header 和现有模型 header。软件侧独立使用权重索引公式构造 DDR 数据；参数
+header 和新版模型 header。软件侧仅将三个权重 header 按原始字节拼接到 DDR；参数
 按输出通道直接将三个完整 header 数组拷贝到各层 bias/multiplier/shift 区，
 不照抄 DUT 的 pack/field/lane 地址循环。模型
 只准备一次，三次 wrapper 调用复用地址，仅更新图像。检查30个 logits、独立
@@ -170,3 +171,32 @@ scalar first-argmax、结果保留字节清零、四个 buffer 守卫，以及�
 `sample,output,expected,actual,match`，类别行 output 为 pred_class。
 同目录 `input.csv` 保存 `sample,pixel,value`，三图共2352行输入数据。
 这项检查验证功能与连续调用，不代替综合/RTL反压、AXI或上板验证。
+
+## 统一卷积 Loader 验证结果
+
+验证工程：仓库根 `build/hls/unified_weight_loader_verify/`，Vitis HLS 2022.2，
+`xc7z020-clg400-2`，时钟目标10 ns。未改 Python/Vitis 数据布局、FIFO深度、
+Vivado 工程、导出 IP 或 bitstream。
+
+- 直接 Loader 检查、全部15个主机 testbench、Vitis CSim 均通过；PS host mock 重链新 Loader 后三图类别仍为0/4/1、各0错误。
+- 综合确认一个 `weight_loader_U0` 和一个 `conv_lane_loop`，共享卷积流水中的 Im2Row、Systolic、ConvPostProcess、Pool 各一个实例。lane loop 达到 II=1、depth=12；每 Pack 包含4次 lane 迭代，加填充/排空及控制后，综合估计每 Pack 为18周期，并非每周期输出一个 Pack。
+- Verilog/XSim co-sim 三笔交易全部 PASS，30个 logits、类别、保留字节及守卫检查0错误，无死锁。Latency 为11979～12006周期，平均11988；Interval 平均11992周期，总执行35964周期。见 [co-sim 报告](../../build/hls/unified_weight_loader_verify/vitis_unified_loader/unified_weight_loader/solution1/sim/report/cnn_accelerator_ddr_cosim.rpt)。这些是仿真 AXI 内存模型下的结果，不是板测。
+- HLS 的 latency 估计为8545～14929周期，估计时钟7.300 ns；与 co-sim 的实际事务测量不同，不能据此承诺板上频率或吞吐。
+
+| HLS 资源估计 | 使用量 | 器件容量 |
+|---|---:|---:|
+| BRAM18K | 42 | 280 |
+| DSP | 51 | 220 |
+| FF | 26351 | 106400 |
+| LUT | 36496 | 53200 |
+
+其中整个 `weight_loader` 为0 BRAM、0 DSP、1566 FF、1649 LUT。FC activation buffer 实际仍为98×64-bit BRAM（2个 BRAM18K）。以上不是 Vivado 布局布线报告。
+
+综合无 II violation，63条 warning；co-sim 4条 warning，无 ERROR：
+
+- FIFO建议：`conv_weight_stream` 建议3、`conv_param_stream` 建议4、`write_logits` 建议3；仍保持原depth=2。本次三图未发生死锁，不能据此证明所有外部停顿条件或最优吞吐。
+- Pool1反向反馈通道与两个 FC guard 有通用死锁风险提示；本次真实 RTL 三图完成，未擅自更改阶段控制或FIFO。
+- `BIND 205-102` 提示存储绑定可能忽略，但上述 FC buffer 的实际映射仍为 BRAM。其余综合 warning 为 loop flatten/bound 更新、变量索引 QoR、名字合法化、未使用子端口等生成处理；不将它们等同于功能错误。
+- co-sim 另有通用 FIFO/AXI sizing 风险、`LIBRARY_PATH` 环境提示、生成 Im2Row 模块空端口及部分对象不可记录波形的提示；本次未阻止仿真或结果比较。
+
+完整日志：[综合](../../build/hls/unified_weight_loader_verify/csim_csynth.log)、[co-sim](../../build/hls/unified_weight_loader_verify/cosim.log)。后续上板仍需用当前源码重新导出 IP 并生成 bitstream。

@@ -103,9 +103,11 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
             pack.spatial_valid = valid_mask;
             for (int lane = 0; lane < SYSTOLIC_SPATIAL_PAR; ++lane) {
                 for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
-                    const int value = ((valid_mask & (1 << lane)) &&
-                                       (conv2 || channel == 0)) ?
-                        activation_value(spatial_tile, token, lane, channel) : 0;
+                    // Conv1 无效 Cin 双侧非零 poison；有效 spatial lane 的
+                    // direct/replay 都必须仅计算 c0。invalid spatial 仍保持零。
+                    const int value = (valid_mask & (1 << lane)) ?
+                        ((!conv2 && channel != 0) ? 37 :
+                         activation_value(spatial_tile, token, lane, channel)) : 0;
                     pack.pixel[lane].channel[channel] = value;
                     activation_csv << activations_written << ',' << spatial_tile
                                    << ',' << row << ',' << tile_x << ',' << token
@@ -126,8 +128,8 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
             for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR;
                  ++cout_lane) {
                 for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
-                    const int value = weight_value(cout_tile, token,
-                                                   cout_lane, channel);
+                    const int value = (!conv2 && channel != 0) ? -29 :
+                        weight_value(cout_tile, token, cout_lane, channel);
                     pack.lane[cout_lane].channel[channel] = value;
                     weight_csv << weights_written << ',' << cout_tile << ','
                                << token << ',' << cout_lane << ',' << channel
@@ -168,12 +170,12 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
                     if (expected_valid & (1 << spatial_lane)) {
                         for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS;
                              ++token) {
-                            for (int channel = 0; channel < SYSTOLIC_CIN_PAR;
+                            // 独立 reference 按逻辑 Cin 累加，不读取 poison。
+                            for (int channel = 0; channel < (conv2 ? SYSTOLIC_CIN_PAR : 1);
                                  ++channel) {
                                 const int activation =
-                                    (conv2 || channel == 0) ?
                                     activation_value(spatial_tile, token,
-                                                     spatial_lane, channel) : 0;
+                                                     spatial_lane, channel);
                                 sum += (int64_t)activation * weight_value(
                                     cout_tile, token, cout_lane, channel);
                             }

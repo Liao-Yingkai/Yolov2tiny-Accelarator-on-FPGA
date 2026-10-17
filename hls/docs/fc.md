@@ -15,6 +15,8 @@ bias、multiplier、shift；它们由 `src/postprocess/fc_postprocess.h` 的 FC
 
 当前 exporter 参数契约要求 multiplier 和 shift 非负；非综合态会断言该契约。
 
+新版 `fc_weight.h` 直接按 `[2][98][5][8]` 保存7840个真实权重字节，PS 无需再从 `[784][10]` 重排。Python 的数学矩阵/NPY 仍为 NHWC 的 `[784][10]`，golden model 解析硬件 header 后恢复该矩阵进行独立计算。NHWC flatten 语义及 FC stream 接口、回放和乘法阵列均不变；三个 weight header 的布局版本均为2。
+
 ## 接口、缓存和吞吐目标
 
 ```cpp
@@ -51,7 +53,6 @@ signed right_shift 一样符号扩展。lane loop 目标 `PIPELINE II=1`；实�
 
 卷积 Systolic 面向3x3滑窗、4个空间 lane 和跨空间 tile 的权重回放；FC 没有滑窗，
 只扁平化 Pool2 的 HWC 向量，并仅为第二输出 tile 缓存输入，不复用卷积阵列或其
-权重缓存。本阶段只添加实现与 `test_fc.cpp`、`test_fc_postprocess.cpp` 源码，
-尚未运行 C-sim、co-sim 或综合。前者覆盖完整784x10 MAC reference、HWC顺序、
+权重缓存。本轮 `test_fc.cpp`、`test_fc_postprocess.cpp` 及各自 PyTorch 对照 testbench 均通过 C++ 功能检查，未重新综合或协同仿真。前者覆盖完整784x10 MAC reference、HWC顺序、
 signed、两个输出 tile 和连续两次调用；后者独立覆盖 FC 后处理的 bias、负数
 requant/shift40/41/饱和、事务守恒及连续两次调用。

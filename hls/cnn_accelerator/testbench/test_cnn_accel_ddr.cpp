@@ -9,7 +9,7 @@
  * DDR wrapper 独立功能对照：image/weights/result 为64-bit word，params为
  * signed32-bit word。低 byte 对应较早 INT8；模型布局为 Conv1 -> Conv2 -> FC，
  * 每层参数为完整 bias -> multiplier -> shift 数组，按输出通道递增。
- * 四区有效 word 数为98/1196/102/2；结果16字节含10 logits、2保留字节、uint32类别。
+ * 四区有效 word 数为98/1133/102/2；结果16字节含10 logits、2保留字节、uint32类别。
  * 三图固定地址连续调用，模型仅打包一次。
  * reference 来自三个 trace 的10个 signed logits；类别由软件 scalar first-max
  * 独立计算。输出 CSV 保存 sample/output/expected/actual/match，输入 CSV 保存
@@ -39,6 +39,8 @@ namespace trace_data_0002 {
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_weight.h"
 
 namespace {
+static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION == 2 &&
+              FC_WEIGHT_LAYOUT_VERSION == 2, "requires blocked weight headers v2");
 // 守卫紧邻有效区；输入和模型快照逐 word 比较，错误不依赖 assert/NDEBUG。
 template <typename T, int N> struct guarded_buffer {
     T storage[N + 2];
@@ -54,27 +56,9 @@ bool unchanged(guarded_buffer<T, N>& buffer, const T (&copy)[N]) {
     for (int i = 0; i < N; ++i) if (buffer.data()[i] != copy[i]) return false;
     return true;
 }
-void pack_conv(bool second, ap_uint<64>* weights, ap_int<32>* params) {
+void pack_conv_params(bool second, ap_int<32>* params) {
     const int outputs = second ? CNN_CONV2_COUT : CNN_CONV1_COUT;
-    const int tiles = outputs / SYSTOLIC_COUT_PAR;
-    const int weight_offset = second ? ddr_layout::CONV2_WEIGHT_OFFSET : ddr_layout::CONV1_WEIGHT_OFFSET;
     const int param_offset = second ? ddr_layout::CONV2_PARAM_OFFSET : ddr_layout::CONV1_PARAM_OFFSET;
-    // 独立软件公式：[K,Cout] 的 K=token*Cin+c，DDR 为 tile/token/lane/c。
-    for (int tile = 0; tile < tiles; ++tile) {
-        for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS; ++token) {
-            for (int lane = 0; lane < SYSTOLIC_COUT_PAR; ++lane) {
-                ap_uint<64> word = 0;
-                const int output = tile * SYSTOLIC_COUT_PAR + lane;
-                for (int c = 0; c < SYSTOLIC_CIN_PAR; ++c) {
-                    const int value = second
-                        ? conv2_weight[(token * CNN_CONV2_CIN + c) * CNN_CONV2_COUT + output]
-                        : (c == 0 ? conv1_weight[token * CNN_CONV1_COUT + output] : 0);
-                    word.range(c * 8 + 7, c * 8) = (ap_uint<8>)value;
-                }
-                weights[weight_offset + (tile * SYSTOLIC_KERNEL_TOKENS + token) * SYSTOLIC_COUT_PAR + lane] = word;
-            }
-        }
-    }
     // 软件直接拷贝三个完整 header 数组，不复用 DUT 的 pack/field/lane 地址公式。
     for (int output = 0; output < outputs; ++output) {
         params[param_offset + output] = second ? conv2_bias[output] : conv1_bias[output];
@@ -83,20 +67,15 @@ void pack_conv(bool second, ap_uint<64>* weights, ap_int<32>* params) {
     }
 }
 void pack_model(ap_uint<64>* weights, ap_int<32>* params) {
-    pack_conv(false, weights, params); pack_conv(true, weights, params);
-    for (int tile = 0; tile < FC_OUT_TILES; ++tile) {
-        for (int token = 0; token < FC_INPUT_PACKS; ++token) {
-            for (int lane = 0; lane < FC_COUT_PAR; ++lane) {
-                ap_uint<64> word = 0;
-                for (int c = 0; c < FC_CIN_PAR; ++c) {
-                    const int input = token * FC_CIN_PAR + c;
-                    const int output = tile * FC_COUT_PAR + lane;
-                    word.range(c * 8 + 7, c * 8) = (ap_uint<8>)fc_weight[input * FC_OUTPUTS + output];
-                }
-                weights[ddr_layout::FC_WEIGHT_OFFSET + (tile * FC_INPUT_PACKS + token) * FC_COUT_PAR + lane] = word;
-            }
-        }
-    }
+    pack_conv_params(false, params); pack_conv_params(true, params);
+    // v2 头已经是硬件消费顺序。仅逐字节连续拼接，不补通道、不重排。
+    const int8_t* sources[] = {conv1_weight, conv2_weight, fc_weight};
+    const int sizes[] = {sizeof(conv1_weight), sizeof(conv2_weight), sizeof(fc_weight)};
+    int byte_offset = 0;
+    for (int layer = 0; layer < 3; ++layer)
+        for (int byte = 0; byte < sizes[layer]; ++byte, ++byte_offset)
+            weights[byte_offset / 8].range((byte_offset % 8) * 8 + 7, (byte_offset % 8) * 8) =
+                (ap_uint<8>)sources[layer][byte];
     for (int output = 0; output < FC_OUTPUTS; ++output) {
         params[ddr_layout::FC_PARAM_OFFSET + output] = fc_bias[output];
         params[ddr_layout::FC_PARAM_OFFSET + FC_OUTPUTS + output] = fc_multiplier[output];

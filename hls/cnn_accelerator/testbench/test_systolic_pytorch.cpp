@@ -16,12 +16,14 @@
  *
  * activation 不由 HLS Im2Row 产生，而是直接由 PyTorch unfold trace 按
  * spatial_tile -> token -> lane 的硬件流顺序装入。weight 则直接读取 exporter
- * 的 [K, OC] header，并按 cout_tile -> token 装入。这使本 TB 仅定位 Systolic
+ * 的 v2 blocked header，按 cout_tile -> token -> cout_lane -> 实际Cin 装入。这使本 TB 仅定位 Systolic
  * 本身的 pack、activation replay、weight replay 与 MAC，而不掩盖上游错误。
  * 输出不做完整 feature map 重排；每个 output transaction 直接映射到 NHWC
  * trace_conv*_systolic_int32_nhwc 的 (y,x,oc) 元素。
  */
 namespace {
+static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION == 2,
+              "requires blocked convolution weight headers v2");
 
 static bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
@@ -49,11 +51,13 @@ static int unfold_value(bool conv2, int y, int x, int token, int channel) {
 }
 
 static int weight_value(bool conv2, int token, int channel, int output) {
+    // v2 头已按 tile/token/lane/Cin 排好，不再从 [K,Cout] 转置。
+    const int pack_lane = ((output / SYSTOLIC_COUT_PAR) * SYSTOLIC_KERNEL_TOKENS + token)
+                          * SYSTOLIC_COUT_PAR + output % SYSTOLIC_COUT_PAR;
     if (!conv2) {
-        return channel == 0 ? conv1_weight[token * CNN_CONV1_COUT + output] : 0;
+        return channel == 0 ? conv1_weight[pack_lane] : 37;
     }
-    return conv2_weight[(token * CNN_CONV2_CIN + channel) * CNN_CONV2_COUT +
-                        output];
+    return conv2_weight[pack_lane * CNN_CONV2_CIN + channel];
 }
 
 static int golden_value(bool conv2, int y, int x, int output) {

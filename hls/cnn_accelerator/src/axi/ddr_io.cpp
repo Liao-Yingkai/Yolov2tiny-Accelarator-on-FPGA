@@ -4,35 +4,58 @@
 #endif
 
 namespace ddr_io {
-// 辅助函数仅内联到所属加载器，保持原有读取顺序和流水约束。
+// 辅助函数仅内联到所属加载器；卷积共用一套按字节消费的固定网络加载逻辑。
 namespace {
-void load_conv_weights(const ap_uint<64>* weights, int offset, int count,
-                       hls::stream<weight_pack_t>& output) {
+void load_conv_weights(const ap_uint<64>* weights,
+                        hls::stream<weight_pack_t>& conv1,
+                        hls::stream<weight_pack_t>& conv2,
+                        layer_mode_t layer_mode) {
 #pragma HLS INLINE
+    const bool is_conv2 = (layer_mode == LAYER2_MODE);
+    const int count = is_conv2 ? CNN_CONV2_WEIGHT_TRANSACTIONS : CNN_CONV1_WEIGHT_TRANSACTIONS;
+    int word_address = is_conv2 ? ddr_layout::CONV2_WEIGHT_OFFSET : ddr_layout::CONV1_WEIGHT_OFFSET;
+    ap_uint<64> cached = 0;
+    ap_uint<3> byte_offset = 0;
 #ifndef __SYNTHESIS__
     int reads = 0, writes = 0;
 #endif
+    // 游标和 word 缓存在整层内连续，不在 pack/Cout tile 边界重置。
+    // Conv1 每 lane 消费1字节，pack8/9共享word；Conv2每lane消费完整8字节。
+conv_pack_loop:
     for (int pack = 0; pack < count; ++pack) {
         weight_pack_t value;
 #pragma HLS ARRAY_PARTITION variable=value.lane complete
+conv_lane_loop:
         for (int lane = 0; lane < SYSTOLIC_COUT_PAR; ++lane) {
 #pragma HLS PIPELINE II=1
-            const ap_uint<64> word = weights[offset + pack * SYSTOLIC_COUT_PAR + lane];
+            if (byte_offset == 0) {
+                cached = weights[word_address++];
+#ifndef __SYNTHESIS__
+                ++reads;
+#endif
+            }
+            // 每个字段都来自已读word，完整初始化。Conv1的c1..7只是
+            // 确定don't-care，不补零；有效Cin由Systolic选择性点积保证。
             for (int c = 0; c < SYSTOLIC_CIN_PAR; ++c) {
 #pragma HLS UNROLL
-                value.lane[lane].channel[c] = (ap_int<8>)word.range(c * 8 + 7, c * 8);
+                value.lane[lane].channel[c] = (ap_int<8>)cached.range(c * 8 + 7, c * 8);
             }
-#ifndef __SYNTHESIS__
-            ++reads;
-#endif
+            if (!is_conv2) {
+                const int bit = byte_offset.to_int() * 8;
+                value.lane[lane].channel[0] = (ap_int<8>)cached.range(bit + 7, bit);
+                byte_offset = byte_offset + 1; // 3bit自然绕回0，下次才读新word。
+            }
         }
-        output.write(value);
+        if (is_conv2) conv2.write(value);
+        else conv1.write(value);
 #ifndef __SYNTHESIS__
         ++writes;
 #endif
     }
 #ifndef __SYNTHESIS__
-    assert(reads == count * SYSTOLIC_COUT_PAR && writes == count);
+    assert(reads == (is_conv2 ? ddr_layout::CONV2_WEIGHT_WORDS : ddr_layout::CONV1_WEIGHT_WORDS));
+    assert(writes == count);
+    assert(byte_offset == 0);
 #endif
 }
 
@@ -89,7 +112,9 @@ void image_loader(const ap_uint<64>* image, hls::stream<pixel_t>& output) {
 #pragma HLS ARRAY_PARTITION variable=pixel.channel complete
             for (int c = 0; c < IM2ROW_MAX_CHANNELS; ++c) {
 #pragma HLS UNROLL
-                pixel.channel[c] = 0;
+                // 当前 word 的字节作为确定 don't-care，不额外读或补零。
+                // Im2Row 保持既有 Conv1 通道规范化，丢弃 channel1..7。
+                pixel.channel[c] = (ap_int<8>)packed.range(c * 8 + 7, c * 8);
             }
             pixel.channel[0] = (ap_int<8>)packed.range(byte * 8 + 7, byte * 8);
             output.write(pixel);
@@ -109,10 +134,13 @@ void weight_loader(const ap_uint<64>* weights,
                    hls::stream<weight_pack_t>& conv2,
                    hls::stream<fc_weight_pack_t>& fc) {
 #pragma HLS INLINE off
-    load_conv_weights(weights, ddr_layout::CONV1_WEIGHT_OFFSET,
-                      CNN_CONV1_WEIGHT_TRANSACTIONS, conv1);
-    load_conv_weights(weights, ddr_layout::CONV2_WEIGHT_OFFSET,
-                      CNN_CONV2_WEIGHT_TRANSACTIONS, conv2);
+    // 非展开、非流水的两阶段控制，只有一个helper源码调用点。
+    // 统一lane循环后Conv1每pack消费4个lane周期，不再使用原并行快路径。
+conv_layer_loop:
+    for (int layer = 0; layer < 2; ++layer) {
+        const layer_mode_t mode = (layer == 0) ? LAYER1_MODE : LAYER2_MODE;
+        load_conv_weights(weights, conv1, conv2, mode);
+    }
 #ifndef __SYNTHESIS__
     int reads = 0, writes = 0;
 #endif

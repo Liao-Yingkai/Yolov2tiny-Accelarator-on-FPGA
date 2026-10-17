@@ -1,5 +1,7 @@
 # Systolic / Broadcast PE Array 设计
 
+> 本轮修订：Systolic 自行按层模式选择有效 Cin；Loader 不再补零，权重 header 改为紧凑硬件顺序。变更摘要见 [模块边界修订](module_boundary_todo.md)，统一 Loader 后的集成综合与三图 RTL co-sim 结果见 [DDR Wrapper](ddr_wrapper.md)。未进行 Vivado 布局布线或板测。
+
 ## 1. 模块定位与当前状态
 
 Systolic 位于 Im2Row 与 ConvPostProcess 之间，只负责卷积的 INT8 乘法和 INT32 累加：
@@ -109,7 +111,7 @@ Im2Row 对一个 spatial tile 连续输出 9 个 token：
 
 Systolic 不需要显式接收 `kh`、`kw`，而是维护 `token=0..8` 计数器。
 
-Im2Row 在输入 pixel 刚被消费时完成通道规范化：Conv1 清零 channel 1..7，Conv2 保留全部8通道。因此 Systolic 的 PE 不再进行运行时 `channel < Cin` 判断，而是固定计算全部8个物理 channel。
+Im2Row 在输入 pixel 刚被消费时完成通道规范化：Conv1 清零 channel 1..7，Conv2 保留全部8通道。该输入契约保持不变，但 Systolic 不再以这些字段已经清零作为计算正确性的前提：Conv1 只取 channel 0 的乘积，Conv2 使用原八路平衡加法树。
 
 对于 Conv1：
 
@@ -131,7 +133,8 @@ PE[spatial_lane][cout_lane]
 每个周期，一个 PE 计算：
 
 ```text
-dot[i][j] = Σ(c=0..7) activation[i][c] × weight[j][c]
+Conv1: dot[i][j] = activation[i][0] × weight[j][0]
+Conv2: dot[i][j] = Σ(c=0..7) activation[i][c] × weight[j][c]
 ```
 
 并更新当前输出的 accumulator：
@@ -144,7 +147,7 @@ acc[i][j] ← acc[i][j] + dot[i][j]
 
 ```text
 acc[i][j]
-= Σ(kh=0..2) Σ(kw=0..2) Σ(c=0..7)
+= Σ(kh=0..2) Σ(kw=0..2) Σ(c=0..logical_Cin-1)
    activation[i][kh][kw][c] × weight[j][kh][kw][c]
 ```
 
@@ -154,7 +157,7 @@ acc[i][j]
 4 spatial × 4 Cout × 8 Cin = 128 个 INT8 multiplication
 ```
 
-Conv1 的 channel 1～7 为零，因此只有 16 个乘法产生有效贡献。由于同一物理阵列随后供 Conv2 使用，这不会增加静态硬件面积。第一版接受 Conv1 的低利用率，不增加动态 channel/Cout 重映射，以避免额外的 mux、控制和 LUT 消耗。
+Conv1 只有 channel 0 的 16 个乘法贡献结果；即使其余 activation 和 weight 同时非零也必须忽略。共享物理阵列仍须支持 Conv2 的128路乘法，不做动态 channel/Cout 重映射。层模式选择对时序、II 和资源的影响须重新综合确认，不能据源码直接声称乘法器数量减少。
 
 ## 6. 数值位宽
 
@@ -286,7 +289,7 @@ weight_pack[cout_lane][channel]
 kh → kw → cin
 ```
 
-Conv1 的 `channel[1..7]` 权重由导出端填零。即使 activation 已经保证这些通道为零，权重填零仍有利于接口一致性、波形检查和降低无意义翻转。
+导出 header 仅存有效通道：Conv 为 `[CoutTile][Kh][Kw][CoutLane][logical_Cin]`，Conv1/Conv2 分别为72/1152字节，不为 Conv1 填充七个无效通道。PS 按 header 原始字节复制；DDR Loader 解包为现有 `weight_pack_t`。Conv1 只有各 Cout lane 的 channel 0 有效，其余字段透传当前已读 word 的字节作为确定但不参与计算的值，不补零、不额外读 DDR。Systolic 的有效 Cin 选择对首用和 replay 路径都生效。详见 [DDR Wrapper](ddr_wrapper.md)。
 
 ## 10. Weight Buffer：四个 BRAM Bank
 

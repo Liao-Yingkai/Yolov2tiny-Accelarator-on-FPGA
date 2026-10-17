@@ -1,6 +1,6 @@
 # MNIST FPGA Accelerator
 
-本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行，提供 stream 计算核心 `cnn_accelerator` 与 DDR 系统顶层 `cnn_accelerator_ddr` 两种入口。Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool、独立 FC MAC/后处理及两阶段控制均已实现。本轮结构重构后的验证记录见下方目录与验证章节；当前 DDR Top 尚未完成综合或 RTL 验证，不能由计算核心或独立模块的历史结果推断其硬件状态。
+本项目使用 Vitis HLS 2022.2 开发面向 MNIST CNN 推理的 FPGA 加速器。设计采用流式接口、片上缓存与空间并行，提供 stream 计算核心 `cnn_accelerator` 与 DDR 系统顶层 `cnn_accelerator_ddr` 两种入口。Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、Pool、独立 FC MAC/后处理及两阶段控制均已实现。当前统一卷积 Loader 版本已完成 DDR Top 综合及连续三图 Verilog/XSim co-sim，尚未进行 Vivado 布局布线或上板验证；结果和警告见下方最新验证章节。
 
 ## 工程原则
 
@@ -68,13 +68,15 @@ Im2Row 固定支持 `3×3`、`stride=1`、`same padding`，每行独立划分 `c
 
 完整的周期时序、双 Strip 所有权、换行两 Beat 预取、反压语义和未确认风险见 [Im2Row 模块详细设计](im2row.md)。
 
-Im2Row 已经过多轮综合，现有结果确认稳态 Token 循环达到 `II=1`，Line Buffer 映射到 BRAM。正式功能验证、RTL Co-simulation 和硬件反压行为仍待完成；反压下的 token 守恒和内部状态停顿必须在后续验证阶段重点检查。
+Im2Row 已经过多轮综合，历史结果确认稳态 Token 循环达到 `II=1`，Line Buffer 映射到 BRAM。本轮没有修改其源码，程序数据和 PyTorch 数据两组 testbench 功能检查通过；新版集成的 RTL Co-simulation 和硬件反压仍须另行验证。
 
 ## Systolic 第一版设计
 
+> 本轮修订：Systolic 自行处理有效 Cin，保留 `pixel_t`/`weight_pack_t`；Loader 不补零，权重 header 采用紧凑硬件顺序。摘要见 [模块边界修订](module_boundary_todo.md)，统一 Loader 后的集成综合与三图 RTL 验证见 [DDR Wrapper](ddr_wrapper.md)。
+
 Systolic 采用 `4 spatial × 4 Cout` Broadcast / Output-Stationary PE Array，每个 PE 固定并行处理 8 个物理输入通道，理论物理并行度为 128 个 INT8 multiplication/cycle。
 
-- Conv1（`LAYER1_MODE`）仅使用channel0，其余7个物理通道填零；
+- Conv1（`LAYER1_MODE`）只使用 channel0 的乘积，其余物理通道即使两侧都非零也不参与点积；Im2Row 保持原通道规范化契约；
 - Conv2（`LAYER2_MODE`）使用全部8个物理输入通道；
 - 同一 spatial tile 的 9 个 activation token通过本地 buffer replay；
 - 每层只在第一个 spatial tile 期间读取一次整层权重，后续 spatial tile 从 Weight Buffer replay；
@@ -94,7 +96,7 @@ Buffer，奇数行读取上一行并完成四值有符号最大值；之后按 `
 
 Pool1的输出由顶层写入阶段间Feature FIFO供Conv2使用；Pool2默认直连独立FC，
 不复用当前Systolic，也不要求Pool侧FC Input Buffer。详细设计见
-[Pool 模块详细设计](pool.md)。本阶段仅完成源码与静态检查，尚未进行C仿真、协同仿真或综合；BRAM、II、时序和资源结论待验证。
+[Pool 模块详细设计](pool.md)。本轮程序数据与 PyTorch 数据两组 C++ 功能检查通过，未重新综合或协同仿真；不能据此确认新版集成的 BRAM、II、时序和资源。
 
 ## ConvPostProcess 第一版设计
 
@@ -118,11 +120,11 @@ shift；首个 spatial tile 读取并缓存所有 Cout tile 的参数，之后�
 
 固定FC将 Pool2 的 `7×7×16=784` 个 INT8 activation 分类为10个 signed INT8 logit。输入顺序保持 Pool2 的紧密 NHWC：`y -> x -> 8-channel pack`，共98个 Pack；权重顺序为 `out_tile(2) -> token(98)`，每个320-bit逻辑 Pack 有5条输出 lane和8条输入 lane。第一输出 Tile 边计算边写入98x64-bit FC Input Buffer，第二 Tile 从该 BRAM 回放，两个 Tile 各输出一个5路 INT32 accumulator Pack。
 
-FC MAC 后使用 `src/postprocess/fc_postprocess.*` 的独立后处理：每组5 lane 串行复用一套32x32 signed requant数据通路，执行 bias、INT64乘法、直接算术右移和 `[-128,127]` 双向饱和，不做 ReLU 或额外 rounding。输出一次完整10路 logit Pack。FC 与卷积 Systolic 的滑窗/空间并行计算不同，既不复用其阵列也不复用其权重缓存。详细接口、缓冲和未验证项见 [独立 FC 设计](fc.md)；本阶段未运行C仿真、协同仿真或综合。
+FC MAC 后使用 `src/postprocess/fc_postprocess.*` 的独立后处理：每组5 lane 串行复用一套32x32 signed requant数据通路，执行 bias、INT64乘法、直接算术右移和 `[-128,127]` 双向饱和，不做 ReLU 或额外 rounding。输出一次完整10路 logit Pack。FC 与卷积 Systolic 的滑窗/空间并行计算不同，既不复用其阵列也不复用其权重缓存。详细接口、缓冲和未验证项见 [独立 FC 设计](fc.md)；本轮四个 FC/FCPostProcess testbench 功能检查通过，未重新综合或协同仿真。
 
 ## 独立 logits Argmax
 
-独立 `src/postprocess/logits_argmax.*` 每调用消费一个10路 signed INT8 logits Pack，输出一个 `ap_uint<4>` 类别索引；并列最大值选择最小索引。比较采用完整展开和分区的 `10 -> 5 -> 3 -> 2 -> 1` 平衡树，共9个 signed 比较器、4层比较深度，避免串行逐项扫描。独立 C Simulation 通过；在 `xc7z020-clg400-2`、10 ns 约束下综合 latency 为2 cycles、interval为3 cycles，估算时钟6.826 ns，资源为59 FF、183 LUT、0 BRAM、0 DSP。它保留独立接口，之后可接到 FCPostProcess 之后；当前不改动 Top 或 logits 接口。详细结果和综合报告见 [独立 logits Argmax 设计](argmax.md)。
+独立 `src/postprocess/logits_argmax.*` 每调用消费一个10路 signed INT8 logits Pack，输出一个 `ap_uint<4>` 类别索引；并列最大值选择最小索引。比较采用完整展开和分区的 `10 -> 5 -> 3 -> 2 -> 1` 平衡树，共9个 signed 比较器、4层比较深度，避免串行逐项扫描。独立 C Simulation 通过；历史独立综合在 `xc7z020-clg400-2`、10 ns 约束下 latency 为2 cycles、interval为3 cycles，估算时钟6.826 ns，资源为59 FF、183 LUT、0 BRAM、0 DSP。DDR wrapper 已通过 logits_split 将 FCPostProcess 输出分别交给 argmax 和 writer，本轮保留该连接。详细历史结果和综合报告见 [独立 logits Argmax 设计](argmax.md)。
 
 ## 相对 dev 通用实现的固定网络化
 
@@ -138,14 +140,18 @@ FC MAC 后使用 `src/postprocess/fc_postprocess.*` 的独立后处理：每组5
 stream，并通过独立 logits 分流/argmax 写出两个64-bit结果 word（16字节：
 10个 logits、2个保留字节、uint32类别）。参数每层按完整 bias/multiplier/shift
 数组连续保存，独立 params AXI 的 widening 上限为32 bit。原 stream
-Top 与计算模块保持不变。接口布局、PS 打包、缓存维护及有限 FIFO/层次待验证项见
-[DDR Wrapper 设计](ddr_wrapper.md)。本次布局改版的 GCC 11 与系统 Clang 14
+Top 的 phase 调度及 stream 接口保持不变；Systolic 现已自行选择有效 Cin。
+新版权重 header v2 直接采用消费顺序且仅含有效字节，PS 三次 `memcpy` 拼接，
+DDR 权重为1133个64-bit word（9064字节），与旧1196-word布局不兼容。
+Python metadata v5 区分逻辑 NPY 与硬件 header 布局，golden model 解码后计算。
+接口布局、PS 复制、缓存维护及有限 FIFO/层次待验证项见
+[DDR Wrapper 设计](ddr_wrapper.md)。以下为旧版布局的历史验证记录，不代表本轮 RTL 已验证：GCC 11 与系统 Clang 14
 静态语法检查通过；Vitis HLS 2022.2
 C Simulation 仅运行一次，三图30个 logits、3个类别、守卫及只读区检查全部通过，
 错误数0，input/output CSV 含表头分别2353/34行，日志无 WARNING/ERROR。报告见
 [Wrapper C Simulation 日志](../../build/hls/ddr_layout_verify_16byte/project/solution1/csim/report/cnn_accelerator_ddr_csim.log)。
-本阶段未运行 wrapper 综合、RTL Co-simulation 或上板验证，未实施 PS 实际打包
-程序；C Simulation 不验证有限深度 FIFO、AXI、HLS pragma 或缓存维护行为。
+本轮同步更新 Vitis 裸机应用及数据提取工具，但不改 Vivado、旧 IP 或 bitstream。
+本轮不运行综合、RTL Co-simulation 或上板验证；C Simulation 不验证有限深度 FIFO、AXI、HLS pragma 或缓存维护行为。
 
 ## 源码分层与两个入口
 
@@ -197,6 +203,24 @@ GCC 11 与系统 Clang 14 对全部25个源码及 testbench `.cpp` 的静态检�
 ## 生成物目录
 
 今后的 csynth/csim/cosim 工程与日志统一写入仓库根目录 `build/hls/<run-name>/`，不要写入 `hls` 源码树；该目录由 Git 忽略。
+
+## 最新：统一卷积 Loader 验证
+
+Conv1/Conv2 在唯一调用点顺序使用同一 `load_conv_weights()`，按 Pack/Cout lane 消费紧凑权重字节，不改1133-word DDR布局或上下游接口。通用 lane loop 达到 II=1；每个完整 Pack 的综合估计为18周期（含流水填充/排空和控制），不是每周期输出一个 Pack。
+
+全部15个主机 testbench、Loader专项检查、Vitis CSim 和连续三图 Verilog/XSim co-sim 通过，30个 logits及类别0错误；PS host mock 三图也通过。HLS估计资源为42 BRAM18K、51 DSP、26351 FF、36496 LUT，时钟估计7.300 ns（目标10 ns）；RTL仿真单图 latency 为11979～12006周期。综合层次确认共享卷积模块各一个实例。
+
+无 II violation；保留 FIFO 深度/反馈通道等警告，本次三图无死锁，未自动调整FIFO。完整结果、资源及警告分类见 [DDR Wrapper 验证结果](ddr_wrapper.md)，[co-sim 报告](../../build/hls/unified_weight_loader_verify/vitis_unified_loader/unified_weight_loader/solution1/sim/report/cnn_accelerator_ddr_cosim.rpt)。所有生成物位于 `build/hls/unified_weight_loader_verify/`，Vivado现有工程/IP/bitstream未修改；HLS估计和仿真不是布局布线或板测结果。
+
+## 历史：紧凑权重与有效 Cin 首次修订验证
+
+- Python：重新导出 v5 metadata/v2 权重头，解码后的三层数学权重及 bias/multiplier/shift 与旧版逐元素相同；原三图 trace 未修改，每图13组中间/最终张量逐元素一致。
+- Loader：图像784个 pixel、Conv1 的9个 word/18个 Pack（含 pack8/9 跨 tile）、Conv2 的36个 Pack、FC 的196个 Pack 及无效字段透传检查通过。
+- 全部15个 testbench 通过主机 C++ 功能检查；独立 Systolic 包含 Conv1 无效 activation/weight 双侧非零测试。
+- Vitis HLS 2022.2 的 DDR `csim_design` 三图、30个 logits 和类别检查通过，0错误。见 [本轮 Vitis 日志](../../build/hls/cin_layout_update_verify/vitis_ddr_csim.log)。
+- Vitis 裸机 main 通过真实 BSP 头文件的 ARM `-Wall -Wextra -Werror` 编译；接真实 HLS 顶层的隔离 host mock 三图类别0/4/1、错误数均0。
+
+全部验证件位于仓库根 `build/hls/cin_layout_update_verify/`。本轮不运行综合、RTL co-sim 或板测，不更新 Vivado/IP/bitstream；新 loader/mode 选择的 II、资源、时序和 RTL 反压仍须重新确认。旧1196-word权重布局不兼容新版本。
 
 ## 模块级验证
 

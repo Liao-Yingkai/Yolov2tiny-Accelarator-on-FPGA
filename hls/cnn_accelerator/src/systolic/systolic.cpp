@@ -18,24 +18,25 @@ typedef ap_uint<SYSTOLIC_WEIGHT_LANE_BITS> packed_weight_lane_t;
 // 使用显式平衡树，避免依赖累加表达式的默认位宽或综合器将其解释为不平衡链。
 // 8 个 signed INT8 乘积的精确和需要至少19位有符号数。
 static dot_t dot_product(const pixel_t& activation,
-                         const weight_lane_t& weight) {
+                         const weight_lane_t& weight, bool is_conv2) {
 #pragma HLS INLINE
     product_t product0 =
         (product_t)(activation.channel[0] * weight.channel[0]);
+    // 逻辑 Cin 由计算模块自身保证：Conv1 无效通道即使双侧非零也不能贡献。
     product_t product1 =
-        (product_t)(activation.channel[1] * weight.channel[1]);
+        is_conv2 ? (product_t)(activation.channel[1] * weight.channel[1]) : product_t(0);
     product_t product2 =
-        (product_t)(activation.channel[2] * weight.channel[2]);
+        is_conv2 ? (product_t)(activation.channel[2] * weight.channel[2]) : product_t(0);
     product_t product3 =
-        (product_t)(activation.channel[3] * weight.channel[3]);
+        is_conv2 ? (product_t)(activation.channel[3] * weight.channel[3]) : product_t(0);
     product_t product4 =
-        (product_t)(activation.channel[4] * weight.channel[4]);
+        is_conv2 ? (product_t)(activation.channel[4] * weight.channel[4]) : product_t(0);
     product_t product5 =
-        (product_t)(activation.channel[5] * weight.channel[5]);
+        is_conv2 ? (product_t)(activation.channel[5] * weight.channel[5]) : product_t(0);
     product_t product6 =
-        (product_t)(activation.channel[6] * weight.channel[6]);
+        is_conv2 ? (product_t)(activation.channel[6] * weight.channel[6]) : product_t(0);
     product_t product7 =
-        (product_t)(activation.channel[7] * weight.channel[7]);
+        is_conv2 ? (product_t)(activation.channel[7] * weight.channel[7]) : product_t(0);
 
     sum2_t sum01 = (sum2_t)product0 + (sum2_t)product1;
     sum2_t sum23 = (sum2_t)product2 + (sum2_t)product3;
@@ -215,7 +216,7 @@ void systolic(hls::stream<activation_pack_t>& activation_stream,
                         }
                     }
 
-                    // 4x4 PE Array：每个 PE 固定计算8个物理 Cin。token0以
+                    // 4x4 PE Array：物理8Cin，Conv1仅c0贡献，Conv2全8路。token0以
                     // dot覆盖旧 accumulator，因此没有额外清零周期。
                     for (int spatial_lane = 0;
                          spatial_lane < SYSTOLIC_SPATIAL_PAR;
@@ -226,7 +227,7 @@ void systolic(hls::stream<activation_pack_t>& activation_stream,
 #pragma HLS UNROLL
                             const dot_t dot = dot_product(
                                 activation.pixel[spatial_lane],
-                                active_weight[cout_lane]);
+                                active_weight[cout_lane], is_conv2);
                             if (token == 0) {
                                 accumulator[spatial_lane][cout_lane] =
                                     (acc_t)dot;
