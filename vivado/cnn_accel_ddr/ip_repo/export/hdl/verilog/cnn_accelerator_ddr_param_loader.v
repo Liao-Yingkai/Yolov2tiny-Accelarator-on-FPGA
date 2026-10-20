@@ -189,12 +189,12 @@ reg    p2_blk_n;
 wire    ap_CS_fsm_state7;
 reg    pf_blk_n;
 wire    ap_CS_fsm_state10;
-wire   [0:0] empty_102_fu_360_p1;
-reg   [0:0] empty_102_reg_921;
+wire   [0:0] empty_106_fu_360_p1;
+reg   [0:0] empty_106_reg_921;
 wire    ap_CS_fsm_state2;
 wire   [0:0] icmp_ln69_fu_348_p2;
-wire   [5:0] empty_105_fu_471_p2;
-reg   [5:0] empty_105_reg_936;
+wire   [5:0] empty_109_fu_471_p2;
+reg   [5:0] empty_109_reg_936;
 wire    ap_CS_fsm_state5;
 wire   [0:0] icmp_ln69_1_fu_443_p2;
 wire   [6:0] tmp_4_fu_572_p5;
@@ -400,10 +400,10 @@ reg   [2:0] pack_2_fu_242;
 wire   [2:0] add_ln69_1_fu_449_p2;
 reg   [1:0] pack_3_fu_246;
 wire   [1:0] add_ln69_2_fu_562_p2;
-wire   [1:0] empty_104_fu_455_p1;
+wire   [1:0] empty_108_fu_455_p1;
 wire   [3:0] tmp_3_fu_459_p3;
 wire   [5:0] p_cast274_fu_467_p1;
-wire   [0:0] empty_107_fu_568_p1;
+wire   [0:0] empty_111_fu_568_p1;
 reg   [9:0] ap_NS_fsm;
 reg    ap_ST_fsm_state1_blk;
 wire    ap_ST_fsm_state2_blk;
@@ -479,7 +479,7 @@ cnn_accelerator_ddr_param_loader_Pipeline_VITIS_LOOP_76_3 grp_param_loader_Pipel
     .m_axi_gmem_params_BRESP(2'd0),
     .m_axi_gmem_params_BID(1'd0),
     .m_axi_gmem_params_BUSER(1'd0),
-    .tmp_1(empty_102_reg_921),
+    .tmp_1(empty_106_reg_921),
     .params(params),
     .value_shift_V_3_out(grp_param_loader_Pipeline_VITIS_LOOP_76_3_fu_277_value_shift_V_3_out),
     .value_shift_V_3_out_ap_vld(grp_param_loader_Pipeline_VITIS_LOOP_76_3_fu_277_value_shift_V_3_out_ap_vld),
@@ -560,7 +560,7 @@ cnn_accelerator_ddr_param_loader_Pipeline_VITIS_LOOP_76_39 grp_param_loader_Pipe
     .m_axi_gmem_params_BRESP(2'd0),
     .m_axi_gmem_params_BID(1'd0),
     .m_axi_gmem_params_BUSER(1'd0),
-    .p_cast275(empty_105_reg_936),
+    .p_cast275(empty_109_reg_936),
     .params(params),
     .value_shift_V_7_out(grp_param_loader_Pipeline_VITIS_LOOP_76_39_fu_297_value_shift_V_7_out),
     .value_shift_V_7_out_ap_vld(grp_param_loader_Pipeline_VITIS_LOOP_76_39_fu_297_value_shift_V_7_out_ap_vld),
@@ -757,13 +757,13 @@ end
 
 always @ (posedge ap_clk) begin
     if (((1'b1 == ap_CS_fsm_state2) & (icmp_ln69_fu_348_p2 == 1'd0))) begin
-        empty_102_reg_921 <= empty_102_fu_360_p1;
+        empty_106_reg_921 <= empty_106_fu_360_p1;
     end
 end
 
 always @ (posedge ap_clk) begin
     if (((1'b1 == ap_CS_fsm_state5) & (icmp_ln69_1_fu_443_p2 == 1'd0))) begin
-        empty_105_reg_936[5 : 2] <= empty_105_fu_471_p2[5 : 2];
+        empty_109_reg_936[5 : 2] <= empty_109_fu_471_p2[5 : 2];
     end
 end
 
@@ -1172,13 +1172,13 @@ always @ (*) begin
     ap_block_state1 = ((ap_done_reg == 1'b1) | (ap_start == 1'b0));
 end
 
-assign empty_102_fu_360_p1 = pack_fu_82[0:0];
+assign empty_106_fu_360_p1 = pack_fu_82[0:0];
 
-assign empty_104_fu_455_p1 = pack_2_fu_242[1:0];
+assign empty_108_fu_455_p1 = pack_2_fu_242[1:0];
 
-assign empty_105_fu_471_p2 = (p_cast274_fu_467_p1 + 6'd24);
+assign empty_109_fu_471_p2 = (p_cast274_fu_467_p1 + 6'd24);
 
-assign empty_107_fu_568_p1 = pack_3_fu_246[0:0];
+assign empty_111_fu_568_p1 = pack_3_fu_246[0:0];
 
 assign grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_ap_start = grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_ap_start_reg;
 
@@ -1238,12 +1238,12 @@ assign p_cast274_fu_467_p1 = tmp_3_fu_459_p3;
 
 assign pf_din = {{{{{{{{{{{{{{{grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_shift_V_17_out}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_shift_V_16_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_shift_V_15_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_shift_V_14_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_shift_V_13_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_multiplier_V_17_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_multiplier_V_16_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_multiplier_V_15_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_multiplier_V_14_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_multiplier_V_13_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_bias_V_17_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_bias_V_16_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_bias_V_15_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_bias_V_14_out}}, {grp_param_loader_Pipeline_VITIS_LOOP_76_310_fu_317_value_bias_V_13_out}};
 
-assign tmp_3_fu_459_p3 = {{empty_104_fu_455_p1}, {2'd0}};
+assign tmp_3_fu_459_p3 = {{empty_108_fu_455_p1}, {2'd0}};
 
-assign tmp_4_fu_572_p5 = {{{{{{4'd9}, {empty_107_fu_568_p1}}}, {1'd0}}}, {empty_107_fu_568_p1}};
+assign tmp_4_fu_572_p5 = {{{{{{4'd9}, {empty_111_fu_568_p1}}}, {1'd0}}}, {empty_111_fu_568_p1}};
 
 always @ (posedge ap_clk) begin
-    empty_105_reg_936[1:0] <= 2'b00;
+    empty_109_reg_936[1:0] <= 2'b00;
     tmp_4_reg_951[1] <= 1'b0;
     tmp_4_reg_951[6:3] <= 4'b1001;
 end

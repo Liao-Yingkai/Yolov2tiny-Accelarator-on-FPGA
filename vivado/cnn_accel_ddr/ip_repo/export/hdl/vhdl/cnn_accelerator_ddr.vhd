@@ -208,7 +208,7 @@ end;
 architecture behav of cnn_accelerator_ddr is 
     attribute CORE_GENERATION_INFO : STRING;
     attribute CORE_GENERATION_INFO of behav : architecture is
-    "cnn_accelerator_ddr_cnn_accelerator_ddr,hls_ip_2022_2,{HLS_INPUT_TYPE=cxx,HLS_INPUT_FLOAT=0,HLS_INPUT_FIXED=0,HLS_INPUT_PART=xc7z020-clg400-2,HLS_INPUT_CLOCK=10.000000,HLS_INPUT_ARCH=dataflow,HLS_SYN_CLOCK=7.300000,HLS_SYN_LAT=-1,HLS_SYN_TPT=-1,HLS_SYN_MEM=42,HLS_SYN_DSP=0,HLS_SYN_FF=26351,HLS_SYN_LUT=36496,HLS_VERSION=2022_2}";
+    "cnn_accelerator_ddr_cnn_accelerator_ddr,hls_ip_2022_2,{HLS_INPUT_TYPE=cxx,HLS_INPUT_FLOAT=0,HLS_INPUT_FIXED=0,HLS_INPUT_PART=xc7z020-clg400-2,HLS_INPUT_CLOCK=10.000000,HLS_INPUT_ARCH=dataflow,HLS_SYN_CLOCK=7.300000,HLS_SYN_LAT=-1,HLS_SYN_TPT=-1,HLS_SYN_MEM=42,HLS_SYN_DSP=0,HLS_SYN_FF=28205,HLS_SYN_LUT=35673,HLS_VERSION=2022_2}";
     constant C_S_AXI_DATA_WIDTH : INTEGER range 63 downto 0 := 20;
     constant ap_const_logic_1 : STD_LOGIC := '1';
     constant C_M_AXI_DATA_WIDTH : INTEGER range 63 downto 0 := 20;
@@ -1016,7 +1016,7 @@ architecture behav of cnn_accelerator_ddr is
     end component;
 
 
-    component cnn_accelerator_ddr_fifo_w256_d2_S IS
+    component cnn_accelerator_ddr_fifo_w256_d2_S_x IS
     port (
         clk : IN STD_LOGIC;
         reset : IN STD_LOGIC;
@@ -2228,7 +2228,7 @@ begin
         if_empty_n => pixels_empty_n,
         if_read => p_anonymous_namespace_compute_runner_U0_pixels_read);
 
-    w1_U : component cnn_accelerator_ddr_fifo_w256_d2_S
+    w1_U : component cnn_accelerator_ddr_fifo_w256_d2_S_x
     port map (
         clk => ap_clk,
         reset => ap_rst_n_inv,
@@ -2243,7 +2243,7 @@ begin
         if_empty_n => w1_empty_n,
         if_read => p_anonymous_namespace_compute_runner_U0_w1_read);
 
-    w2_U : component cnn_accelerator_ddr_fifo_w256_d2_S
+    w2_U : component cnn_accelerator_ddr_fifo_w256_d2_S_x
     port map (
         clk => ap_clk,
         reset => ap_rst_n_inv,

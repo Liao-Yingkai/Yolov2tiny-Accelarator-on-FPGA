@@ -7,7 +7,7 @@
 
 `timescale 1 ns / 1 ps 
 
-(* CORE_GENERATION_INFO="cnn_accelerator_ddr_cnn_accelerator_ddr,hls_ip_2022_2,{HLS_INPUT_TYPE=cxx,HLS_INPUT_FLOAT=0,HLS_INPUT_FIXED=0,HLS_INPUT_PART=xc7z020-clg400-2,HLS_INPUT_CLOCK=10.000000,HLS_INPUT_ARCH=dataflow,HLS_SYN_CLOCK=7.300000,HLS_SYN_LAT=-1,HLS_SYN_TPT=-1,HLS_SYN_MEM=42,HLS_SYN_DSP=0,HLS_SYN_FF=26351,HLS_SYN_LUT=36496,HLS_VERSION=2022_2}" *)
+(* CORE_GENERATION_INFO="cnn_accelerator_ddr_cnn_accelerator_ddr,hls_ip_2022_2,{HLS_INPUT_TYPE=cxx,HLS_INPUT_FLOAT=0,HLS_INPUT_FIXED=0,HLS_INPUT_PART=xc7z020-clg400-2,HLS_INPUT_CLOCK=10.000000,HLS_INPUT_ARCH=dataflow,HLS_SYN_CLOCK=7.300000,HLS_SYN_LAT=-1,HLS_SYN_TPT=-1,HLS_SYN_MEM=42,HLS_SYN_DSP=0,HLS_SYN_FF=28205,HLS_SYN_LUT=35673,HLS_VERSION=2022_2}" *)
 
 module cnn_accelerator_ddr (
         s_axi_control_AWVALID,
@@ -1455,7 +1455,7 @@ cnn_accelerator_ddr_fifo_w64_d2_S_x pixels_U(
     .if_read(p_anonymous_namespace_compute_runner_U0_pixels_read)
 );
 
-cnn_accelerator_ddr_fifo_w256_d2_S w1_U(
+cnn_accelerator_ddr_fifo_w256_d2_S_x w1_U(
     .clk(ap_clk),
     .reset(ap_rst_n_inv),
     .if_read_ce(1'b1),
@@ -1470,7 +1470,7 @@ cnn_accelerator_ddr_fifo_w256_d2_S w1_U(
     .if_read(p_anonymous_namespace_compute_runner_U0_w1_read)
 );
 
-cnn_accelerator_ddr_fifo_w256_d2_S w2_U(
+cnn_accelerator_ddr_fifo_w256_d2_S_x w2_U(
     .clk(ap_clk),
     .reset(ap_rst_n_inv),
     .if_read_ce(1'b1),

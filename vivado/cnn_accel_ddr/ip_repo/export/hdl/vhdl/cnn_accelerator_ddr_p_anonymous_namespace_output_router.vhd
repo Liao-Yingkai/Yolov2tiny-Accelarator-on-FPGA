@@ -77,20 +77,20 @@ attribute shreg_extract : string;
     signal layer_mode_blk_n : STD_LOGIC;
     signal layer_mode_c23_blk_n : STD_LOGIC;
     signal layer_mode_read_reg_84 : STD_LOGIC_VECTOR (0 downto 0);
-    signal select_ln122_fu_76_p3 : STD_LOGIC_VECTOR (7 downto 0);
-    signal select_ln122_reg_90 : STD_LOGIC_VECTOR (7 downto 0);
+    signal select_ln123_fu_76_p3 : STD_LOGIC_VECTOR (7 downto 0);
+    signal select_ln123_reg_90 : STD_LOGIC_VECTOR (7 downto 0);
     signal ap_CS_fsm_state2 : STD_LOGIC;
     attribute fsm_encoding of ap_CS_fsm_state2 : signal is "none";
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start : STD_LOGIC;
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done : STD_LOGIC;
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_idle : STD_LOGIC;
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_ready : STD_LOGIC;
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool_output_stream_read : STD_LOGIC;
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool1_feature_fifo_din : STD_LOGIC_VECTOR (63 downto 0);
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool1_feature_fifo_write : STD_LOGIC;
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_fc_input_stream_din : STD_LOGIC_VECTOR (63 downto 0);
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_fc_input_stream_write : STD_LOGIC;
-    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start_reg : STD_LOGIC := '0';
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start : STD_LOGIC;
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done : STD_LOGIC;
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_idle : STD_LOGIC;
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_ready : STD_LOGIC;
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool_output_stream_read : STD_LOGIC;
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool1_feature_fifo_din : STD_LOGIC_VECTOR (63 downto 0);
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool1_feature_fifo_write : STD_LOGIC;
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_fc_input_stream_din : STD_LOGIC_VECTOR (63 downto 0);
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_fc_input_stream_write : STD_LOGIC;
+    signal grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start_reg : STD_LOGIC := '0';
     signal ap_CS_fsm_state3 : STD_LOGIC;
     attribute fsm_encoding of ap_CS_fsm_state3 : signal is "none";
     signal ap_block_state1 : BOOLEAN;
@@ -100,7 +100,7 @@ attribute shreg_extract : string;
     signal ap_ST_fsm_state3_blk : STD_LOGIC;
     signal ap_ce_reg : STD_LOGIC;
 
-    component cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1 IS
+    component cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1 IS
     port (
         ap_clk : IN STD_LOGIC;
         ap_rst : IN STD_LOGIC;
@@ -123,37 +123,37 @@ attribute shreg_extract : string;
         fc_input_stream_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
         fc_input_stream_full_n : IN STD_LOGIC;
         fc_input_stream_write : OUT STD_LOGIC;
-        select_ln122 : IN STD_LOGIC_VECTOR (7 downto 0);
+        select_ln123 : IN STD_LOGIC_VECTOR (7 downto 0);
         layer_mode_load : IN STD_LOGIC_VECTOR (0 downto 0) );
     end component;
 
 
 
 begin
-    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64 : component cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1
+    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64 : component cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1
     port map (
         ap_clk => ap_clk,
         ap_rst => ap_rst,
-        ap_start => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start,
-        ap_done => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done,
-        ap_idle => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_idle,
-        ap_ready => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_ready,
+        ap_start => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start,
+        ap_done => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done,
+        ap_idle => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_idle,
+        ap_ready => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_ready,
         pool_output_stream_dout => pool_output_stream_dout,
         pool_output_stream_num_data_valid => ap_const_lv2_0,
         pool_output_stream_fifo_cap => ap_const_lv2_0,
         pool_output_stream_empty_n => pool_output_stream_empty_n,
-        pool_output_stream_read => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool_output_stream_read,
-        pool1_feature_fifo_din => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool1_feature_fifo_din,
+        pool_output_stream_read => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool_output_stream_read,
+        pool1_feature_fifo_din => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool1_feature_fifo_din,
         pool1_feature_fifo_num_data_valid => ap_const_lv9_0,
         pool1_feature_fifo_fifo_cap => ap_const_lv9_0,
         pool1_feature_fifo_full_n => pool1_feature_fifo_full_n,
-        pool1_feature_fifo_write => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool1_feature_fifo_write,
-        fc_input_stream_din => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_fc_input_stream_din,
+        pool1_feature_fifo_write => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool1_feature_fifo_write,
+        fc_input_stream_din => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_fc_input_stream_din,
         fc_input_stream_num_data_valid => ap_const_lv2_0,
         fc_input_stream_fifo_cap => ap_const_lv2_0,
         fc_input_stream_full_n => fc_input_stream_full_n,
-        fc_input_stream_write => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_fc_input_stream_write,
-        select_ln122 => select_ln122_reg_90,
+        fc_input_stream_write => grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_fc_input_stream_write,
+        select_ln123 => select_ln123_reg_90,
         layer_mode_load => layer_mode_read_reg_84);
 
 
@@ -180,7 +180,7 @@ begin
             else
                 if ((ap_continue = ap_const_logic_1)) then 
                     ap_done_reg <= ap_const_logic_0;
-                elsif (((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_state3))) then 
+                elsif (((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_state3))) then 
                     ap_done_reg <= ap_const_logic_1;
                 end if; 
             end if;
@@ -188,16 +188,16 @@ begin
     end process;
 
 
-    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start_reg_assign_proc : process(ap_clk)
+    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start_reg_assign_proc : process(ap_clk)
     begin
         if (ap_clk'event and ap_clk =  '1') then
             if (ap_rst = '1') then
-                grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start_reg <= ap_const_logic_0;
+                grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start_reg <= ap_const_logic_0;
             else
                 if ((ap_const_logic_1 = ap_CS_fsm_state2)) then 
-                    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start_reg <= ap_const_logic_1;
-                elsif ((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_ready = ap_const_logic_1)) then 
-                    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start_reg <= ap_const_logic_0;
+                    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start_reg <= ap_const_logic_1;
+                elsif ((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_ready = ap_const_logic_1)) then 
+                    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start_reg <= ap_const_logic_0;
                 end if; 
             end if;
         end if;
@@ -231,15 +231,15 @@ begin
     begin
         if (ap_clk'event and ap_clk = '1') then
             if ((ap_const_logic_1 = ap_CS_fsm_state2)) then
-                    select_ln122_reg_90(2 downto 1) <= select_ln122_fu_76_p3(2 downto 1);    select_ln122_reg_90(5) <= select_ln122_fu_76_p3(5);    select_ln122_reg_90(7) <= select_ln122_fu_76_p3(7);
+                    select_ln123_reg_90(2 downto 1) <= select_ln123_fu_76_p3(2 downto 1);    select_ln123_reg_90(5) <= select_ln123_fu_76_p3(5);    select_ln123_reg_90(7) <= select_ln123_fu_76_p3(7);
             end if;
         end if;
     end process;
-    select_ln122_reg_90(0) <= '0';
-    select_ln122_reg_90(4 downto 3) <= "00";
-    select_ln122_reg_90(6) <= '1';
+    select_ln123_reg_90(0) <= '0';
+    select_ln123_reg_90(4 downto 3) <= "00";
+    select_ln123_reg_90(6) <= '1';
 
-    ap_NS_fsm_assign_proc : process (real_start, ap_done_reg, ap_CS_fsm, ap_CS_fsm_state1, layer_mode_empty_n, layer_mode_c23_full_n, grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done, ap_CS_fsm_state3)
+    ap_NS_fsm_assign_proc : process (real_start, ap_done_reg, ap_CS_fsm, ap_CS_fsm_state1, layer_mode_empty_n, layer_mode_c23_full_n, grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done, ap_CS_fsm_state3)
     begin
         case ap_CS_fsm is
             when ap_ST_fsm_state1 => 
@@ -251,7 +251,7 @@ begin
             when ap_ST_fsm_state2 => 
                 ap_NS_fsm <= ap_ST_fsm_state3;
             when ap_ST_fsm_state3 => 
-                if (((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_state3))) then
+                if (((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_state3))) then
                     ap_NS_fsm <= ap_ST_fsm_state1;
                 else
                     ap_NS_fsm <= ap_ST_fsm_state3;
@@ -275,9 +275,9 @@ begin
 
     ap_ST_fsm_state2_blk <= ap_const_logic_0;
 
-    ap_ST_fsm_state3_blk_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done)
+    ap_ST_fsm_state3_blk_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done)
     begin
-        if ((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done = ap_const_logic_0)) then 
+        if ((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done = ap_const_logic_0)) then 
             ap_ST_fsm_state3_blk <= ap_const_logic_1;
         else 
             ap_ST_fsm_state3_blk <= ap_const_logic_0;
@@ -291,9 +291,9 @@ begin
     end process;
 
 
-    ap_done_assign_proc : process(ap_done_reg, grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done, ap_CS_fsm_state3)
+    ap_done_assign_proc : process(ap_done_reg, grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done, ap_CS_fsm_state3)
     begin
-        if (((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_state3))) then 
+        if (((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_state3))) then 
             ap_done <= ap_const_logic_1;
         else 
             ap_done <= ap_done_reg;
@@ -311,22 +311,22 @@ begin
     end process;
 
     ap_ready <= internal_ap_ready;
-    fc_input_stream_din <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_fc_input_stream_din;
+    fc_input_stream_din <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_fc_input_stream_din;
 
-    fc_input_stream_write_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_fc_input_stream_write, ap_CS_fsm_state3)
+    fc_input_stream_write_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_fc_input_stream_write, ap_CS_fsm_state3)
     begin
         if ((ap_const_logic_1 = ap_CS_fsm_state3)) then 
-            fc_input_stream_write <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_fc_input_stream_write;
+            fc_input_stream_write <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_fc_input_stream_write;
         else 
             fc_input_stream_write <= ap_const_logic_0;
         end if; 
     end process;
 
-    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_start_reg;
+    grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_start_reg;
 
-    internal_ap_ready_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done, ap_CS_fsm_state3)
+    internal_ap_ready_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done, ap_CS_fsm_state3)
     begin
-        if (((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_ap_done = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_state3))) then 
+        if (((grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_ap_done = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_state3))) then 
             internal_ap_ready <= ap_const_logic_1;
         else 
             internal_ap_ready <= ap_const_logic_0;
@@ -374,22 +374,22 @@ begin
         end if; 
     end process;
 
-    pool1_feature_fifo_din <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool1_feature_fifo_din;
+    pool1_feature_fifo_din <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool1_feature_fifo_din;
 
-    pool1_feature_fifo_write_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool1_feature_fifo_write, ap_CS_fsm_state3)
+    pool1_feature_fifo_write_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool1_feature_fifo_write, ap_CS_fsm_state3)
     begin
         if ((ap_const_logic_1 = ap_CS_fsm_state3)) then 
-            pool1_feature_fifo_write <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool1_feature_fifo_write;
+            pool1_feature_fifo_write <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool1_feature_fifo_write;
         else 
             pool1_feature_fifo_write <= ap_const_logic_0;
         end if; 
     end process;
 
 
-    pool_output_stream_read_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool_output_stream_read, ap_CS_fsm_state3)
+    pool_output_stream_read_assign_proc : process(grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool_output_stream_read, ap_CS_fsm_state3)
     begin
         if ((ap_const_logic_1 = ap_CS_fsm_state3)) then 
-            pool_output_stream_read <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64_pool_output_stream_read;
+            pool_output_stream_read <= grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64_pool_output_stream_read;
         else 
             pool_output_stream_read <= ap_const_logic_0;
         end if; 
@@ -405,7 +405,7 @@ begin
         end if; 
     end process;
 
-    select_ln122_fu_76_p3 <= 
+    select_ln123_fu_76_p3 <= 
         ap_const_lv8_62 when (layer_mode_read_reg_84(0) = '1') else 
         ap_const_lv8_C4;
     start_out <= real_start;

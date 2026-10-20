@@ -4,7 +4,7 @@
 // Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
 // ==============================================================
 `timescale 1 ns / 1 ps
-module cnn_accelerator_ddr_systolic_activation_bank_V_RAM_1P_BRAM_1R1W (
+module cnn_accelerator_ddr_systolic_OS_weight_bank_V_RAM_1P_BRAM_1R1W (
      
     address0, ce0,
     d0, we0, 
@@ -13,8 +13,8 @@ module cnn_accelerator_ddr_systolic_activation_bank_V_RAM_1P_BRAM_1R1W (
     reset, clk);
 
 parameter DataWidth = 64;
-parameter AddressWidth = 4;
-parameter AddressRange = 9;
+parameter AddressWidth = 6;
+parameter AddressRange = 36;
  
 input[AddressWidth-1:0] address0;
 input ce0;

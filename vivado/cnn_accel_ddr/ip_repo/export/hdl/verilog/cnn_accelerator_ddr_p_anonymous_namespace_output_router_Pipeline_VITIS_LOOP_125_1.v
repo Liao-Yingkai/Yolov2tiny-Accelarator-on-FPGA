@@ -7,7 +7,7 @@
 
 `timescale 1 ns / 1 ps 
 
-module cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1 (
+module cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1 (
         ap_clk,
         ap_rst,
         ap_start,
@@ -29,7 +29,7 @@ module cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LO
         fc_input_stream_fifo_cap,
         fc_input_stream_full_n,
         fc_input_stream_write,
-        select_ln122,
+        select_ln123,
         layer_mode_load
 );
 
@@ -56,7 +56,7 @@ input  [1:0] fc_input_stream_num_data_valid;
 input  [1:0] fc_input_stream_fifo_cap;
 input   fc_input_stream_full_n;
 output   fc_input_stream_write;
-input  [7:0] select_ln122;
+input  [7:0] select_ln123;
 input  [0:0] layer_mode_load;
 
 reg ap_idle;
@@ -72,7 +72,7 @@ reg    ap_idle_pp0;
 wire    ap_block_state1_pp0_stage0_iter0;
 reg    ap_block_state2_pp0_stage0_iter1;
 reg    ap_block_pp0_stage0_subdone;
-wire   [0:0] icmp_ln124_fu_94_p2;
+wire   [0:0] icmp_ln125_fu_94_p2;
 reg    ap_condition_exit_pp0_iter0_stage0;
 wire    ap_loop_exit_ready;
 reg    ap_ready_int;
@@ -150,7 +150,7 @@ end
 
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
-        if (((icmp_ln124_fu_94_p2 == 1'd0) & (ap_enable_reg_pp0_iter0 == 1'b1))) begin
+        if (((icmp_ln125_fu_94_p2 == 1'd0) & (ap_enable_reg_pp0_iter0 == 1'b1))) begin
             index_fu_48 <= index_2_fu_100_p2;
         end else if ((ap_loop_init == 1'b1)) begin
             index_fu_48 <= 8'd0;
@@ -159,7 +159,7 @@ always @ (posedge ap_clk) begin
 end
 
 always @ (*) begin
-    if (((icmp_ln124_fu_94_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
+    if (((icmp_ln125_fu_94_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b1;
     end else begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b0;
@@ -295,10 +295,10 @@ assign ap_loop_exit_ready = ap_condition_exit_pp0_iter0_stage0;
 
 assign fc_input_stream_din = pool_output_stream_dout;
 
-assign icmp_ln124_fu_94_p2 = ((ap_sig_allocacmp_index_1 == select_ln122) ? 1'b1 : 1'b0);
+assign icmp_ln125_fu_94_p2 = ((ap_sig_allocacmp_index_1 == select_ln123) ? 1'b1 : 1'b0);
 
 assign index_2_fu_100_p2 = (ap_sig_allocacmp_index_1 + 8'd1);
 
 assign pool1_feature_fifo_din = pool_output_stream_dout;
 
-endmodule //cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1
+endmodule //cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1

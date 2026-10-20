@@ -1050,7 +1050,7 @@ end
         .token_out_vec(token_out_vec_4),
         .dl_detect_out(dl_in_vec[4]));
 
-    assign proc_4_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_30_1_fu_64.pixels_blk_n);
+    assign proc_4_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_31_1_fu_64.pixels_blk_n);
     assign proc_4_data_PIPO_blk[0] = 1'b0;
     assign proc_4_start_FIFO_blk[0] = 1'b0 | (~start_for_p_anonymous_namespace_compute_runner_U0_U.if_empty_n & p_anonymous_namespace_compute_runner_U0.ap_idle & ~start_for_p_anonymous_namespace_compute_runner_U0_U.if_write);
     assign proc_4_TLF_FIFO_blk[0] = 1'b0;
@@ -1127,14 +1127,14 @@ end
         .token_out_vec(token_out_vec_5),
         .dl_detect_out(dl_in_vec[5]));
 
-    assign proc_5_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_30_1_fu_64.conv_input_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.layer_mode_c28_blk_n);
+    assign proc_5_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_31_1_fu_64.conv_input_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.layer_mode_c28_blk_n);
     assign proc_5_data_PIPO_blk[0] = 1'b0;
     assign proc_5_start_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_im2row_U0_U.if_full_n & p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.ap_start & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.real_start & (trans_in_cnt_1 == trans_out_cnt_1) & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_im2row_U0_U.if_read);
     assign proc_5_TLF_FIFO_blk[0] = 1'b0;
     assign proc_5_input_sync_blk[0] = 1'b0;
     assign proc_5_output_sync_blk[0] = 1'b0;
     assign proc_dep_vld_vec_5[0] = dl_detect_out ? proc_dep_vld_vec_5_reg[0] : (proc_5_data_FIFO_blk[0] | proc_5_data_PIPO_blk[0] | proc_5_start_FIFO_blk[0] | proc_5_TLF_FIFO_blk[0] | proc_5_input_sync_blk[0] | proc_5_output_sync_blk[0]);
-    assign proc_5_data_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_30_1_fu_64.pool1_feature_fifo_blk_n);
+    assign proc_5_data_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_31_1_fu_64.pool1_feature_fifo_blk_n);
     assign proc_5_data_PIPO_blk[1] = 1'b0;
     assign proc_5_start_FIFO_blk[1] = 1'b0;
     assign proc_5_TLF_FIFO_blk[1] = 1'b0;
@@ -1206,7 +1206,7 @@ end
 
     assign proc_6_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_conv_weight_router_U0.conv_weight_stream_blk_n);
     assign proc_6_data_PIPO_blk[0] = 1'b0;
-    assign proc_6_start_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_systolic_U0_U.if_full_n & p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_conv_weight_router_U0.ap_start & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_conv_weight_router_U0.real_start & (trans_in_cnt_2 == trans_out_cnt_2) & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_systolic_U0_U.if_read);
+    assign proc_6_start_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_systolic_OS_U0_U.if_full_n & p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_conv_weight_router_U0.ap_start & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_conv_weight_router_U0.real_start & (trans_in_cnt_2 == trans_out_cnt_2) & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_systolic_OS_U0_U.if_read);
     assign proc_6_TLF_FIFO_blk[0] = 1'b0;
     assign proc_6_input_sync_blk[0] = 1'b0;
     assign proc_6_output_sync_blk[0] = 1'b0;
@@ -1332,7 +1332,7 @@ end
         .token_out_vec(token_out_vec_8),
         .dl_detect_out(dl_in_vec[8]));
 
-    assign proc_8_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.im2row_U0.grp_im2row_Pipeline_VITIS_LOOP_291_2_fu_132.conv_input_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.im2row_U0.layer_mode_blk_n);
+    assign proc_8_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.im2row_U0.grp_im2row_Pipeline_VITIS_LOOP_317_3_fu_149.conv_input_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.im2row_U0.layer_mode_blk_n);
     assign proc_8_data_PIPO_blk[0] = 1'b0;
     assign proc_8_start_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_im2row_U0_U.if_empty_n & p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.im2row_U0.ap_idle & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_im2row_U0_U.if_write);
     assign proc_8_TLF_FIFO_blk[0] = 1'b0;
@@ -1367,7 +1367,7 @@ end
     assign dep_chan_data_8_9 = out_chan_dep_data_8;
     assign token_8_9 = token_out_vec_8[1];
 
-    // Process: p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_U0
+    // Process: p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0
     cnn_accelerator_ddr_hls_deadlock_detect_unit #(18, 9, 3, 3) cnn_accelerator_ddr_hls_deadlock_detect_unit_9 (
         .reset(dl_reset),
         .clock(dl_clock),
@@ -1383,21 +1383,21 @@ end
         .token_out_vec(token_out_vec_9),
         .dl_detect_out(dl_in_vec[9]));
 
-    assign proc_9_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_U0.grp_systolic_Pipeline_VITIS_LOOP_153_3_fu_299.activation_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_U0.layer_mode_blk_n);
+    assign proc_9_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.grp_systolic_OS_Pipeline_VITIS_LOOP_211_3_fu_235.activation_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.layer_mode_blk_n);
     assign proc_9_data_PIPO_blk[0] = 1'b0;
     assign proc_9_start_FIFO_blk[0] = 1'b0;
     assign proc_9_TLF_FIFO_blk[0] = 1'b0;
     assign proc_9_input_sync_blk[0] = 1'b0;
     assign proc_9_output_sync_blk[0] = 1'b0;
     assign proc_dep_vld_vec_9[0] = dl_detect_out ? proc_dep_vld_vec_9_reg[0] : (proc_9_data_FIFO_blk[0] | proc_9_data_PIPO_blk[0] | proc_9_start_FIFO_blk[0] | proc_9_TLF_FIFO_blk[0] | proc_9_input_sync_blk[0] | proc_9_output_sync_blk[0]);
-    assign proc_9_data_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_U0.grp_systolic_Pipeline_VITIS_LOOP_153_3_fu_299.conv_weight_stream_blk_n);
+    assign proc_9_data_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.grp_systolic_OS_Pipeline_VITIS_LOOP_211_3_fu_235.conv_weight_stream_blk_n);
     assign proc_9_data_PIPO_blk[1] = 1'b0;
-    assign proc_9_start_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_systolic_U0_U.if_empty_n & p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_U0.ap_idle & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_systolic_U0_U.if_write);
+    assign proc_9_start_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_systolic_OS_U0_U.if_empty_n & p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.ap_idle & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_systolic_OS_U0_U.if_write);
     assign proc_9_TLF_FIFO_blk[1] = 1'b0;
     assign proc_9_input_sync_blk[1] = 1'b0;
     assign proc_9_output_sync_blk[1] = 1'b0;
     assign proc_dep_vld_vec_9[1] = dl_detect_out ? proc_dep_vld_vec_9_reg[1] : (proc_9_data_FIFO_blk[1] | proc_9_data_PIPO_blk[1] | proc_9_start_FIFO_blk[1] | proc_9_TLF_FIFO_blk[1] | proc_9_input_sync_blk[1] | proc_9_output_sync_blk[1]);
-    assign proc_9_data_FIFO_blk[2] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_U0.acc_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_U0.layer_mode_c26_blk_n);
+    assign proc_9_data_FIFO_blk[2] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.acc_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.layer_mode_c26_blk_n);
     assign proc_9_data_PIPO_blk[2] = 1'b0;
     assign proc_9_start_FIFO_blk[2] = 1'b0;
     assign proc_9_TLF_FIFO_blk[2] = 1'b0;
@@ -1562,21 +1562,21 @@ end
         .token_out_vec(token_out_vec_12),
         .dl_detect_out(dl_in_vec[12]));
 
-    assign proc_12_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64.pool_output_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.layer_mode_blk_n);
+    assign proc_12_data_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64.pool_output_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.layer_mode_blk_n);
     assign proc_12_data_PIPO_blk[0] = 1'b0;
     assign proc_12_start_FIFO_blk[0] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_p_anonymous_namespace_output_router_U0_U.if_empty_n & p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.ap_idle & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_p_anonymous_namespace_output_router_U0_U.if_write);
     assign proc_12_TLF_FIFO_blk[0] = 1'b0;
     assign proc_12_input_sync_blk[0] = 1'b0;
     assign proc_12_output_sync_blk[0] = 1'b0;
     assign proc_dep_vld_vec_12[0] = dl_detect_out ? proc_dep_vld_vec_12_reg[0] : (proc_12_data_FIFO_blk[0] | proc_12_data_PIPO_blk[0] | proc_12_start_FIFO_blk[0] | proc_12_TLF_FIFO_blk[0] | proc_12_input_sync_blk[0] | proc_12_output_sync_blk[0]);
-    assign proc_12_data_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64.fc_input_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.layer_mode_c23_blk_n);
+    assign proc_12_data_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64.fc_input_stream_blk_n) | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.layer_mode_c23_blk_n);
     assign proc_12_data_PIPO_blk[1] = 1'b0;
     assign proc_12_start_FIFO_blk[1] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_p_anonymous_namespace_fully_connected_guard_U0_U.if_full_n & p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.ap_start & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.real_start & (trans_in_cnt_6 == trans_out_cnt_6) & ~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.start_for_p_anonymous_namespace_fully_connected_guard_U0_U.if_read);
     assign proc_12_TLF_FIFO_blk[1] = 1'b0;
     assign proc_12_input_sync_blk[1] = 1'b0;
     assign proc_12_output_sync_blk[1] = 1'b0;
     assign proc_dep_vld_vec_12[1] = dl_detect_out ? proc_dep_vld_vec_12_reg[1] : (proc_12_data_FIFO_blk[1] | proc_12_data_PIPO_blk[1] | proc_12_start_FIFO_blk[1] | proc_12_TLF_FIFO_blk[1] | proc_12_input_sync_blk[1] | proc_12_output_sync_blk[1]);
-    assign proc_12_data_FIFO_blk[2] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64.pool1_feature_fifo_blk_n);
+    assign proc_12_data_FIFO_blk[2] = 1'b0 | (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64.pool1_feature_fifo_blk_n);
     assign proc_12_data_PIPO_blk[2] = 1'b0;
     assign proc_12_start_FIFO_blk[2] = 1'b0;
     assign proc_12_TLF_FIFO_blk[2] = 1'b0;

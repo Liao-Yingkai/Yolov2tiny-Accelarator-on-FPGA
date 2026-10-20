@@ -101,8 +101,6 @@ wire    p_anonymous_namespace_conv_weight_router_U0_ap_ready;
 wire    p_anonymous_namespace_conv_weight_router_U0_w1_read;
 wire    p_anonymous_namespace_conv_weight_router_U0_w2_read;
 wire   [255:0] p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_din;
-wire   [1:0] p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_num_data_valid;
-wire   [1:0] p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_fifo_cap;
 wire    p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_write;
 wire    p_anonymous_namespace_conv_weight_router_U0_start_out;
 wire    p_anonymous_namespace_conv_weight_router_U0_start_write;
@@ -124,24 +122,22 @@ wire    im2row_U0_ap_idle;
 wire    im2row_U0_ap_ready;
 wire    im2row_U0_conv_input_stream_read;
 wire   [259:0] im2row_U0_activation_stream_din;
-wire   [1:0] im2row_U0_activation_stream_num_data_valid;
-wire   [1:0] im2row_U0_activation_stream_fifo_cap;
 wire    im2row_U0_activation_stream_write;
 wire    im2row_U0_layer_mode_read;
 wire   [0:0] im2row_U0_layer_mode_c27_din;
 wire    im2row_U0_layer_mode_c27_write;
-wire    systolic_U0_ap_start;
-wire    systolic_U0_ap_done;
-wire    systolic_U0_ap_continue;
-wire    systolic_U0_ap_idle;
-wire    systolic_U0_ap_ready;
-wire    systolic_U0_activation_stream_read;
-wire    systolic_U0_conv_weight_stream_read;
-wire   [515:0] systolic_U0_acc_stream_din;
-wire    systolic_U0_acc_stream_write;
-wire    systolic_U0_layer_mode_read;
-wire   [0:0] systolic_U0_layer_mode_c26_din;
-wire    systolic_U0_layer_mode_c26_write;
+wire    systolic_OS_U0_ap_start;
+wire    systolic_OS_U0_ap_done;
+wire    systolic_OS_U0_ap_continue;
+wire    systolic_OS_U0_ap_idle;
+wire    systolic_OS_U0_ap_ready;
+wire    systolic_OS_U0_activation_stream_read;
+wire    systolic_OS_U0_conv_weight_stream_read;
+wire   [515:0] systolic_OS_U0_acc_stream_din;
+wire    systolic_OS_U0_acc_stream_write;
+wire    systolic_OS_U0_layer_mode_read;
+wire   [0:0] systolic_OS_U0_layer_mode_c26_din;
+wire    systolic_OS_U0_layer_mode_c26_write;
 wire    conv_postprocess_U0_ap_start;
 wire    conv_postprocess_U0_ap_done;
 wire    conv_postprocess_U0_ap_continue;
@@ -225,8 +221,8 @@ wire   [8:0] pool1_feature_fifo_fifo_cap;
 wire    pool1_feature_fifo_empty_n;
 wire    conv_weight_stream_full_n;
 wire   [255:0] conv_weight_stream_dout;
-wire   [2:0] conv_weight_stream_num_data_valid;
-wire   [2:0] conv_weight_stream_fifo_cap;
+wire   [1:0] conv_weight_stream_num_data_valid;
+wire   [1:0] conv_weight_stream_fifo_cap;
 wire    conv_weight_stream_empty_n;
 wire    conv_param_stream_full_n;
 wire   [383:0] conv_param_stream_dout;
@@ -235,8 +231,8 @@ wire   [1:0] conv_param_stream_fifo_cap;
 wire    conv_param_stream_empty_n;
 wire    activation_stream_full_n;
 wire   [259:0] activation_stream_dout;
-wire   [2:0] activation_stream_num_data_valid;
-wire   [2:0] activation_stream_fifo_cap;
+wire   [1:0] activation_stream_num_data_valid;
+wire   [1:0] activation_stream_fifo_cap;
 wire    activation_stream_empty_n;
 wire    layer_mode_c27_full_n;
 wire   [0:0] layer_mode_c27_dout;
@@ -304,10 +300,10 @@ wire   [0:0] start_for_im2row_U0_din;
 wire    start_for_im2row_U0_full_n;
 wire   [0:0] start_for_im2row_U0_dout;
 wire    start_for_im2row_U0_empty_n;
-wire   [0:0] start_for_systolic_U0_din;
-wire    start_for_systolic_U0_full_n;
-wire   [0:0] start_for_systolic_U0_dout;
-wire    start_for_systolic_U0_empty_n;
+wire   [0:0] start_for_systolic_OS_U0_din;
+wire    start_for_systolic_OS_U0_full_n;
+wire   [0:0] start_for_systolic_OS_U0_dout;
+wire    start_for_systolic_OS_U0_empty_n;
 wire   [0:0] start_for_conv_postprocess_U0_din;
 wire    start_for_conv_postprocess_U0_full_n;
 wire   [0:0] start_for_conv_postprocess_U0_dout;
@@ -375,7 +371,7 @@ cnn_accelerator_ddr_p_anonymous_namespace_conv_weight_router p_anonymous_namespa
     .ap_clk(ap_clk),
     .ap_rst(ap_rst),
     .ap_start(p_anonymous_namespace_conv_weight_router_U0_ap_start),
-    .start_full_n(start_for_systolic_U0_full_n),
+    .start_full_n(start_for_systolic_OS_U0_full_n),
     .ap_done(p_anonymous_namespace_conv_weight_router_U0_ap_done),
     .ap_continue(p_anonymous_namespace_conv_weight_router_U0_ap_continue),
     .ap_idle(p_anonymous_namespace_conv_weight_router_U0_ap_idle),
@@ -391,8 +387,8 @@ cnn_accelerator_ddr_p_anonymous_namespace_conv_weight_router p_anonymous_namespa
     .w2_empty_n(w2_empty_n),
     .w2_read(p_anonymous_namespace_conv_weight_router_U0_w2_read),
     .conv_weight_stream_din(p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_din),
-    .conv_weight_stream_num_data_valid(p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_num_data_valid),
-    .conv_weight_stream_fifo_cap(p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_fifo_cap),
+    .conv_weight_stream_num_data_valid(conv_weight_stream_num_data_valid),
+    .conv_weight_stream_fifo_cap(conv_weight_stream_fifo_cap),
     .conv_weight_stream_full_n(conv_weight_stream_full_n),
     .conv_weight_stream_write(p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_write),
     .start_out(p_anonymous_namespace_conv_weight_router_U0_start_out),
@@ -443,8 +439,8 @@ cnn_accelerator_ddr_im2row im2row_U0(
     .conv_input_stream_empty_n(conv_input_stream_empty_n),
     .conv_input_stream_read(im2row_U0_conv_input_stream_read),
     .activation_stream_din(im2row_U0_activation_stream_din),
-    .activation_stream_num_data_valid(im2row_U0_activation_stream_num_data_valid),
-    .activation_stream_fifo_cap(im2row_U0_activation_stream_fifo_cap),
+    .activation_stream_num_data_valid(activation_stream_num_data_valid),
+    .activation_stream_fifo_cap(activation_stream_fifo_cap),
     .activation_stream_full_n(activation_stream_full_n),
     .activation_stream_write(im2row_U0_activation_stream_write),
     .layer_mode_dout(layer_mode_c28_dout),
@@ -459,39 +455,39 @@ cnn_accelerator_ddr_im2row im2row_U0(
     .layer_mode_c27_write(im2row_U0_layer_mode_c27_write)
 );
 
-cnn_accelerator_ddr_systolic systolic_U0(
+cnn_accelerator_ddr_systolic_OS systolic_OS_U0(
     .ap_clk(ap_clk),
     .ap_rst(ap_rst),
-    .ap_start(systolic_U0_ap_start),
-    .ap_done(systolic_U0_ap_done),
-    .ap_continue(systolic_U0_ap_continue),
-    .ap_idle(systolic_U0_ap_idle),
-    .ap_ready(systolic_U0_ap_ready),
+    .ap_start(systolic_OS_U0_ap_start),
+    .ap_done(systolic_OS_U0_ap_done),
+    .ap_continue(systolic_OS_U0_ap_continue),
+    .ap_idle(systolic_OS_U0_ap_idle),
+    .ap_ready(systolic_OS_U0_ap_ready),
     .activation_stream_dout(activation_stream_dout),
     .activation_stream_num_data_valid(activation_stream_num_data_valid),
     .activation_stream_fifo_cap(activation_stream_fifo_cap),
     .activation_stream_empty_n(activation_stream_empty_n),
-    .activation_stream_read(systolic_U0_activation_stream_read),
+    .activation_stream_read(systolic_OS_U0_activation_stream_read),
     .conv_weight_stream_dout(conv_weight_stream_dout),
     .conv_weight_stream_num_data_valid(conv_weight_stream_num_data_valid),
     .conv_weight_stream_fifo_cap(conv_weight_stream_fifo_cap),
     .conv_weight_stream_empty_n(conv_weight_stream_empty_n),
-    .conv_weight_stream_read(systolic_U0_conv_weight_stream_read),
-    .acc_stream_din(systolic_U0_acc_stream_din),
+    .conv_weight_stream_read(systolic_OS_U0_conv_weight_stream_read),
+    .acc_stream_din(systolic_OS_U0_acc_stream_din),
     .acc_stream_num_data_valid(acc_stream_num_data_valid),
     .acc_stream_fifo_cap(acc_stream_fifo_cap),
     .acc_stream_full_n(acc_stream_full_n),
-    .acc_stream_write(systolic_U0_acc_stream_write),
+    .acc_stream_write(systolic_OS_U0_acc_stream_write),
     .layer_mode_dout(layer_mode_c27_dout),
     .layer_mode_num_data_valid(layer_mode_c27_num_data_valid),
     .layer_mode_fifo_cap(layer_mode_c27_fifo_cap),
     .layer_mode_empty_n(layer_mode_c27_empty_n),
-    .layer_mode_read(systolic_U0_layer_mode_read),
-    .layer_mode_c26_din(systolic_U0_layer_mode_c26_din),
+    .layer_mode_read(systolic_OS_U0_layer_mode_read),
+    .layer_mode_c26_din(systolic_OS_U0_layer_mode_c26_din),
     .layer_mode_c26_num_data_valid(layer_mode_c26_num_data_valid),
     .layer_mode_c26_fifo_cap(layer_mode_c26_fifo_cap),
     .layer_mode_c26_full_n(layer_mode_c26_full_n),
-    .layer_mode_c26_write(systolic_U0_layer_mode_c26_write)
+    .layer_mode_c26_write(systolic_OS_U0_layer_mode_c26_write)
 );
 
 cnn_accelerator_ddr_conv_postprocess conv_postprocess_U0(
@@ -716,7 +712,7 @@ cnn_accelerator_ddr_fifo_w64_d196_B pool1_feature_fifo_U(
     .if_read(p_anonymous_namespace_input_router_U0_pool1_feature_fifo_read)
 );
 
-cnn_accelerator_ddr_fifo_w256_d3_S conv_weight_stream_U(
+cnn_accelerator_ddr_fifo_w256_d2_S conv_weight_stream_U(
     .clk(ap_clk),
     .reset(ap_rst),
     .if_read_ce(1'b1),
@@ -728,7 +724,7 @@ cnn_accelerator_ddr_fifo_w256_d3_S conv_weight_stream_U(
     .if_num_data_valid(conv_weight_stream_num_data_valid),
     .if_fifo_cap(conv_weight_stream_fifo_cap),
     .if_empty_n(conv_weight_stream_empty_n),
-    .if_read(systolic_U0_conv_weight_stream_read)
+    .if_read(systolic_OS_U0_conv_weight_stream_read)
 );
 
 cnn_accelerator_ddr_fifo_w384_d2_S conv_param_stream_U(
@@ -746,7 +742,7 @@ cnn_accelerator_ddr_fifo_w384_d2_S conv_param_stream_U(
     .if_read(conv_postprocess_U0_conv_param_stream_read)
 );
 
-cnn_accelerator_ddr_fifo_w260_d3_S activation_stream_U(
+cnn_accelerator_ddr_fifo_w260_d2_S activation_stream_U(
     .clk(ap_clk),
     .reset(ap_rst),
     .if_read_ce(1'b1),
@@ -758,7 +754,7 @@ cnn_accelerator_ddr_fifo_w260_d3_S activation_stream_U(
     .if_num_data_valid(activation_stream_num_data_valid),
     .if_fifo_cap(activation_stream_fifo_cap),
     .if_empty_n(activation_stream_empty_n),
-    .if_read(systolic_U0_activation_stream_read)
+    .if_read(systolic_OS_U0_activation_stream_read)
 );
 
 cnn_accelerator_ddr_fifo_w1_d2_S layer_mode_c27_U(
@@ -773,7 +769,7 @@ cnn_accelerator_ddr_fifo_w1_d2_S layer_mode_c27_U(
     .if_num_data_valid(layer_mode_c27_num_data_valid),
     .if_fifo_cap(layer_mode_c27_fifo_cap),
     .if_empty_n(layer_mode_c27_empty_n),
-    .if_read(systolic_U0_layer_mode_read)
+    .if_read(systolic_OS_U0_layer_mode_read)
 );
 
 cnn_accelerator_ddr_fifo_w516_d2_S acc_stream_U(
@@ -781,9 +777,9 @@ cnn_accelerator_ddr_fifo_w516_d2_S acc_stream_U(
     .reset(ap_rst),
     .if_read_ce(1'b1),
     .if_write_ce(1'b1),
-    .if_din(systolic_U0_acc_stream_din),
+    .if_din(systolic_OS_U0_acc_stream_din),
     .if_full_n(acc_stream_full_n),
-    .if_write(systolic_U0_acc_stream_write),
+    .if_write(systolic_OS_U0_acc_stream_write),
     .if_dout(acc_stream_dout),
     .if_num_data_valid(acc_stream_num_data_valid),
     .if_fifo_cap(acc_stream_fifo_cap),
@@ -796,9 +792,9 @@ cnn_accelerator_ddr_fifo_w1_d2_S layer_mode_c26_U(
     .reset(ap_rst),
     .if_read_ce(1'b1),
     .if_write_ce(1'b1),
-    .if_din(systolic_U0_layer_mode_c26_din),
+    .if_din(systolic_OS_U0_layer_mode_c26_din),
     .if_full_n(layer_mode_c26_full_n),
-    .if_write(systolic_U0_layer_mode_c26_write),
+    .if_write(systolic_OS_U0_layer_mode_c26_write),
     .if_dout(layer_mode_c26_dout),
     .if_num_data_valid(layer_mode_c26_num_data_valid),
     .if_fifo_cap(layer_mode_c26_fifo_cap),
@@ -939,17 +935,17 @@ cnn_accelerator_ddr_start_for_im2row_U0 start_for_im2row_U0_U(
     .if_read(im2row_U0_ap_ready)
 );
 
-cnn_accelerator_ddr_start_for_systolic_U0 start_for_systolic_U0_U(
+cnn_accelerator_ddr_start_for_systolic_OS_U0 start_for_systolic_OS_U0_U(
     .clk(ap_clk),
     .reset(ap_rst),
     .if_read_ce(1'b1),
     .if_write_ce(1'b1),
-    .if_din(start_for_systolic_U0_din),
-    .if_full_n(start_for_systolic_U0_full_n),
+    .if_din(start_for_systolic_OS_U0_din),
+    .if_full_n(start_for_systolic_OS_U0_full_n),
     .if_write(p_anonymous_namespace_conv_weight_router_U0_start_write),
-    .if_dout(start_for_systolic_U0_dout),
-    .if_empty_n(start_for_systolic_U0_empty_n),
-    .if_read(systolic_U0_ap_ready)
+    .if_dout(start_for_systolic_OS_U0_dout),
+    .if_empty_n(start_for_systolic_OS_U0_empty_n),
+    .if_read(systolic_OS_U0_ap_ready)
 );
 
 cnn_accelerator_ddr_start_for_conv_postprocess_U0 start_for_conv_postprocess_U0_U(
@@ -1055,7 +1051,7 @@ end
 
 assign ap_done = p_anonymous_namespace_fc_postprocess_guard_U0_ap_done;
 
-assign ap_idle = (systolic_U0_ap_idle & p_anonymous_namespace_output_router_U0_ap_idle & p_anonymous_namespace_input_router_U0_ap_idle & p_anonymous_namespace_fully_connected_guard_U0_ap_idle & p_anonymous_namespace_fc_postprocess_guard_U0_ap_idle & p_anonymous_namespace_conv_weight_router_U0_ap_idle & p_anonymous_namespace_conv_param_router_U0_ap_idle & maxpool_U0_ap_idle & im2row_U0_ap_idle & conv_postprocess_U0_ap_idle);
+assign ap_idle = (systolic_OS_U0_ap_idle & p_anonymous_namespace_output_router_U0_ap_idle & p_anonymous_namespace_input_router_U0_ap_idle & p_anonymous_namespace_fully_connected_guard_U0_ap_idle & p_anonymous_namespace_fc_postprocess_guard_U0_ap_idle & p_anonymous_namespace_conv_weight_router_U0_ap_idle & p_anonymous_namespace_conv_param_router_U0_ap_idle & maxpool_U0_ap_idle & im2row_U0_ap_idle & conv_postprocess_U0_ap_idle);
 
 assign ap_ready = ap_sync_ready;
 
@@ -1074,10 +1070,6 @@ assign computed_write = p_anonymous_namespace_fc_postprocess_guard_U0_computed_w
 assign conv_postprocess_U0_ap_continue = 1'b1;
 
 assign conv_postprocess_U0_ap_start = start_for_conv_postprocess_U0_empty_n;
-
-assign im2row_U0_activation_stream_fifo_cap = activation_stream_fifo_cap;
-
-assign im2row_U0_activation_stream_num_data_valid = activation_stream_num_data_valid;
 
 assign im2row_U0_ap_continue = 1'b1;
 
@@ -1098,10 +1090,6 @@ assign p_anonymous_namespace_conv_param_router_U0_ap_start = ((ap_sync_reg_p_ano
 assign p_anonymous_namespace_conv_weight_router_U0_ap_continue = 1'b1;
 
 assign p_anonymous_namespace_conv_weight_router_U0_ap_start = ((ap_sync_reg_p_anonymous_namespace_conv_weight_router_U0_ap_ready ^ 1'b1) & ap_start);
-
-assign p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_fifo_cap = conv_weight_stream_fifo_cap;
-
-assign p_anonymous_namespace_conv_weight_router_U0_conv_weight_stream_num_data_valid = conv_weight_stream_num_data_valid;
 
 assign p_anonymous_namespace_fc_postprocess_guard_U0_ap_continue = ap_continue;
 
@@ -1139,11 +1127,11 @@ assign start_for_p_anonymous_namespace_fully_connected_guard_U0_din = 1'b1;
 
 assign start_for_p_anonymous_namespace_output_router_U0_din = 1'b1;
 
-assign start_for_systolic_U0_din = 1'b1;
+assign start_for_systolic_OS_U0_din = 1'b1;
 
-assign systolic_U0_ap_continue = 1'b1;
+assign systolic_OS_U0_ap_continue = 1'b1;
 
-assign systolic_U0_ap_start = start_for_systolic_U0_empty_n;
+assign systolic_OS_U0_ap_start = start_for_systolic_OS_U0_empty_n;
 
 assign w1_read = p_anonymous_namespace_conv_weight_router_U0_w1_read;
 

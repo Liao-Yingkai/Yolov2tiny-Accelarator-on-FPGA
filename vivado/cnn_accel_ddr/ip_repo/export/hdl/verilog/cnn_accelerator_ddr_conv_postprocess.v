@@ -125,8 +125,8 @@ reg   [31:0] trunc_ln92_11_reg_2066;
 reg   [31:0] trunc_ln92_12_reg_2071;
 reg   [31:0] trunc_ln92_13_reg_2076;
 reg   [3:0] output_spatial_valid_V_reg_2081;
-wire   [1:0] empty_124_fu_1338_p1;
-reg   [1:0] empty_124_reg_2092;
+wire   [1:0] empty_128_fu_1338_p1;
+reg   [1:0] empty_128_reg_2092;
 reg   [1:0] input_value_V_address0;
 reg    input_value_V_ce0;
 reg    input_value_V_we0;
@@ -400,7 +400,7 @@ cnn_accelerator_ddr_conv_postprocess_Pipeline_VITIS_LOOP_128_4 grp_conv_postproc
     .bias_cache_V_4_3(bias_cache_V_7_fu_252),
     .bias_cache_V_8_3(bias_cache_V_11_fu_268),
     .bias_cache_V_12_3(bias_cache_V_15_fu_284),
-    .cout_tile_cast(empty_124_reg_2092),
+    .cout_tile_cast(empty_128_reg_2092),
     .multiplier_cache_V_327(multiplier_cache_V_4_fu_300),
     .multiplier_cache_V_4_3(multiplier_cache_V_8_fu_316),
     .multiplier_cache_V_8_3(multiplier_cache_V_12_fu_332),
@@ -657,7 +657,7 @@ end
 
 always @ (posedge ap_clk) begin
     if ((1'b1 == ap_CS_fsm_state3)) begin
-        empty_124_reg_2092 <= empty_124_fu_1338_p1;
+        empty_128_reg_2092 <= empty_128_fu_1338_p1;
     end
 end
 
@@ -1296,7 +1296,7 @@ assign bias_cache_V_20_fu_980_p1 = conv_param_stream_dout[31:0];
 
 assign bound_fu_718_p3 = ((layer_mode_dout[0:0] == 1'b1) ? 9'd224 : 9'd392);
 
-assign empty_124_fu_1338_p1 = select_ln89_1_fu_938_p3[1:0];
+assign empty_128_fu_1338_p1 = select_ln89_1_fu_938_p3[1:0];
 
 assign grp_conv_postprocess_Pipeline_VITIS_LOOP_128_4_fu_634_ap_start = grp_conv_postprocess_Pipeline_VITIS_LOOP_128_4_fu_634_ap_start_reg;
 

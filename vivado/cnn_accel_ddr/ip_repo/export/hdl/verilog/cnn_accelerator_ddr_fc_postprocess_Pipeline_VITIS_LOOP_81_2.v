@@ -242,7 +242,7 @@ cnn_accelerator_ddr_mul_32s_32s_64_1_1 #(
     .din0_WIDTH( 32 ),
     .din1_WIDTH( 32 ),
     .dout_WIDTH( 64 ))
-mul_32s_32s_64_1_1_U651(
+mul_32s_32s_64_1_1_U635(
     .din0(multiplier_V_reg_645),
     .din1(biased_reg_655),
     .dout(ret_V_fu_210_p2)

@@ -223,7 +223,7 @@ attribute shreg_extract : string;
 
 
 begin
-    mul_32s_32s_64_1_1_U651 : component cnn_accelerator_ddr_mul_32s_32s_64_1_1
+    mul_32s_32s_64_1_1_U635 : component cnn_accelerator_ddr_mul_32s_32s_64_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,

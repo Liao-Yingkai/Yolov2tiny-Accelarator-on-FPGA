@@ -136,7 +136,7 @@ reg    internal_ap_ready;
 wire   [0:0] layer_mode_fu_93_p2;
 reg   [0:0] layer_mode_reg_115;
 wire    ap_CS_fsm_state2;
-wire   [0:0] icmp_ln254_fu_81_p2;
+wire   [0:0] icmp_ln259_fu_81_p2;
 wire    grp_p_anonymous_namespace_run_layer_phase_fu_50_pixels_read;
 wire    grp_p_anonymous_namespace_run_layer_phase_fu_50_w1_read;
 wire    grp_p_anonymous_namespace_run_layer_phase_fu_50_p1_read;
@@ -227,7 +227,7 @@ always @ (posedge ap_clk) begin
     end else begin
         if ((ap_continue == 1'b1)) begin
             ap_done_reg <= 1'b0;
-        end else if (((icmp_ln254_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
+        end else if (((icmp_ln259_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
             ap_done_reg <= 1'b1;
         end
     end
@@ -261,7 +261,7 @@ always @ (posedge ap_clk) begin
     if (ap_rst == 1'b1) begin
         grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= 1'b0;
     end else begin
-        if ((((icmp_ln254_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2)) | ((1'b1 == ap_CS_fsm_state3) & (ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready == 1'b0)))) begin
+        if ((((icmp_ln259_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2)) | ((1'b1 == ap_CS_fsm_state3) & (ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready == 1'b0)))) begin
             grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= 1'b1;
         end else if ((grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready == 1'b1)) begin
             grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= 1'b0;
@@ -284,13 +284,13 @@ end
 always @ (posedge ap_clk) begin
     if ((~((real_start == 1'b0) | (ap_done_reg == 1'b1)) & (1'b1 == ap_CS_fsm_state1))) begin
         phase_fu_46 <= 2'd0;
-    end else if (((icmp_ln254_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
+    end else if (((icmp_ln259_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
         phase_fu_46 <= phase_2_fu_87_p2;
     end
 end
 
 always @ (posedge ap_clk) begin
-    if (((icmp_ln254_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
+    if (((icmp_ln259_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
         layer_mode_reg_115 <= layer_mode_fu_93_p2;
     end
 end
@@ -314,7 +314,7 @@ always @ (*) begin
 end
 
 always @ (*) begin
-    if (((icmp_ln254_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
+    if (((icmp_ln259_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
         ap_done = 1'b1;
     end else begin
         ap_done = ap_done_reg;
@@ -346,7 +346,7 @@ always @ (*) begin
 end
 
 always @ (*) begin
-    if (((icmp_ln254_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
+    if (((icmp_ln259_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
         internal_ap_ready = 1'b1;
     end else begin
         internal_ap_ready = 1'b0;
@@ -435,7 +435,7 @@ always @ (*) begin
             end
         end
         ap_ST_fsm_state2 : begin
-            if (((icmp_ln254_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
+            if (((icmp_ln259_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
                 ap_NS_fsm = ap_ST_fsm_state1;
             end else begin
                 ap_NS_fsm = ap_ST_fsm_state3;
@@ -478,7 +478,7 @@ assign computed_din = grp_p_anonymous_namespace_run_layer_phase_fu_50_computed_d
 
 assign grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start = grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg;
 
-assign icmp_ln254_fu_81_p2 = ((phase_fu_46 == 2'd2) ? 1'b1 : 1'b0);
+assign icmp_ln259_fu_81_p2 = ((phase_fu_46 == 2'd2) ? 1'b1 : 1'b0);
 
 assign layer_mode_fu_93_p2 = ((phase_fu_46 != 2'd0) ? 1'b1 : 1'b0);
 

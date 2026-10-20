@@ -157,7 +157,7 @@ attribute shreg_extract : string;
 
 
 begin
-    mux_21_64_1_1_U724 : component cnn_accelerator_ddr_mux_21_64_1_1
+    mux_21_64_1_1_U708 : component cnn_accelerator_ddr_mux_21_64_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,

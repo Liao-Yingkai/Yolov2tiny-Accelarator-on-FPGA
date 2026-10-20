@@ -226,13 +226,13 @@ attribute shreg_extract : string;
     signal sext_ln1494_fu_830_p1 : STD_LOGIC_VECTOR (15 downto 0);
     signal result_1_reg_1975 : STD_LOGIC_VECTOR (7 downto 0);
     signal result_1_reg_1975_pp0_iter3_reg : STD_LOGIC_VECTOR (7 downto 0);
-    signal sext_ln1494_11_fu_858_p1 : STD_LOGIC_VECTOR (15 downto 0);
+    signal sext_ln1494_4_fu_858_p1 : STD_LOGIC_VECTOR (15 downto 0);
     signal result_3_reg_1994 : STD_LOGIC_VECTOR (7 downto 0);
     signal result_3_reg_1994_pp0_iter3_reg : STD_LOGIC_VECTOR (7 downto 0);
-    signal sext_ln1494_15_fu_886_p1 : STD_LOGIC_VECTOR (15 downto 0);
+    signal sext_ln1494_8_fu_886_p1 : STD_LOGIC_VECTOR (15 downto 0);
     signal result_5_reg_2013 : STD_LOGIC_VECTOR (7 downto 0);
     signal result_5_reg_2013_pp0_iter3_reg : STD_LOGIC_VECTOR (7 downto 0);
-    signal sext_ln1494_19_fu_914_p1 : STD_LOGIC_VECTOR (15 downto 0);
+    signal sext_ln1494_12_fu_914_p1 : STD_LOGIC_VECTOR (15 downto 0);
     signal result_7_reg_2032 : STD_LOGIC_VECTOR (7 downto 0);
     signal result_7_reg_2032_pp0_iter3_reg : STD_LOGIC_VECTOR (7 downto 0);
     signal dot_V_fu_1300_p2 : STD_LOGIC_VECTOR (18 downto 0);
@@ -305,13 +305,13 @@ attribute shreg_extract : string;
     signal trunc_ln101_33_fu_766_p4 : STD_LOGIC_VECTOR (7 downto 0);
     signal trunc_ln101_35_fu_786_p4 : STD_LOGIC_VECTOR (7 downto 0);
     signal ret_V_128_fu_1002_p0 : STD_LOGIC_VECTOR (7 downto 0);
-    signal sext_ln1494_9_fu_996_p1 : STD_LOGIC_VECTOR (15 downto 0);
+    signal sext_ln1494_2_fu_996_p1 : STD_LOGIC_VECTOR (15 downto 0);
     signal ret_V_130_fu_1014_p0 : STD_LOGIC_VECTOR (7 downto 0);
-    signal sext_ln1494_13_fu_1008_p1 : STD_LOGIC_VECTOR (15 downto 0);
+    signal sext_ln1494_6_fu_1008_p1 : STD_LOGIC_VECTOR (15 downto 0);
     signal ret_V_132_fu_1026_p0 : STD_LOGIC_VECTOR (7 downto 0);
-    signal sext_ln1494_17_fu_1020_p1 : STD_LOGIC_VECTOR (15 downto 0);
+    signal sext_ln1494_10_fu_1020_p1 : STD_LOGIC_VECTOR (15 downto 0);
     signal ret_V_134_fu_1038_p0 : STD_LOGIC_VECTOR (7 downto 0);
-    signal sext_ln1494_21_fu_1032_p1 : STD_LOGIC_VECTOR (15 downto 0);
+    signal sext_ln1494_14_fu_1032_p1 : STD_LOGIC_VECTOR (15 downto 0);
     signal ret_V_128_fu_1002_p2 : STD_LOGIC_VECTOR (15 downto 0);
     signal ret_V_130_fu_1014_p2 : STD_LOGIC_VECTOR (15 downto 0);
     signal ret_V_132_fu_1026_p2 : STD_LOGIC_VECTOR (15 downto 0);
@@ -411,13 +411,13 @@ attribute shreg_extract : string;
     signal sext_ln112_fu_1473_p1 : STD_LOGIC_VECTOR (31 downto 0);
     signal add_ln840_fu_1476_p2 : STD_LOGIC_VECTOR (31 downto 0);
     signal sext_ln112_1_fu_1489_p1 : STD_LOGIC_VECTOR (31 downto 0);
-    signal add_ln840_1_fu_1492_p2 : STD_LOGIC_VECTOR (31 downto 0);
+    signal add_ln840_16_fu_1492_p2 : STD_LOGIC_VECTOR (31 downto 0);
     signal sext_ln112_2_fu_1505_p1 : STD_LOGIC_VECTOR (31 downto 0);
-    signal add_ln840_2_fu_1508_p2 : STD_LOGIC_VECTOR (31 downto 0);
+    signal add_ln840_17_fu_1508_p2 : STD_LOGIC_VECTOR (31 downto 0);
     signal sext_ln112_3_fu_1521_p1 : STD_LOGIC_VECTOR (31 downto 0);
-    signal add_ln840_3_fu_1524_p2 : STD_LOGIC_VECTOR (31 downto 0);
+    signal add_ln840_18_fu_1524_p2 : STD_LOGIC_VECTOR (31 downto 0);
     signal sext_ln112_4_fu_1537_p1 : STD_LOGIC_VECTOR (31 downto 0);
-    signal add_ln840_4_fu_1540_p2 : STD_LOGIC_VECTOR (31 downto 0);
+    signal add_ln840_19_fu_1540_p2 : STD_LOGIC_VECTOR (31 downto 0);
     signal grp_fu_1593_p0 : STD_LOGIC_VECTOR (7 downto 0);
     signal grp_fu_1602_p0 : STD_LOGIC_VECTOR (7 downto 0);
     signal grp_fu_1611_p0 : STD_LOGIC_VECTOR (7 downto 0);
@@ -555,7 +555,7 @@ begin
         d0 => fc_input_stream_dout,
         q0 => activation_buffer_V_q0);
 
-    mul_8s_8s_16_1_1_U602 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U586 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -567,7 +567,7 @@ begin
         din1 => trunc_ln101_2_reg_1861_pp0_iter3_reg,
         dout => ret_V_128_fu_1002_p2);
 
-    mul_8s_8s_16_1_1_U603 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U587 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -579,7 +579,7 @@ begin
         din1 => trunc_ln101_4_reg_1866_pp0_iter3_reg,
         dout => ret_V_130_fu_1014_p2);
 
-    mul_8s_8s_16_1_1_U604 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U588 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -591,7 +591,7 @@ begin
         din1 => trunc_ln101_6_reg_1871_pp0_iter3_reg,
         dout => ret_V_132_fu_1026_p2);
 
-    mul_8s_8s_16_1_1_U605 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U589 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -603,7 +603,7 @@ begin
         din1 => trunc_ln101_8_reg_1876_pp0_iter3_reg,
         dout => ret_V_134_fu_1038_p2);
 
-    mul_8s_8s_16_1_1_U606 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U590 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -615,7 +615,7 @@ begin
         din1 => trunc_ln101_s_reg_1881_pp0_iter3_reg,
         dout => ret_V_136_fu_1063_p2);
 
-    mul_8s_8s_16_1_1_U607 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U591 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -627,7 +627,7 @@ begin
         din1 => trunc_ln101_10_reg_1886_pp0_iter3_reg,
         dout => ret_V_138_fu_1072_p2);
 
-    mul_8s_8s_16_1_1_U608 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U592 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -639,7 +639,7 @@ begin
         din1 => trunc_ln101_12_reg_1891_pp0_iter3_reg,
         dout => ret_V_140_fu_1081_p2);
 
-    mul_8s_8s_16_1_1_U609 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U593 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -651,7 +651,7 @@ begin
         din1 => tmp_s_reg_1956_pp0_iter3_reg,
         dout => ret_V_142_fu_1090_p2);
 
-    mul_8s_8s_16_1_1_U610 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U594 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -663,7 +663,7 @@ begin
         din1 => trunc_ln101_15_reg_1896_pp0_iter3_reg,
         dout => ret_V_144_fu_1115_p2);
 
-    mul_8s_8s_16_1_1_U611 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U595 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -675,7 +675,7 @@ begin
         din1 => trunc_ln101_17_reg_1901_pp0_iter3_reg,
         dout => ret_V_146_fu_1124_p2);
 
-    mul_8s_8s_16_1_1_U612 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U596 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -687,7 +687,7 @@ begin
         din1 => trunc_ln101_19_reg_1906_pp0_iter3_reg,
         dout => ret_V_148_fu_1133_p2);
 
-    mul_8s_8s_16_1_1_U613 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U597 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -699,7 +699,7 @@ begin
         din1 => trunc_ln101_21_reg_1911_pp0_iter3_reg,
         dout => ret_V_150_fu_1142_p2);
 
-    mul_8s_8s_16_1_1_U614 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U598 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -711,7 +711,7 @@ begin
         din1 => trunc_ln101_22_reg_1916_pp0_iter3_reg,
         dout => ret_V_152_fu_1167_p2);
 
-    mul_8s_8s_16_1_1_U615 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U599 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -723,7 +723,7 @@ begin
         din1 => trunc_ln101_24_reg_1921_pp0_iter3_reg,
         dout => ret_V_154_fu_1176_p2);
 
-    mul_8s_8s_16_1_1_U616 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U600 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -735,7 +735,7 @@ begin
         din1 => trunc_ln101_26_reg_1926_pp0_iter3_reg,
         dout => ret_V_156_fu_1185_p2);
 
-    mul_8s_8s_16_1_1_U617 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U601 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -747,7 +747,7 @@ begin
         din1 => trunc_ln101_28_reg_1931_pp0_iter3_reg,
         dout => ret_V_158_fu_1194_p2);
 
-    mul_8s_8s_16_1_1_U618 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U602 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -759,7 +759,7 @@ begin
         din1 => trunc_ln101_30_reg_1936_pp0_iter3_reg,
         dout => ret_V_160_fu_1219_p2);
 
-    mul_8s_8s_16_1_1_U619 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U603 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -771,7 +771,7 @@ begin
         din1 => trunc_ln101_32_reg_1941_pp0_iter3_reg,
         dout => ret_V_162_fu_1228_p2);
 
-    mul_8s_8s_16_1_1_U620 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U604 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -783,7 +783,7 @@ begin
         din1 => trunc_ln101_34_reg_1946_pp0_iter3_reg,
         dout => ret_V_164_fu_1237_p2);
 
-    mul_8s_8s_16_1_1_U621 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U605 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -795,7 +795,7 @@ begin
         din1 => trunc_ln101_36_reg_1951_pp0_iter3_reg,
         dout => ret_V_166_fu_1246_p2);
 
-    mac_muladd_8s_8s_16s_17_4_1_U622 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U606 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -812,7 +812,7 @@ begin
         ce => grp_fu_1593_ce,
         dout => grp_fu_1593_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U623 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U607 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -829,7 +829,7 @@ begin
         ce => grp_fu_1602_ce,
         dout => grp_fu_1602_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U624 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U608 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -846,7 +846,7 @@ begin
         ce => grp_fu_1611_ce,
         dout => grp_fu_1611_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U625 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U609 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -863,7 +863,7 @@ begin
         ce => grp_fu_1620_ce,
         dout => grp_fu_1620_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U626 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U610 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -880,7 +880,7 @@ begin
         ce => grp_fu_1629_ce,
         dout => grp_fu_1629_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U627 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U611 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -897,7 +897,7 @@ begin
         ce => grp_fu_1638_ce,
         dout => grp_fu_1638_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U628 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U612 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -914,7 +914,7 @@ begin
         ce => grp_fu_1647_ce,
         dout => grp_fu_1647_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U629 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U613 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -931,7 +931,7 @@ begin
         ce => grp_fu_1656_ce,
         dout => grp_fu_1656_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U630 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U614 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -948,7 +948,7 @@ begin
         ce => grp_fu_1665_ce,
         dout => grp_fu_1665_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U631 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U615 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -965,7 +965,7 @@ begin
         ce => grp_fu_1674_ce,
         dout => grp_fu_1674_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U632 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U616 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -982,7 +982,7 @@ begin
         ce => grp_fu_1683_ce,
         dout => grp_fu_1683_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U633 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U617 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -999,7 +999,7 @@ begin
         ce => grp_fu_1692_ce,
         dout => grp_fu_1692_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U634 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U618 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1016,7 +1016,7 @@ begin
         ce => grp_fu_1701_ce,
         dout => grp_fu_1701_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U635 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U619 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1033,7 +1033,7 @@ begin
         ce => grp_fu_1710_ce,
         dout => grp_fu_1710_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U636 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U620 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1050,7 +1050,7 @@ begin
         ce => grp_fu_1719_ce,
         dout => grp_fu_1719_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U637 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U621 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1067,7 +1067,7 @@ begin
         ce => grp_fu_1728_ce,
         dout => grp_fu_1728_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U638 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U622 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1084,7 +1084,7 @@ begin
         ce => grp_fu_1737_ce,
         dout => grp_fu_1737_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U639 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U623 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1101,7 +1101,7 @@ begin
         ce => grp_fu_1746_ce,
         dout => grp_fu_1746_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U640 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U624 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1118,7 +1118,7 @@ begin
         ce => grp_fu_1755_ce,
         dout => grp_fu_1755_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U641 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U625 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1483,10 +1483,10 @@ begin
 
     add_ln81_1_fu_361_p2 <= std_logic_vector(unsigned(ap_sig_allocacmp_out_tile_load) + unsigned(ap_const_lv2_1));
     add_ln81_fu_335_p2 <= std_logic_vector(unsigned(ap_sig_allocacmp_indvar_flatten_load) + unsigned(ap_const_lv8_1));
-    add_ln840_1_fu_1492_p2 <= std_logic_vector(unsigned(add_i_1560_fu_230) + unsigned(sext_ln112_1_fu_1489_p1));
-    add_ln840_2_fu_1508_p2 <= std_logic_vector(unsigned(add_i_2562_fu_234) + unsigned(sext_ln112_2_fu_1505_p1));
-    add_ln840_3_fu_1524_p2 <= std_logic_vector(unsigned(add_i_3564_fu_238) + unsigned(sext_ln112_3_fu_1521_p1));
-    add_ln840_4_fu_1540_p2 <= std_logic_vector(unsigned(add_i_4566_fu_242) + unsigned(sext_ln112_4_fu_1537_p1));
+    add_ln840_16_fu_1492_p2 <= std_logic_vector(unsigned(add_i_1560_fu_230) + unsigned(sext_ln112_1_fu_1489_p1));
+    add_ln840_17_fu_1508_p2 <= std_logic_vector(unsigned(add_i_2562_fu_234) + unsigned(sext_ln112_2_fu_1505_p1));
+    add_ln840_18_fu_1524_p2 <= std_logic_vector(unsigned(add_i_3564_fu_238) + unsigned(sext_ln112_3_fu_1521_p1));
+    add_ln840_19_fu_1540_p2 <= std_logic_vector(unsigned(add_i_4566_fu_242) + unsigned(sext_ln112_4_fu_1537_p1));
     add_ln840_fu_1476_p2 <= std_logic_vector(unsigned(add_i558_fu_226) + unsigned(sext_ln112_fu_1473_p1));
     add_ln85_fu_395_p2 <= std_logic_vector(unsigned(select_ln81_fu_353_p3) + unsigned(ap_const_lv7_1));
     ap_CS_fsm_pp0_stage0 <= ap_CS_fsm(0);
@@ -1713,7 +1713,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1602_p0 <= sext_ln1494_11_fu_858_p1(8 - 1 downto 0);
+    grp_fu_1602_p0 <= sext_ln1494_4_fu_858_p1(8 - 1 downto 0);
 
     grp_fu_1611_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1724,7 +1724,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1611_p0 <= sext_ln1494_15_fu_886_p1(8 - 1 downto 0);
+    grp_fu_1611_p0 <= sext_ln1494_8_fu_886_p1(8 - 1 downto 0);
 
     grp_fu_1620_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1735,7 +1735,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1620_p0 <= sext_ln1494_19_fu_914_p1(8 - 1 downto 0);
+    grp_fu_1620_p0 <= sext_ln1494_12_fu_914_p1(8 - 1 downto 0);
 
     grp_fu_1629_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1757,7 +1757,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1638_p0 <= sext_ln1494_11_fu_858_p1(8 - 1 downto 0);
+    grp_fu_1638_p0 <= sext_ln1494_4_fu_858_p1(8 - 1 downto 0);
 
     grp_fu_1647_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1768,7 +1768,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1647_p0 <= sext_ln1494_15_fu_886_p1(8 - 1 downto 0);
+    grp_fu_1647_p0 <= sext_ln1494_8_fu_886_p1(8 - 1 downto 0);
 
     grp_fu_1656_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1779,7 +1779,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1656_p0 <= sext_ln1494_19_fu_914_p1(8 - 1 downto 0);
+    grp_fu_1656_p0 <= sext_ln1494_12_fu_914_p1(8 - 1 downto 0);
 
     grp_fu_1665_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1801,7 +1801,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1674_p0 <= sext_ln1494_11_fu_858_p1(8 - 1 downto 0);
+    grp_fu_1674_p0 <= sext_ln1494_4_fu_858_p1(8 - 1 downto 0);
 
     grp_fu_1683_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1812,7 +1812,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1683_p0 <= sext_ln1494_15_fu_886_p1(8 - 1 downto 0);
+    grp_fu_1683_p0 <= sext_ln1494_8_fu_886_p1(8 - 1 downto 0);
 
     grp_fu_1692_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1823,7 +1823,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1692_p0 <= sext_ln1494_19_fu_914_p1(8 - 1 downto 0);
+    grp_fu_1692_p0 <= sext_ln1494_12_fu_914_p1(8 - 1 downto 0);
 
     grp_fu_1701_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1845,7 +1845,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1710_p0 <= sext_ln1494_11_fu_858_p1(8 - 1 downto 0);
+    grp_fu_1710_p0 <= sext_ln1494_4_fu_858_p1(8 - 1 downto 0);
 
     grp_fu_1719_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1856,7 +1856,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1719_p0 <= sext_ln1494_15_fu_886_p1(8 - 1 downto 0);
+    grp_fu_1719_p0 <= sext_ln1494_8_fu_886_p1(8 - 1 downto 0);
 
     grp_fu_1728_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1867,7 +1867,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1728_p0 <= sext_ln1494_19_fu_914_p1(8 - 1 downto 0);
+    grp_fu_1728_p0 <= sext_ln1494_12_fu_914_p1(8 - 1 downto 0);
 
     grp_fu_1737_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1889,7 +1889,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1746_p0 <= sext_ln1494_11_fu_858_p1(8 - 1 downto 0);
+    grp_fu_1746_p0 <= sext_ln1494_4_fu_858_p1(8 - 1 downto 0);
 
     grp_fu_1755_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1900,7 +1900,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1755_p0 <= sext_ln1494_15_fu_886_p1(8 - 1 downto 0);
+    grp_fu_1755_p0 <= sext_ln1494_8_fu_886_p1(8 - 1 downto 0);
 
     grp_fu_1764_ce_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_block_pp0_stage0_11001)
     begin
@@ -1911,7 +1911,7 @@ begin
         end if; 
     end process;
 
-    grp_fu_1764_p0 <= sext_ln1494_19_fu_914_p1(8 - 1 downto 0);
+    grp_fu_1764_p0 <= sext_ln1494_12_fu_914_p1(8 - 1 downto 0);
     icmp_ln81_fu_329_p2 <= "1" when (ap_sig_allocacmp_indvar_flatten_load = ap_const_lv8_C4) else "0";
     icmp_ln85_1_fu_401_p2 <= "1" when (add_ln85_fu_395_p2 = ap_const_lv7_62) else "0";
     icmp_ln85_fu_347_p2 <= "1" when (ap_sig_allocacmp_token_load = ap_const_lv7_62) else "0";
@@ -1919,38 +1919,38 @@ begin
     result_4_fu_876_p4 <= ap_phi_mux_activation_word_V_2_phi_fu_304_p4(39 downto 32);
     result_6_fu_904_p4 <= ap_phi_mux_activation_word_V_2_phi_fu_304_p4(55 downto 48);
     result_fu_826_p1 <= ap_phi_mux_activation_word_V_2_phi_fu_304_p4(8 - 1 downto 0);
-    ret_V_128_fu_1002_p0 <= sext_ln1494_9_fu_996_p1(8 - 1 downto 0);
-    ret_V_130_fu_1014_p0 <= sext_ln1494_13_fu_1008_p1(8 - 1 downto 0);
-    ret_V_132_fu_1026_p0 <= sext_ln1494_17_fu_1020_p1(8 - 1 downto 0);
-    ret_V_134_fu_1038_p0 <= sext_ln1494_21_fu_1032_p1(8 - 1 downto 0);
-    ret_V_136_fu_1063_p0 <= sext_ln1494_9_fu_996_p1(8 - 1 downto 0);
-    ret_V_138_fu_1072_p0 <= sext_ln1494_13_fu_1008_p1(8 - 1 downto 0);
-    ret_V_140_fu_1081_p0 <= sext_ln1494_17_fu_1020_p1(8 - 1 downto 0);
-    ret_V_142_fu_1090_p0 <= sext_ln1494_21_fu_1032_p1(8 - 1 downto 0);
-    ret_V_144_fu_1115_p0 <= sext_ln1494_9_fu_996_p1(8 - 1 downto 0);
-    ret_V_146_fu_1124_p0 <= sext_ln1494_13_fu_1008_p1(8 - 1 downto 0);
-    ret_V_148_fu_1133_p0 <= sext_ln1494_17_fu_1020_p1(8 - 1 downto 0);
-    ret_V_150_fu_1142_p0 <= sext_ln1494_21_fu_1032_p1(8 - 1 downto 0);
-    ret_V_152_fu_1167_p0 <= sext_ln1494_9_fu_996_p1(8 - 1 downto 0);
-    ret_V_154_fu_1176_p0 <= sext_ln1494_13_fu_1008_p1(8 - 1 downto 0);
-    ret_V_156_fu_1185_p0 <= sext_ln1494_17_fu_1020_p1(8 - 1 downto 0);
-    ret_V_158_fu_1194_p0 <= sext_ln1494_21_fu_1032_p1(8 - 1 downto 0);
-    ret_V_160_fu_1219_p0 <= sext_ln1494_9_fu_996_p1(8 - 1 downto 0);
-    ret_V_162_fu_1228_p0 <= sext_ln1494_13_fu_1008_p1(8 - 1 downto 0);
-    ret_V_164_fu_1237_p0 <= sext_ln1494_17_fu_1020_p1(8 - 1 downto 0);
-    ret_V_166_fu_1246_p0 <= sext_ln1494_21_fu_1032_p1(8 - 1 downto 0);
+    ret_V_128_fu_1002_p0 <= sext_ln1494_2_fu_996_p1(8 - 1 downto 0);
+    ret_V_130_fu_1014_p0 <= sext_ln1494_6_fu_1008_p1(8 - 1 downto 0);
+    ret_V_132_fu_1026_p0 <= sext_ln1494_10_fu_1020_p1(8 - 1 downto 0);
+    ret_V_134_fu_1038_p0 <= sext_ln1494_14_fu_1032_p1(8 - 1 downto 0);
+    ret_V_136_fu_1063_p0 <= sext_ln1494_2_fu_996_p1(8 - 1 downto 0);
+    ret_V_138_fu_1072_p0 <= sext_ln1494_6_fu_1008_p1(8 - 1 downto 0);
+    ret_V_140_fu_1081_p0 <= sext_ln1494_10_fu_1020_p1(8 - 1 downto 0);
+    ret_V_142_fu_1090_p0 <= sext_ln1494_14_fu_1032_p1(8 - 1 downto 0);
+    ret_V_144_fu_1115_p0 <= sext_ln1494_2_fu_996_p1(8 - 1 downto 0);
+    ret_V_146_fu_1124_p0 <= sext_ln1494_6_fu_1008_p1(8 - 1 downto 0);
+    ret_V_148_fu_1133_p0 <= sext_ln1494_10_fu_1020_p1(8 - 1 downto 0);
+    ret_V_150_fu_1142_p0 <= sext_ln1494_14_fu_1032_p1(8 - 1 downto 0);
+    ret_V_152_fu_1167_p0 <= sext_ln1494_2_fu_996_p1(8 - 1 downto 0);
+    ret_V_154_fu_1176_p0 <= sext_ln1494_6_fu_1008_p1(8 - 1 downto 0);
+    ret_V_156_fu_1185_p0 <= sext_ln1494_10_fu_1020_p1(8 - 1 downto 0);
+    ret_V_158_fu_1194_p0 <= sext_ln1494_14_fu_1032_p1(8 - 1 downto 0);
+    ret_V_160_fu_1219_p0 <= sext_ln1494_2_fu_996_p1(8 - 1 downto 0);
+    ret_V_162_fu_1228_p0 <= sext_ln1494_6_fu_1008_p1(8 - 1 downto 0);
+    ret_V_164_fu_1237_p0 <= sext_ln1494_10_fu_1020_p1(8 - 1 downto 0);
+    ret_V_166_fu_1246_p0 <= sext_ln1494_14_fu_1032_p1(8 - 1 downto 0);
     select_ln111_1_fu_1498_p3 <= 
         sext_ln112_1_fu_1489_p1 when (cmp21_reg_1852_pp0_iter5_reg(0) = '1') else 
-        add_ln840_1_fu_1492_p2;
+        add_ln840_16_fu_1492_p2;
     select_ln111_2_fu_1514_p3 <= 
         sext_ln112_2_fu_1505_p1 when (cmp21_reg_1852_pp0_iter5_reg(0) = '1') else 
-        add_ln840_2_fu_1508_p2;
+        add_ln840_17_fu_1508_p2;
     select_ln111_3_fu_1530_p3 <= 
         sext_ln112_3_fu_1521_p1 when (cmp21_reg_1852_pp0_iter5_reg(0) = '1') else 
-        add_ln840_3_fu_1524_p2;
+        add_ln840_18_fu_1524_p2;
     select_ln111_4_fu_1546_p3 <= 
         sext_ln112_4_fu_1537_p1 when (cmp21_reg_1852_pp0_iter5_reg(0) = '1') else 
-        add_ln840_4_fu_1540_p2;
+        add_ln840_19_fu_1540_p2;
     select_ln111_fu_1482_p3 <= 
         sext_ln112_fu_1473_p1 when (cmp21_reg_1852_pp0_iter5_reg(0) = '1') else 
         add_ln840_fu_1476_p2;
@@ -1973,19 +1973,19 @@ begin
 
         sext_ln112_fu_1473_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(dot_V_reg_2217),32));
 
-        sext_ln1494_11_fu_858_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_2_fu_848_p4),16));
+        sext_ln1494_10_fu_1020_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_5_reg_2013_pp0_iter3_reg),16));
 
-        sext_ln1494_13_fu_1008_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_3_reg_1994_pp0_iter3_reg),16));
+        sext_ln1494_12_fu_914_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_6_fu_904_p4),16));
 
-        sext_ln1494_15_fu_886_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_4_fu_876_p4),16));
+        sext_ln1494_14_fu_1032_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_7_reg_2032_pp0_iter3_reg),16));
 
-        sext_ln1494_17_fu_1020_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_5_reg_2013_pp0_iter3_reg),16));
+        sext_ln1494_2_fu_996_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_1_reg_1975_pp0_iter3_reg),16));
 
-        sext_ln1494_19_fu_914_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_6_fu_904_p4),16));
+        sext_ln1494_4_fu_858_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_2_fu_848_p4),16));
 
-        sext_ln1494_21_fu_1032_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_7_reg_2032_pp0_iter3_reg),16));
+        sext_ln1494_6_fu_1008_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_3_reg_1994_pp0_iter3_reg),16));
 
-        sext_ln1494_9_fu_996_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_1_reg_1975_pp0_iter3_reg),16));
+        sext_ln1494_8_fu_886_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_4_fu_876_p4),16));
 
         sext_ln1494_fu_830_p1 <= std_logic_vector(IEEE.numeric_std.resize(signed(result_fu_826_p1),16));
 

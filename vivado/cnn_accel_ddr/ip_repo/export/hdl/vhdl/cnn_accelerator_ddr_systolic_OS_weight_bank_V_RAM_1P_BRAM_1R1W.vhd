@@ -8,12 +8,12 @@ library ieee;
 use ieee.std_logic_1164.all; 
 use ieee.std_logic_unsigned.all;
 
-entity cnn_accelerator_ddr_systolic_activation_bank_V_RAM_1P_BRAM_1R1W is 
+entity cnn_accelerator_ddr_systolic_OS_weight_bank_V_RAM_1P_BRAM_1R1W is 
     generic(
         MEM_TYPE        : string    := "block"; 
         DataWidth       : integer   := 64; 
-        AddressWidth    : integer   := 4;
-        AddressRange    : integer   := 9
+        AddressWidth    : integer   := 6;
+        AddressRange    : integer   := 36
     ); 
     port (
         address0    : in std_logic_vector(AddressWidth-1 downto 0); 
@@ -26,7 +26,7 @@ entity cnn_accelerator_ddr_systolic_activation_bank_V_RAM_1P_BRAM_1R1W is
     ); 
 end entity; 
 
-architecture rtl of cnn_accelerator_ddr_systolic_activation_bank_V_RAM_1P_BRAM_1R1W is 
+architecture rtl of cnn_accelerator_ddr_systolic_OS_weight_bank_V_RAM_1P_BRAM_1R1W is 
 
 signal address0_tmp : std_logic_vector(AddressWidth-1 downto 0);
 

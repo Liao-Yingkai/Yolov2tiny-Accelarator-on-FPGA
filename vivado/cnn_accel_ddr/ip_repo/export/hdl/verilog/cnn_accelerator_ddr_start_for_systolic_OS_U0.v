@@ -7,7 +7,7 @@
 
 `timescale 1 ns / 1 ps
 
-module cnn_accelerator_ddr_start_for_systolic_U0
+module cnn_accelerator_ddr_start_for_systolic_OS_U0
 #(parameter
     MEM_STYLE   = "shiftReg",
     DATA_WIDTH  = 1,
@@ -41,11 +41,11 @@ reg                   empty_n = 1'b0;
 reg                   full_n  = 1'b1;
 // with almost full?  no 
 //------------------------Instantiation------------------
-cnn_accelerator_ddr_start_for_systolic_U0_ShiftReg 
+cnn_accelerator_ddr_start_for_systolic_OS_U0_ShiftReg 
 #(  .DATA_WIDTH (DATA_WIDTH),
     .ADDR_WIDTH (ADDR_WIDTH),
     .DEPTH      (DEPTH))
-U_cnn_accelerator_ddr_start_for_systolic_U0_ShiftReg (
+U_cnn_accelerator_ddr_start_for_systolic_OS_U0_ShiftReg (
     .clk        (clk),
     .we         (push),
     .addr       (addr),
@@ -104,7 +104,7 @@ end
 endmodule  
 
 
-module cnn_accelerator_ddr_start_for_systolic_U0_ShiftReg
+module cnn_accelerator_ddr_start_for_systolic_OS_U0_ShiftReg
 #(parameter
     DATA_WIDTH  = 1,
     ADDR_WIDTH  = 2,

@@ -66,7 +66,7 @@ attribute shreg_extract : string;
     signal ap_enable_reg_pp0_iter1 : STD_LOGIC := '0';
     signal ap_idle_pp0 : STD_LOGIC;
     signal internal_ap_ready : STD_LOGIC;
-    signal icmp_ln61_fu_103_p2 : STD_LOGIC_VECTOR (0 downto 0);
+    signal icmp_ln62_fu_103_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal ap_predicate_op21_read_state1 : BOOLEAN;
     signal ap_predicate_op23_read_state1 : BOOLEAN;
     signal ap_done_reg : STD_LOGIC := '0';
@@ -88,7 +88,7 @@ attribute shreg_extract : string;
     signal ap_loop_init : STD_LOGIC;
     signal ap_sig_allocacmp_index : STD_LOGIC_VECTOR (5 downto 0);
     signal ap_block_pp0_stage0_01001 : BOOLEAN;
-    signal select_ln59_fu_87_p3 : STD_LOGIC_VECTOR (5 downto 0);
+    signal select_ln60_fu_87_p3 : STD_LOGIC_VECTOR (5 downto 0);
     signal ap_continue_int : STD_LOGIC;
     signal ap_done_int : STD_LOGIC;
     signal ap_NS_fsm : STD_LOGIC_VECTOR (0 downto 0);
@@ -201,9 +201,9 @@ begin
     begin
         if (ap_clk'event and ap_clk = '1') then
             if ((ap_const_boolean_1 = ap_condition_137)) then
-                if (((layer_mode = ap_const_lv1_1) and (icmp_ln61_fu_103_p2 = ap_const_lv1_0))) then 
+                if (((layer_mode = ap_const_lv1_1) and (icmp_ln62_fu_103_p2 = ap_const_lv1_0))) then 
                     ap_phi_reg_pp0_iter1_weight_2_reg_77 <= w2_dout;
-                elsif (((layer_mode = ap_const_lv1_0) and (icmp_ln61_fu_103_p2 = ap_const_lv1_0))) then 
+                elsif (((layer_mode = ap_const_lv1_0) and (icmp_ln62_fu_103_p2 = ap_const_lv1_0))) then 
                     ap_phi_reg_pp0_iter1_weight_2_reg_77 <= w1_dout;
                 elsif ((ap_const_boolean_1 = ap_const_boolean_1)) then 
                     ap_phi_reg_pp0_iter1_weight_2_reg_77 <= ap_phi_reg_pp0_iter0_weight_2_reg_77;
@@ -216,7 +216,7 @@ begin
     begin
         if (ap_clk'event and ap_clk = '1') then
             if ((ap_const_boolean_1 = ap_condition_137)) then
-                if ((icmp_ln61_fu_103_p2 = ap_const_lv1_0)) then 
+                if ((icmp_ln62_fu_103_p2 = ap_const_lv1_0)) then 
                     index_02_fu_48 <= index_5_fu_109_p2;
                 elsif ((ap_loop_init = ap_const_logic_1)) then 
                     index_02_fu_48 <= ap_const_lv6_0;
@@ -273,9 +273,9 @@ begin
     end process;
 
 
-    ap_condition_exit_pp0_iter0_stage0_assign_proc : process(ap_CS_fsm_pp0_stage0, icmp_ln61_fu_103_p2, ap_block_pp0_stage0_subdone, ap_start_int)
+    ap_condition_exit_pp0_iter0_stage0_assign_proc : process(ap_CS_fsm_pp0_stage0, icmp_ln62_fu_103_p2, ap_block_pp0_stage0_subdone, ap_start_int)
     begin
-        if (((ap_const_boolean_0 = ap_block_pp0_stage0_subdone) and (icmp_ln61_fu_103_p2 = ap_const_lv1_1) and (ap_start_int = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_pp0_stage0))) then 
+        if (((ap_const_boolean_0 = ap_block_pp0_stage0_subdone) and (icmp_ln62_fu_103_p2 = ap_const_lv1_1) and (ap_start_int = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_pp0_stage0))) then 
             ap_condition_exit_pp0_iter0_stage0 <= ap_const_logic_1;
         else 
             ap_condition_exit_pp0_iter0_stage0 <= ap_const_logic_0;
@@ -317,15 +317,15 @@ begin
     ap_loop_exit_ready <= ap_condition_exit_pp0_iter0_stage0;
     ap_phi_reg_pp0_iter0_weight_2_reg_77 <= "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
-    ap_predicate_op21_read_state1_assign_proc : process(icmp_ln61_fu_103_p2, layer_mode)
+    ap_predicate_op21_read_state1_assign_proc : process(icmp_ln62_fu_103_p2, layer_mode)
     begin
-                ap_predicate_op21_read_state1 <= ((layer_mode = ap_const_lv1_0) and (icmp_ln61_fu_103_p2 = ap_const_lv1_0));
+                ap_predicate_op21_read_state1 <= ((layer_mode = ap_const_lv1_0) and (icmp_ln62_fu_103_p2 = ap_const_lv1_0));
     end process;
 
 
-    ap_predicate_op23_read_state1_assign_proc : process(icmp_ln61_fu_103_p2, layer_mode)
+    ap_predicate_op23_read_state1_assign_proc : process(icmp_ln62_fu_103_p2, layer_mode)
     begin
-                ap_predicate_op23_read_state1 <= ((layer_mode = ap_const_lv1_1) and (icmp_ln61_fu_103_p2 = ap_const_lv1_0));
+                ap_predicate_op23_read_state1 <= ((layer_mode = ap_const_lv1_1) and (icmp_ln62_fu_103_p2 = ap_const_lv1_0));
     end process;
 
     ap_ready <= internal_ap_ready;
@@ -370,7 +370,7 @@ begin
         end if; 
     end process;
 
-    icmp_ln61_fu_103_p2 <= "1" when (ap_sig_allocacmp_index = select_ln59_fu_87_p3) else "0";
+    icmp_ln62_fu_103_p2 <= "1" when (ap_sig_allocacmp_index = select_ln60_fu_87_p3) else "0";
     index_5_fu_109_p2 <= std_logic_vector(unsigned(ap_sig_allocacmp_index) + unsigned(ap_const_lv6_1));
 
     real_start_assign_proc : process(ap_start, start_full_n, start_once_reg)
@@ -382,7 +382,7 @@ begin
         end if; 
     end process;
 
-    select_ln59_fu_87_p3 <= 
+    select_ln60_fu_87_p3 <= 
         ap_const_lv6_24 when (layer_mode(0) = '1') else 
         ap_const_lv6_12;
     start_out <= real_start;
