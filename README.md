@@ -176,6 +176,13 @@ Systolic 采用 `4 spatial × 4 Cout` Broadcast / Output-Stationary PE Array，�
 
 完整接口、Buffer、时序、事务守恒、HLS 约束和验证要求见 [Systolic / Broadcast PE Array 设计](hls/docs/systolic.md)。
 
+## 传统 Output-Stationary 脉动阵列
+
+另提供的 `systolic_OS.cpp`：Activation 向右传播、Weight 向下传播，边界按
+lane 延迟0/1/2/3步，部分和保留在 PE 内。每个 PE 仍是8路 Cin SIMD 点积，
+不是将 Cin 再串行化的标量阵列。当前计算核心和两个 Systolic testbench 的
+`SYSTOLIC_OS=1` 选择此实现；这是编译期选择，不是额外实例化第二套卷积阵列。
+
 ## Pool 第一版设计
 
 Pool固定实现2×2、stride=2的INT8有符号MaxPool，消费ConvPostProcess保持的

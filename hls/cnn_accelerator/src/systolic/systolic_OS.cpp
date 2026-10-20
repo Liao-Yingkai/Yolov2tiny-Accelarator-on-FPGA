@@ -14,25 +14,25 @@ typedef ap_uint<SYSTOLIC_WEIGHT_LANE_BITS> packed_weight_lane_t;
 // 使用显式平衡树，避免依赖累加表达式的默认位宽或综合器将其解释为不平衡链。
 // 8 个 signed INT8 乘积的精确和需要至少19位有符号数。
 static dot_t dot_product(const pixel_t& activation,
-                         const weight_lane_t& weight, bool is_conv2) {
+                         const weight_lane_t& weight) {
 #pragma HLS INLINE
     product_t product0 =
         (product_t)(activation.channel[0] * weight.channel[0]);
-    // 逻辑 Cin 由计算模块自身保证：Conv1 无效通道即使双侧非零也不能贡献。
+    // 权重入口已按逻辑 Cin 规范化，Conv1 的内部 channel[1..7] 恒为零。
     product_t product1 =
-        is_conv2 ? (product_t)(activation.channel[1] * weight.channel[1]) : product_t(0);
+        (product_t)(activation.channel[1] * weight.channel[1]);
     product_t product2 =
-        is_conv2 ? (product_t)(activation.channel[2] * weight.channel[2]) : product_t(0);
+        (product_t)(activation.channel[2] * weight.channel[2]);
     product_t product3 =
-        is_conv2 ? (product_t)(activation.channel[3] * weight.channel[3]) : product_t(0);
+        (product_t)(activation.channel[3] * weight.channel[3]);
     product_t product4 =
-        is_conv2 ? (product_t)(activation.channel[4] * weight.channel[4]) : product_t(0);
+        (product_t)(activation.channel[4] * weight.channel[4]);
     product_t product5 =
-        is_conv2 ? (product_t)(activation.channel[5] * weight.channel[5]) : product_t(0);
+        (product_t)(activation.channel[5] * weight.channel[5]);
     product_t product6 =
-        is_conv2 ? (product_t)(activation.channel[6] * weight.channel[6]) : product_t(0);
+        (product_t)(activation.channel[6] * weight.channel[6]);
     product_t product7 =
-        is_conv2 ? (product_t)(activation.channel[7] * weight.channel[7]) : product_t(0);
+        (product_t)(activation.channel[7] * weight.channel[7]);
 
     sum2_t sum01 = (sum2_t)product0 + (sum2_t)product1;
     sum2_t sum23 = (sum2_t)product2 + (sum2_t)product3;
@@ -159,41 +159,6 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
 #pragma HLS ARRAY_PARTITION variable=activation_bank complete dim=1
 #pragma HLS BIND_STORAGE variable=activation_bank type=ram_1p impl=bram
 
-    acc_t accumulator[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
-#pragma HLS ARRAY_PARTITION variable=accumulator complete dim=0
-
-//activation传播寄存器
-    pixel_with_valid_pack_t activation_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
-#pragma HLS ARRAY_PARTITION variable=activation_trans complete dim=0
-
-//weight传播寄存器
-    weight_with_valid_pack_t weight_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
-#pragma HLS ARRAY_PARTITION variable=weight_trans complete dim=0
-
-//activation pe边界输入寄存器
-    pixel_with_valid_pack_t activation_edge[SYSTOLIC_SPATIAL_PAR] = {zero_activation,zero_activation,zero_activation,zero_activation};
-#pragma HLS ARRAY_PARTITION variable=activation_edge complete dim=0
-
-//weight pe边界输入寄存器
-    weight_with_valid_pack_t weight_edge[SYSTOLIC_COUT_PAR] = {zero_weight,zero_weight,zero_weight,zero_weight};
-#pragma HLS ARRAY_PARTITION variable=weight_edge complete dim=0
-
-//activation错拍寄存器
-    pixel_with_valid_pack_t A1_delay[1] = {zero_activation,};
-    pixel_with_valid_pack_t A2_delay[2] = {zero_activation,zero_activation,};
-    pixel_with_valid_pack_t A3_delay[3] = {zero_activation,zero_activation,zero_activation,};
-#pragma HLS ARRAY_PARTITION variable=A1_delay complete
-#pragma HLS ARRAY_PARTITION variable=A2_delay complete
-#pragma HLS ARRAY_PARTITION variable=A3_delay complete
-
-//weight错拍寄存器
-    weight_with_valid_pack_t W1_delay[1] = {zero_weight,};
-    weight_with_valid_pack_t W2_delay[2] = {zero_weight,zero_weight,};
-    weight_with_valid_pack_t W3_delay[3] = {zero_weight,zero_weight,zero_weight,};
-#pragma HLS ARRAY_PARTITION variable=W1_delay complete
-#pragma HLS ARRAY_PARTITION variable=W2_delay complete
-#pragma HLS ARRAY_PARTITION variable=W3_delay complete
-
     // spatial_tile 与 Im2Row 的 row -> tile_x 顺序完全等价：Conv1 共有196个，
     // Conv2 共有56个。合并计数器不改变 activation 或 result 的事务顺序。
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
@@ -203,6 +168,43 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
 
 
             for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
+                // PE、入口和错拍状态仅属于当前 Cout Tile；全量初始化后再推进15步波前。
+                // replay BRAM 仍在完整层作用域，跨 Tile 数据与流事务顺序保持不变。
+                acc_t accumulator[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+                #pragma HLS ARRAY_PARTITION variable=accumulator complete dim=0
+
+                //activation传播寄存器
+                pixel_with_valid_pack_t activation_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+                #pragma HLS ARRAY_PARTITION variable=activation_trans complete dim=0
+
+                //weight传播寄存器
+                weight_with_valid_pack_t weight_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+                #pragma HLS ARRAY_PARTITION variable=weight_trans complete dim=0
+
+                //activation pe边界输入寄存器
+                pixel_with_valid_pack_t activation_edge[SYSTOLIC_SPATIAL_PAR] = {zero_activation,zero_activation,zero_activation,zero_activation};
+                #pragma HLS ARRAY_PARTITION variable=activation_edge complete dim=0
+
+                //weight pe边界输入寄存器
+                weight_with_valid_pack_t weight_edge[SYSTOLIC_COUT_PAR] = {zero_weight,zero_weight,zero_weight,zero_weight};
+                #pragma HLS ARRAY_PARTITION variable=weight_edge complete dim=0
+
+                //activation错拍寄存器
+                pixel_with_valid_pack_t A1_delay[1] = {zero_activation,};
+                pixel_with_valid_pack_t A2_delay[2] = {zero_activation,zero_activation,};
+                pixel_with_valid_pack_t A3_delay[3] = {zero_activation,zero_activation,zero_activation,};
+                #pragma HLS ARRAY_PARTITION variable=A1_delay complete
+                #pragma HLS ARRAY_PARTITION variable=A2_delay complete
+                #pragma HLS ARRAY_PARTITION variable=A3_delay complete
+
+                //weight错拍寄存器
+                weight_with_valid_pack_t W1_delay[1] = {zero_weight,};
+                weight_with_valid_pack_t W2_delay[2] = {zero_weight,zero_weight,};
+                weight_with_valid_pack_t W3_delay[3] = {zero_weight,zero_weight,zero_weight,};
+                #pragma HLS ARRAY_PARTITION variable=W1_delay complete
+                #pragma HLS ARRAY_PARTITION variable=W2_delay complete
+                #pragma HLS ARRAY_PARTITION variable=W3_delay complete
+
                 clear_accumualtor(accumulator);
                 clear_activation_trans(activation_trans);
                 clear_weight_trans(weight_trans);
@@ -267,16 +269,28 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
                         if(first_spatial_tile) {
                             weight_raw = weight_stream.read();
 
-                            weight_edge[0].weight = weight_raw.lane[0];
-                            W1_delay[0].weight = weight_raw.lane[1];
-                            W2_delay[0].weight = weight_raw.lane[2];
-                            W3_delay[0].weight = weight_raw.lane[3];
+                            // Conv1 即使输入权重的无效 Cin 非零，也在入口清零；
+                            weight_pack_t normalized_weight;
+                            for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
+#pragma HLS UNROLL
+                                for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
+#pragma HLS UNROLL
+                                    normalized_weight.lane[cout_lane].channel[channel] =
+                                        (channel == 0 || is_conv2) ?
+                                            weight_raw.lane[cout_lane].channel[channel] : weight_t(0);
+                                }
+                            }
+
+                            weight_edge[0].weight = normalized_weight.lane[0];
+                            W1_delay[0].weight = normalized_weight.lane[1];
+                            W2_delay[0].weight = normalized_weight.lane[2];
+                            W3_delay[0].weight = normalized_weight.lane[3];
 
                             //保存weight
                             for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
                             weight_bank[cout_lane][weight_address] =
-                                pack_weight_lane(weight_raw.lane[cout_lane]);
+                                pack_weight_lane(normalized_weight.lane[cout_lane]);
                             }
                         }
                         else {
@@ -291,7 +305,7 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
                             W3_delay[0].valid = (ap_uint<1>) 1;
                         }
                     else {
-                        //接收tokrn完毕
+                        // 9拍输入注入完毕，随后6拍注入零事务排空波前。
                             activation_edge[0] = zero_activation;
                             A1_delay[0] = zero_activation;
                             A2_delay[0] = zero_activation;
@@ -315,7 +329,7 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
 
                             if (activation_trans[spatial_lane][cout_lane].valid
                                 && weight_trans[spatial_lane][cout_lane].valid && tile_spatial_valid[spatial_lane]) {
-                                    const dot_t dot = dot_product(activation_trans[spatial_lane][cout_lane].pixel,weight_trans[spatial_lane][cout_lane].weight,is_conv2);
+                                    const dot_t dot = dot_product(activation_trans[spatial_lane][cout_lane].pixel,weight_trans[spatial_lane][cout_lane].weight);
                                     accumulator[spatial_lane][cout_lane] += (acc_t) dot;
                             }
                         }
