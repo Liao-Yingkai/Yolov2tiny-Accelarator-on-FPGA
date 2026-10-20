@@ -264,24 +264,24 @@ attribute shreg_extract : string;
     signal selected_word_V_18_fu_2768_p4 : STD_LOGIC_VECTOR (63 downto 0);
     signal selected_word_V_15_fu_2784_p4 : STD_LOGIC_VECTOR (63 downto 0);
     signal selected_word_V_12_fu_2800_p4 : STD_LOGIC_VECTOR (63 downto 0);
-    signal pixel_channel_V_60_reg_5204 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_61_reg_5209 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_62_reg_5214 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_63_reg_5219 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_64_reg_5224 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_65_reg_5229 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_66_reg_5234 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_32_reg_5204 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_33_reg_5209 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_34_reg_5214 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_35_reg_5219 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_36_reg_5224 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_37_reg_5229 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_38_reg_5234 : STD_LOGIC_VECTOR (7 downto 0);
     signal select_ln209_fu_3121_p3 : STD_LOGIC_VECTOR (7 downto 0);
     signal select_ln209_reg_5239 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_67_fu_3227_p1 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_67_reg_5244 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_68_reg_5249 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_69_reg_5254 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_70_reg_5259 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_71_reg_5264 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_72_reg_5269 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_73_reg_5274 : STD_LOGIC_VECTOR (7 downto 0);
-    signal pixel_channel_V_74_reg_5279 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_39_fu_3227_p1 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_39_reg_5244 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_40_reg_5249 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_41_reg_5254 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_42_reg_5259 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_43_reg_5264 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_44_reg_5269 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_45_reg_5274 : STD_LOGIC_VECTOR (7 downto 0);
+    signal pixel_channel_V_46_reg_5279 : STD_LOGIC_VECTOR (7 downto 0);
     signal and_ln432_fu_3699_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal ap_phi_reg_pp0_iter0_p_Val2_29_reg_771 : STD_LOGIC_VECTOR (3 downto 0);
     signal ap_phi_reg_pp0_iter1_p_Val2_29_reg_771 : STD_LOGIC_VECTOR (3 downto 0);
@@ -2304,21 +2304,21 @@ begin
     begin
         if (ap_clk'event and ap_clk = '1') then
             if (((ap_const_boolean_0 = ap_block_pp0_stage0_11001) and (p_Result_s_reg_4959_pp0_iter2_reg = ap_const_lv1_0) and (icmp_ln317_reg_4939_pp0_iter2_reg = ap_const_lv1_0))) then
-                pixel_channel_V_60_reg_5204 <= selected_word_V_51_fu_3039_p3(15 downto 8);
-                pixel_channel_V_61_reg_5209 <= selected_word_V_51_fu_3039_p3(23 downto 16);
-                pixel_channel_V_62_reg_5214 <= selected_word_V_51_fu_3039_p3(31 downto 24);
-                pixel_channel_V_63_reg_5219 <= selected_word_V_51_fu_3039_p3(39 downto 32);
-                pixel_channel_V_64_reg_5224 <= selected_word_V_51_fu_3039_p3(47 downto 40);
-                pixel_channel_V_65_reg_5229 <= selected_word_V_51_fu_3039_p3(55 downto 48);
-                pixel_channel_V_66_reg_5234 <= selected_word_V_51_fu_3039_p3(63 downto 56);
-                pixel_channel_V_67_reg_5244 <= pixel_channel_V_67_fu_3227_p1;
-                pixel_channel_V_68_reg_5249 <= selected_word_V_52_fu_3219_p3(15 downto 8);
-                pixel_channel_V_69_reg_5254 <= selected_word_V_52_fu_3219_p3(23 downto 16);
-                pixel_channel_V_70_reg_5259 <= selected_word_V_52_fu_3219_p3(31 downto 24);
-                pixel_channel_V_71_reg_5264 <= selected_word_V_52_fu_3219_p3(39 downto 32);
-                pixel_channel_V_72_reg_5269 <= selected_word_V_52_fu_3219_p3(47 downto 40);
-                pixel_channel_V_73_reg_5274 <= selected_word_V_52_fu_3219_p3(55 downto 48);
-                pixel_channel_V_74_reg_5279 <= selected_word_V_52_fu_3219_p3(63 downto 56);
+                pixel_channel_V_32_reg_5204 <= selected_word_V_51_fu_3039_p3(15 downto 8);
+                pixel_channel_V_33_reg_5209 <= selected_word_V_51_fu_3039_p3(23 downto 16);
+                pixel_channel_V_34_reg_5214 <= selected_word_V_51_fu_3039_p3(31 downto 24);
+                pixel_channel_V_35_reg_5219 <= selected_word_V_51_fu_3039_p3(39 downto 32);
+                pixel_channel_V_36_reg_5224 <= selected_word_V_51_fu_3039_p3(47 downto 40);
+                pixel_channel_V_37_reg_5229 <= selected_word_V_51_fu_3039_p3(55 downto 48);
+                pixel_channel_V_38_reg_5234 <= selected_word_V_51_fu_3039_p3(63 downto 56);
+                pixel_channel_V_39_reg_5244 <= pixel_channel_V_39_fu_3227_p1;
+                pixel_channel_V_40_reg_5249 <= selected_word_V_52_fu_3219_p3(15 downto 8);
+                pixel_channel_V_41_reg_5254 <= selected_word_V_52_fu_3219_p3(23 downto 16);
+                pixel_channel_V_42_reg_5259 <= selected_word_V_52_fu_3219_p3(31 downto 24);
+                pixel_channel_V_43_reg_5264 <= selected_word_V_52_fu_3219_p3(39 downto 32);
+                pixel_channel_V_44_reg_5269 <= selected_word_V_52_fu_3219_p3(47 downto 40);
+                pixel_channel_V_45_reg_5274 <= selected_word_V_52_fu_3219_p3(55 downto 48);
+                pixel_channel_V_46_reg_5279 <= selected_word_V_52_fu_3219_p3(63 downto 56);
             end if;
         end if;
     end process;
@@ -3761,7 +3761,7 @@ begin
 
         pf_activation_stream_U_frpsig_data_in <= std_logic_vector(IEEE.numeric_std.resize(signed(tmp_9_fu_4442_p20),260));
 
-    pixel_channel_V_67_fu_3227_p1 <= selected_word_V_52_fu_3219_p3(8 - 1 downto 0);
+    pixel_channel_V_39_fu_3227_p1 <= selected_word_V_52_fu_3219_p3(8 - 1 downto 0);
     pixel_channel_V_fu_3047_p1 <= selected_word_V_51_fu_3039_p3(8 - 1 downto 0);
     select_ln183_fu_2235_p3 <= 
         ap_const_lv5_0 when (icmp_ln197_reg_4987(0) = '1') else 
@@ -3774,49 +3774,49 @@ begin
         ap_const_lv3_4;
     select_ln209_10_fu_4399_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_69_reg_5254;
+        pixel_channel_V_41_reg_5254;
     select_ln209_11_fu_4405_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_70_reg_5259;
+        pixel_channel_V_42_reg_5259;
     select_ln209_12_fu_4411_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_71_reg_5264;
+        pixel_channel_V_43_reg_5264;
     select_ln209_13_fu_4417_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_72_reg_5269;
+        pixel_channel_V_44_reg_5269;
     select_ln209_14_fu_4423_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_73_reg_5274;
+        pixel_channel_V_45_reg_5274;
     select_ln209_15_fu_4429_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_74_reg_5279;
+        pixel_channel_V_46_reg_5279;
     select_ln209_1_fu_4345_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_60_reg_5204;
+        pixel_channel_V_32_reg_5204;
     select_ln209_2_fu_4351_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_61_reg_5209;
+        pixel_channel_V_33_reg_5209;
     select_ln209_3_fu_4357_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_62_reg_5214;
+        pixel_channel_V_34_reg_5214;
     select_ln209_4_fu_4363_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_63_reg_5219;
+        pixel_channel_V_35_reg_5219;
     select_ln209_5_fu_4369_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_64_reg_5224;
+        pixel_channel_V_36_reg_5224;
     select_ln209_6_fu_4375_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_65_reg_5229;
+        pixel_channel_V_37_reg_5229;
     select_ln209_7_fu_4381_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_66_reg_5234;
+        pixel_channel_V_38_reg_5234;
     select_ln209_8_fu_4387_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_67_reg_5244;
+        pixel_channel_V_39_reg_5244;
     select_ln209_9_fu_4393_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter3_reg(0) = '1') else 
-        pixel_channel_V_68_reg_5249;
+        pixel_channel_V_40_reg_5249;
     select_ln209_fu_3121_p3 <= 
         ap_const_lv8_0 when (p_Result_s_reg_4959_pp0_iter2_reg(0) = '1') else 
         pixel_channel_V_fu_3047_p1;

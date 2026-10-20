@@ -8,6 +8,8 @@
 #include <iostream>
 #include <string>
 
+#define SYSTOLIC_OS 1
+
 /*
  * Systolic 完整层定向 testbench。
  * - activation流严格为 spatial_tile(row->tile_x) -> token；Conv1供给
@@ -141,7 +143,12 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
         }
     }
 
+#if SYSTOLIC_OS
+    systolic_OS(activation_stream, weight_stream, output_stream, layer_mode);
+#else
     systolic(activation_stream, weight_stream, output_stream, layer_mode);
+#endif
+
     int comparisons = 0;
     int outputs_read = 0;
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {

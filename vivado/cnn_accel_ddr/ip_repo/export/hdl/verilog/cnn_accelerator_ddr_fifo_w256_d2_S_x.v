@@ -7,12 +7,12 @@
 
 `timescale 1 ns / 1 ps
 
-module cnn_accelerator_ddr_fifo_w256_d3_S
+module cnn_accelerator_ddr_fifo_w256_d2_S_x
 #(parameter
     MEM_STYLE   = "shiftReg",
     DATA_WIDTH  = 256,
-    ADDR_WIDTH  = 2,
-    DEPTH       = 3)
+    ADDR_WIDTH  = 1,
+    DEPTH       = 2)
 (
     // system signal
     input  wire                  clk,
@@ -43,11 +43,11 @@ reg                   empty_n = 1'b0;
 reg                   full_n  = 1'b1;
 // with almost full?  no 
 //------------------------Instantiation------------------
-cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg 
+cnn_accelerator_ddr_fifo_w256_d2_S_x_ShiftReg 
 #(  .DATA_WIDTH (DATA_WIDTH),
     .ADDR_WIDTH (ADDR_WIDTH),
     .DEPTH      (DEPTH))
-U_cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg (
+U_cnn_accelerator_ddr_fifo_w256_d2_S_x_ShiftReg (
     .clk        (clk),
     .we         (push),
     .addr       (addr),
@@ -108,11 +108,11 @@ end
 endmodule  
 
 
-module cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg
+module cnn_accelerator_ddr_fifo_w256_d2_S_x_ShiftReg
 #(parameter
     DATA_WIDTH  = 256,
-    ADDR_WIDTH  = 2,
-    DEPTH       = 3)
+    ADDR_WIDTH  = 1,
+    DEPTH       = 2)
 (
     input  wire                  clk,
     input  wire                  we,

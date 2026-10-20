@@ -32,10 +32,10 @@ static const int IM2ROW_MAX_BLOCKS_PER_ROW =
     (IM2ROW_MAX_W + IM2ROW_P - 1) / IM2ROW_P;
 static const int IM2ROW_STRIP_WIDTH = IM2ROW_P + IM2ROW_KERNEL - 1;
 
-// Broadcast/output-stationary Systolic 阵列维度。
+// Broadcast Systolic 阵列维度。
 static const int SYSTOLIC_SPATIAL_PAR = IM2ROW_P;
 static const int SYSTOLIC_CIN_PAR = IM2ROW_MAX_CHANNELS;
-static const int SYSTOLIC_COUT_PAR = 4;
+static const int SYSTOLIC_COUT_PAR = IM2ROW_P;
 static const int SYSTOLIC_KERNEL_TOKENS = IM2ROW_KERNEL * IM2ROW_KERNEL;
 static const int SYSTOLIC_ACTIVATION_LANE_BITS =
     SYSTOLIC_CIN_PAR * ACTIVATION_BITS;
@@ -43,6 +43,9 @@ static const int SYSTOLIC_WEIGHT_LANE_BITS = SYSTOLIC_CIN_PAR * WEIGHT_BITS;
 static const int SYSTOLIC_SUM2_BITS = PRODUCT_BITS + 1;
 static const int SYSTOLIC_SUM4_BITS = PRODUCT_BITS + 2;
 static const int SYSTOLIC_DOT_BITS = PRODUCT_BITS + 3;
+
+//Output-stationary Systolic
+static const int SYSTOLIC_EXCU_TIME = (SYSTOLIC_KERNEL_TOKENS-1) + (SYSTOLIC_COUT_PAR-1) + (SYSTOLIC_SPATIAL_PAR-1) + 1;
 
 // 每层卷积由固定几何参数派生的stream事务形状。
 static const int CNN_CONV1_TILES_PER_ROW =

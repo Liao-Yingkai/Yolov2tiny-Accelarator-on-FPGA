@@ -11,6 +11,8 @@
 #include <iostream>
 #include <string>
 
+#define SYSTOLIC_OS 1
+
 /*
  * Systolic 的 PyTorch 对照 testbench。
  *
@@ -136,7 +138,11 @@ static int run_layer(layer_mode_t layer_mode,
         }
     }
 
+#if SYSTOLIC_OS
+    systolic_OS(activation_stream, weight_stream, output_stream, layer_mode);
+#else
     systolic(activation_stream, weight_stream, output_stream, layer_mode);
+#endif
 
     int errors = 0;
     int comparisons = 0;

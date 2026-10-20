@@ -9,12 +9,12 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity cnn_accelerator_ddr_fifo_w256_d3_S is 
+entity cnn_accelerator_ddr_fifo_w260_d2_S is 
     generic (
         MEM_STYLE         : string  := "shiftReg"; 
-        DATA_WIDTH        : integer := 256;
-        ADDR_WIDTH        : integer := 2;
-        DEPTH             : integer := 3);
+        DATA_WIDTH        : integer := 260;
+        ADDR_WIDTH        : integer := 1;
+        DEPTH             : integer := 2);
     port (
         clk               : in  std_logic;
         reset             : in  std_logic;
@@ -35,13 +35,13 @@ entity cnn_accelerator_ddr_fifo_w256_d3_S is
     );
 end entity;
 
-architecture rtl of cnn_accelerator_ddr_fifo_w256_d3_S is
+architecture rtl of cnn_accelerator_ddr_fifo_w260_d2_S is
 
-    component cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg is
+    component cnn_accelerator_ddr_fifo_w260_d2_S_ShiftReg is
     generic (
-        DATA_WIDTH : integer := 256;
-        ADDR_WIDTH : integer := 2;
-        DEPTH      : integer := 3);
+        DATA_WIDTH : integer := 260;
+        ADDR_WIDTH : integer := 1;
+        DEPTH      : integer := 2);
     port (
         clk        : in std_logic;
         we         : in std_logic;
@@ -59,7 +59,7 @@ architecture rtl of cnn_accelerator_ddr_fifo_w256_d3_S is
     -- with almost full?  no 
 begin
 ----------------------- Instantiation -----------------------
-    U_cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg : cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg
+    U_cnn_accelerator_ddr_fifo_w260_d2_S_ShiftReg : cnn_accelerator_ddr_fifo_w260_d2_S_ShiftReg
     generic map (
         DATA_WIDTH => DATA_WIDTH,
         ADDR_WIDTH => ADDR_WIDTH,
@@ -138,20 +138,20 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.std_logic_unsigned.all;
 
-entity cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg is
+entity cnn_accelerator_ddr_fifo_w260_d2_S_ShiftReg is
     generic (
-        DATA_WIDTH : integer := 256;
-        ADDR_WIDTH : integer := 2;
-        DEPTH      : integer := 3);
+        DATA_WIDTH : integer := 260;
+        ADDR_WIDTH : integer := 1;
+        DEPTH      : integer := 2);
     port (
         clk        : in std_logic;
         we         : in std_logic;
         addr       : in std_logic_vector(ADDR_WIDTH-1 downto 0);
         din        : in std_logic_vector(DATA_WIDTH-1 downto 0);
         dout       : out std_logic_vector(DATA_WIDTH-1 downto 0));
-end cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg;
+end cnn_accelerator_ddr_fifo_w260_d2_S_ShiftReg;
 
-architecture rtl of cnn_accelerator_ddr_fifo_w256_d3_S_ShiftReg is
+architecture rtl of cnn_accelerator_ddr_fifo_w260_d2_S_ShiftReg is
 type SRL_ARRAY is array (0 to DEPTH-1) of std_logic_vector(DATA_WIDTH-1 downto 0);
 signal SRL_SIG : SRL_ARRAY;
 

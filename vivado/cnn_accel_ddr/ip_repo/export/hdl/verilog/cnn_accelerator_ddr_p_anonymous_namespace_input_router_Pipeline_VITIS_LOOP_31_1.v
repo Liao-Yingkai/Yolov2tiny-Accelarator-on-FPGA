@@ -7,7 +7,7 @@
 
 `timescale 1 ns / 1 ps 
 
-module cnn_accelerator_ddr_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_30_1 (
+module cnn_accelerator_ddr_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_31_1 (
         ap_clk,
         ap_rst,
         ap_start,
@@ -29,7 +29,7 @@ module cnn_accelerator_ddr_p_anonymous_namespace_input_router_Pipeline_VITIS_LOO
         conv_input_stream_fifo_cap,
         conv_input_stream_full_n,
         conv_input_stream_write,
-        select_ln30,
+        select_ln31,
         layer_mode
 );
 
@@ -56,7 +56,7 @@ input  [1:0] conv_input_stream_num_data_valid;
 input  [1:0] conv_input_stream_fifo_cap;
 input   conv_input_stream_full_n;
 output   conv_input_stream_write;
-input  [8:0] select_ln30;
+input  [8:0] select_ln31;
 input  [0:0] layer_mode;
 
 reg ap_idle;
@@ -71,13 +71,13 @@ reg    ap_enable_reg_pp0_iter1;
 reg    ap_enable_reg_pp0_iter2;
 reg    ap_idle_pp0;
 wire    ap_block_state1_pp0_stage0_iter0;
-reg   [0:0] icmp_ln30_reg_133;
+reg   [0:0] icmp_ln31_reg_133;
 reg    ap_predicate_op24_read_state2;
 reg    ap_predicate_op26_read_state2;
 reg    ap_block_state2_pp0_stage0_iter1;
 reg    ap_block_state3_pp0_stage0_iter2;
 reg    ap_block_pp0_stage0_subdone;
-wire   [0:0] icmp_ln30_fu_105_p2;
+wire   [0:0] icmp_ln31_fu_105_p2;
 reg    ap_condition_exit_pp0_iter0_stage0;
 wire    ap_loop_exit_ready;
 reg    ap_ready_int;
@@ -94,7 +94,7 @@ wire   [9:0] index_4_fu_111_p2;
 wire    ap_loop_init;
 reg   [9:0] ap_sig_allocacmp_index_3;
 reg    ap_block_pp0_stage0_01001;
-wire  signed [9:0] select_ln30_cast_fu_93_p1;
+wire  signed [9:0] select_ln31_cast_fu_93_p1;
 reg    ap_done_reg;
 wire    ap_continue_int;
 reg    ap_done_int;
@@ -172,9 +172,9 @@ end
 
 always @ (posedge ap_clk) begin
     if ((1'b1 == ap_condition_127)) begin
-        if (((layer_mode == 1'd1) & (icmp_ln30_reg_133 == 1'd0))) begin
+        if (((layer_mode == 1'd1) & (icmp_ln31_reg_133 == 1'd0))) begin
             ap_phi_reg_pp0_iter2_input_2_reg_83 <= pool1_feature_fifo_dout;
-        end else if (((layer_mode == 1'd0) & (icmp_ln30_reg_133 == 1'd0))) begin
+        end else if (((layer_mode == 1'd0) & (icmp_ln31_reg_133 == 1'd0))) begin
             ap_phi_reg_pp0_iter2_input_2_reg_83 <= pixels_dout;
         end else if ((1'b1 == 1'b1)) begin
             ap_phi_reg_pp0_iter2_input_2_reg_83 <= ap_phi_reg_pp0_iter1_input_2_reg_83;
@@ -184,7 +184,7 @@ end
 
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
-        if (((icmp_ln30_fu_105_p2 == 1'd0) & (ap_enable_reg_pp0_iter0 == 1'b1))) begin
+        if (((icmp_ln31_fu_105_p2 == 1'd0) & (ap_enable_reg_pp0_iter0 == 1'b1))) begin
             index_fu_48 <= index_4_fu_111_p2;
         end else if ((ap_loop_init == 1'b1)) begin
             index_fu_48 <= 10'd0;
@@ -195,7 +195,7 @@ end
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         ap_loop_exit_ready_pp0_iter1_reg <= ap_loop_exit_ready;
-        icmp_ln30_reg_133 <= icmp_ln30_fu_105_p2;
+        icmp_ln31_reg_133 <= icmp_ln31_fu_105_p2;
     end
 end
 
@@ -206,7 +206,7 @@ always @ (posedge ap_clk) begin
 end
 
 always @ (*) begin
-    if (((icmp_ln30_fu_105_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
+    if (((icmp_ln31_fu_105_p2 == 1'd1) & (1'b0 == ap_block_pp0_stage0_subdone) & (ap_enable_reg_pp0_iter0 == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b1;
     end else begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b0;
@@ -351,19 +351,19 @@ assign ap_loop_exit_ready = ap_condition_exit_pp0_iter0_stage0;
 assign ap_phi_reg_pp0_iter0_input_2_reg_83 = 'bx;
 
 always @ (*) begin
-    ap_predicate_op24_read_state2 = ((layer_mode == 1'd0) & (icmp_ln30_reg_133 == 1'd0));
+    ap_predicate_op24_read_state2 = ((layer_mode == 1'd0) & (icmp_ln31_reg_133 == 1'd0));
 end
 
 always @ (*) begin
-    ap_predicate_op26_read_state2 = ((layer_mode == 1'd1) & (icmp_ln30_reg_133 == 1'd0));
+    ap_predicate_op26_read_state2 = ((layer_mode == 1'd1) & (icmp_ln31_reg_133 == 1'd0));
 end
 
 assign conv_input_stream_din = ap_phi_reg_pp0_iter2_input_2_reg_83;
 
-assign icmp_ln30_fu_105_p2 = ((ap_sig_allocacmp_index_3 == select_ln30_cast_fu_93_p1) ? 1'b1 : 1'b0);
+assign icmp_ln31_fu_105_p2 = ((ap_sig_allocacmp_index_3 == select_ln31_cast_fu_93_p1) ? 1'b1 : 1'b0);
 
 assign index_4_fu_111_p2 = (ap_sig_allocacmp_index_3 + 10'd1);
 
-assign select_ln30_cast_fu_93_p1 = $signed(select_ln30);
+assign select_ln31_cast_fu_93_p1 = $signed(select_ln31);
 
-endmodule //cnn_accelerator_ddr_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_30_1
+endmodule //cnn_accelerator_ddr_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_31_1

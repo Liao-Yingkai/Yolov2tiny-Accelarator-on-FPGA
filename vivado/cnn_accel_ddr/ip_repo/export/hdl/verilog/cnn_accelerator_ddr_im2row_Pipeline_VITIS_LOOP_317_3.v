@@ -317,24 +317,24 @@ wire   [63:0] selected_word_V_fu_2758_p4;
 wire   [63:0] selected_word_V_18_fu_2768_p4;
 wire   [63:0] selected_word_V_15_fu_2784_p4;
 wire   [63:0] selected_word_V_12_fu_2800_p4;
-reg   [7:0] pixel_channel_V_60_reg_5204;
-reg   [7:0] pixel_channel_V_61_reg_5209;
-reg   [7:0] pixel_channel_V_62_reg_5214;
-reg   [7:0] pixel_channel_V_63_reg_5219;
-reg   [7:0] pixel_channel_V_64_reg_5224;
-reg   [7:0] pixel_channel_V_65_reg_5229;
-reg   [7:0] pixel_channel_V_66_reg_5234;
+reg   [7:0] pixel_channel_V_32_reg_5204;
+reg   [7:0] pixel_channel_V_33_reg_5209;
+reg   [7:0] pixel_channel_V_34_reg_5214;
+reg   [7:0] pixel_channel_V_35_reg_5219;
+reg   [7:0] pixel_channel_V_36_reg_5224;
+reg   [7:0] pixel_channel_V_37_reg_5229;
+reg   [7:0] pixel_channel_V_38_reg_5234;
 wire   [7:0] select_ln209_fu_3121_p3;
 reg   [7:0] select_ln209_reg_5239;
-wire   [7:0] pixel_channel_V_67_fu_3227_p1;
-reg   [7:0] pixel_channel_V_67_reg_5244;
-reg   [7:0] pixel_channel_V_68_reg_5249;
-reg   [7:0] pixel_channel_V_69_reg_5254;
-reg   [7:0] pixel_channel_V_70_reg_5259;
-reg   [7:0] pixel_channel_V_71_reg_5264;
-reg   [7:0] pixel_channel_V_72_reg_5269;
-reg   [7:0] pixel_channel_V_73_reg_5274;
-reg   [7:0] pixel_channel_V_74_reg_5279;
+wire   [7:0] pixel_channel_V_39_fu_3227_p1;
+reg   [7:0] pixel_channel_V_39_reg_5244;
+reg   [7:0] pixel_channel_V_40_reg_5249;
+reg   [7:0] pixel_channel_V_41_reg_5254;
+reg   [7:0] pixel_channel_V_42_reg_5259;
+reg   [7:0] pixel_channel_V_43_reg_5264;
+reg   [7:0] pixel_channel_V_44_reg_5269;
+reg   [7:0] pixel_channel_V_45_reg_5274;
+reg   [7:0] pixel_channel_V_46_reg_5279;
 wire   [0:0] and_ln432_fu_3699_p2;
 wire   [3:0] ap_phi_reg_pp0_iter0_p_Val2_29_reg_771;
 reg   [3:0] ap_phi_reg_pp0_iter1_p_Val2_29_reg_771;
@@ -2077,21 +2077,21 @@ end
 
 always @ (posedge ap_clk) begin
     if (((1'b0 == ap_block_pp0_stage0_11001) & (p_Result_s_reg_4959_pp0_iter2_reg == 1'd0) & (icmp_ln317_reg_4939_pp0_iter2_reg == 1'd0))) begin
-        pixel_channel_V_60_reg_5204 <= {{selected_word_V_51_fu_3039_p3[15:8]}};
-        pixel_channel_V_61_reg_5209 <= {{selected_word_V_51_fu_3039_p3[23:16]}};
-        pixel_channel_V_62_reg_5214 <= {{selected_word_V_51_fu_3039_p3[31:24]}};
-        pixel_channel_V_63_reg_5219 <= {{selected_word_V_51_fu_3039_p3[39:32]}};
-        pixel_channel_V_64_reg_5224 <= {{selected_word_V_51_fu_3039_p3[47:40]}};
-        pixel_channel_V_65_reg_5229 <= {{selected_word_V_51_fu_3039_p3[55:48]}};
-        pixel_channel_V_66_reg_5234 <= {{selected_word_V_51_fu_3039_p3[63:56]}};
-        pixel_channel_V_67_reg_5244 <= pixel_channel_V_67_fu_3227_p1;
-        pixel_channel_V_68_reg_5249 <= {{selected_word_V_52_fu_3219_p3[15:8]}};
-        pixel_channel_V_69_reg_5254 <= {{selected_word_V_52_fu_3219_p3[23:16]}};
-        pixel_channel_V_70_reg_5259 <= {{selected_word_V_52_fu_3219_p3[31:24]}};
-        pixel_channel_V_71_reg_5264 <= {{selected_word_V_52_fu_3219_p3[39:32]}};
-        pixel_channel_V_72_reg_5269 <= {{selected_word_V_52_fu_3219_p3[47:40]}};
-        pixel_channel_V_73_reg_5274 <= {{selected_word_V_52_fu_3219_p3[55:48]}};
-        pixel_channel_V_74_reg_5279 <= {{selected_word_V_52_fu_3219_p3[63:56]}};
+        pixel_channel_V_32_reg_5204 <= {{selected_word_V_51_fu_3039_p3[15:8]}};
+        pixel_channel_V_33_reg_5209 <= {{selected_word_V_51_fu_3039_p3[23:16]}};
+        pixel_channel_V_34_reg_5214 <= {{selected_word_V_51_fu_3039_p3[31:24]}};
+        pixel_channel_V_35_reg_5219 <= {{selected_word_V_51_fu_3039_p3[39:32]}};
+        pixel_channel_V_36_reg_5224 <= {{selected_word_V_51_fu_3039_p3[47:40]}};
+        pixel_channel_V_37_reg_5229 <= {{selected_word_V_51_fu_3039_p3[55:48]}};
+        pixel_channel_V_38_reg_5234 <= {{selected_word_V_51_fu_3039_p3[63:56]}};
+        pixel_channel_V_39_reg_5244 <= pixel_channel_V_39_fu_3227_p1;
+        pixel_channel_V_40_reg_5249 <= {{selected_word_V_52_fu_3219_p3[15:8]}};
+        pixel_channel_V_41_reg_5254 <= {{selected_word_V_52_fu_3219_p3[23:16]}};
+        pixel_channel_V_42_reg_5259 <= {{selected_word_V_52_fu_3219_p3[31:24]}};
+        pixel_channel_V_43_reg_5264 <= {{selected_word_V_52_fu_3219_p3[39:32]}};
+        pixel_channel_V_44_reg_5269 <= {{selected_word_V_52_fu_3219_p3[47:40]}};
+        pixel_channel_V_45_reg_5274 <= {{selected_word_V_52_fu_3219_p3[55:48]}};
+        pixel_channel_V_46_reg_5279 <= {{selected_word_V_52_fu_3219_p3[63:56]}};
     end
 end
 
@@ -3390,7 +3390,7 @@ assign p_Result_s_fu_2040_p2 = (layer_mode_load & icmp_ln209_fu_2034_p2);
 
 assign pf_activation_stream_U_frpsig_data_in = $signed(tmp_9_fu_4442_p20);
 
-assign pixel_channel_V_67_fu_3227_p1 = selected_word_V_52_fu_3219_p3[7:0];
+assign pixel_channel_V_39_fu_3227_p1 = selected_word_V_52_fu_3219_p3[7:0];
 
 assign pixel_channel_V_fu_3047_p1 = selected_word_V_51_fu_3039_p3[7:0];
 
@@ -3400,35 +3400,35 @@ assign select_ln197_fu_2064_p3 = ((icmp_ln197_fu_2052_p2[0:0] == 1'b1) ? 3'd5 : 
 
 assign select_ln202_fu_2084_p3 = ((and_ln202_fu_2078_p2[0:0] == 1'b1) ? 3'd3 : 3'd4);
 
-assign select_ln209_10_fu_4399_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_69_reg_5254);
+assign select_ln209_10_fu_4399_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_41_reg_5254);
 
-assign select_ln209_11_fu_4405_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_70_reg_5259);
+assign select_ln209_11_fu_4405_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_42_reg_5259);
 
-assign select_ln209_12_fu_4411_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_71_reg_5264);
+assign select_ln209_12_fu_4411_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_43_reg_5264);
 
-assign select_ln209_13_fu_4417_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_72_reg_5269);
+assign select_ln209_13_fu_4417_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_44_reg_5269);
 
-assign select_ln209_14_fu_4423_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_73_reg_5274);
+assign select_ln209_14_fu_4423_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_45_reg_5274);
 
-assign select_ln209_15_fu_4429_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_74_reg_5279);
+assign select_ln209_15_fu_4429_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_46_reg_5279);
 
-assign select_ln209_1_fu_4345_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_60_reg_5204);
+assign select_ln209_1_fu_4345_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_32_reg_5204);
 
-assign select_ln209_2_fu_4351_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_61_reg_5209);
+assign select_ln209_2_fu_4351_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_33_reg_5209);
 
-assign select_ln209_3_fu_4357_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_62_reg_5214);
+assign select_ln209_3_fu_4357_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_34_reg_5214);
 
-assign select_ln209_4_fu_4363_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_63_reg_5219);
+assign select_ln209_4_fu_4363_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_35_reg_5219);
 
-assign select_ln209_5_fu_4369_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_64_reg_5224);
+assign select_ln209_5_fu_4369_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_36_reg_5224);
 
-assign select_ln209_6_fu_4375_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_65_reg_5229);
+assign select_ln209_6_fu_4375_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_37_reg_5229);
 
-assign select_ln209_7_fu_4381_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_66_reg_5234);
+assign select_ln209_7_fu_4381_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_38_reg_5234);
 
-assign select_ln209_8_fu_4387_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_67_reg_5244);
+assign select_ln209_8_fu_4387_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_39_reg_5244);
 
-assign select_ln209_9_fu_4393_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_68_reg_5249);
+assign select_ln209_9_fu_4393_p3 = ((p_Result_s_reg_4959_pp0_iter3_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_40_reg_5249);
 
 assign select_ln209_fu_3121_p3 = ((p_Result_s_reg_4959_pp0_iter2_reg[0:0] == 1'b1) ? 8'd0 : pixel_channel_V_fu_3047_p1);
 

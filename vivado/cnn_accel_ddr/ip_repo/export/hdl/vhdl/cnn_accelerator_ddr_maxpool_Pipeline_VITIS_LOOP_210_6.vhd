@@ -88,10 +88,10 @@ attribute shreg_extract : string;
     signal shl_ln779_fu_203_p2 : STD_LOGIC_VECTOR (1 downto 0);
     signal and_ln779_fu_209_p2 : STD_LOGIC_VECTOR (1 downto 0);
     signal trunc_ln218_fu_199_p1 : STD_LOGIC_VECTOR (0 downto 0);
-    signal empty_109_fu_221_p2 : STD_LOGIC_VECTOR (0 downto 0);
+    signal empty_113_fu_221_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal tmp_s_fu_227_p4 : STD_LOGIC_VECTOR (31 downto 0);
     signal tmp_1_fu_237_p4 : STD_LOGIC_VECTOR (31 downto 0);
-    signal empty_108_fu_195_p1 : STD_LOGIC_VECTOR (0 downto 0);
+    signal empty_112_fu_195_p1 : STD_LOGIC_VECTOR (0 downto 0);
     signal tmp_2_fu_257_p4 : STD_LOGIC_VECTOR (31 downto 0);
     signal tmp_3_fu_267_p4 : STD_LOGIC_VECTOR (31 downto 0);
     signal ap_done_reg : STD_LOGIC := '0';
@@ -137,7 +137,7 @@ attribute shreg_extract : string;
 
 
 begin
-    mux_21_32_1_1_U568 : component cnn_accelerator_ddr_mux_21_32_1_1
+    mux_21_32_1_1_U552 : component cnn_accelerator_ddr_mux_21_32_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -148,10 +148,10 @@ begin
     port map (
         din0 => pooled_half_V_250_reload,
         din1 => pooled_half_V_2_2_reload,
-        din2 => empty_109_fu_221_p2,
+        din2 => empty_113_fu_221_p2,
         dout => tmp_s_fu_227_p4);
 
-    mux_21_32_1_1_U569 : component cnn_accelerator_ddr_mux_21_32_1_1
+    mux_21_32_1_1_U553 : component cnn_accelerator_ddr_mux_21_32_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -162,10 +162,10 @@ begin
     port map (
         din0 => pooled_half_V_4_2_reload,
         din1 => pooled_half_V_6_2_reload,
-        din2 => empty_109_fu_221_p2,
+        din2 => empty_113_fu_221_p2,
         dout => tmp_1_fu_237_p4);
 
-    mux_21_32_1_1_U570 : component cnn_accelerator_ddr_mux_21_32_1_1
+    mux_21_32_1_1_U554 : component cnn_accelerator_ddr_mux_21_32_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -176,10 +176,10 @@ begin
     port map (
         din0 => tmp_s_fu_227_p4,
         din1 => tmp_1_fu_237_p4,
-        din2 => empty_108_fu_195_p1,
+        din2 => empty_112_fu_195_p1,
         dout => source_V_fu_247_p4);
 
-    mux_21_32_1_1_U571 : component cnn_accelerator_ddr_mux_21_32_1_1
+    mux_21_32_1_1_U555 : component cnn_accelerator_ddr_mux_21_32_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -190,10 +190,10 @@ begin
     port map (
         din0 => pooled_half_V_1_2_reload,
         din1 => pooled_half_V_3_2_reload,
-        din2 => empty_109_fu_221_p2,
+        din2 => empty_113_fu_221_p2,
         dout => tmp_2_fu_257_p4);
 
-    mux_21_32_1_1_U572 : component cnn_accelerator_ddr_mux_21_32_1_1
+    mux_21_32_1_1_U556 : component cnn_accelerator_ddr_mux_21_32_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -204,10 +204,10 @@ begin
     port map (
         din0 => pooled_half_V_5_2_reload,
         din1 => pooled_half_V_7_2_reload,
-        din2 => empty_109_fu_221_p2,
+        din2 => empty_113_fu_221_p2,
         dout => tmp_3_fu_267_p4);
 
-    mux_21_32_1_1_U573 : component cnn_accelerator_ddr_mux_21_32_1_1
+    mux_21_32_1_1_U557 : component cnn_accelerator_ddr_mux_21_32_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -218,7 +218,7 @@ begin
     port map (
         din0 => tmp_2_fu_257_p4,
         din1 => tmp_3_fu_267_p4,
-        din2 => empty_108_fu_195_p1,
+        din2 => empty_112_fu_195_p1,
         dout => source_V_1_fu_277_p4);
 
     flow_control_loop_pipe_sequential_init_U : component cnn_accelerator_ddr_flow_control_loop_pipe_sequential_init
@@ -414,8 +414,8 @@ begin
         end if; 
     end process;
 
-    empty_108_fu_195_p1 <= select_ln217_fu_187_p3(1 - 1 downto 0);
-    empty_109_fu_221_p2 <= (trunc_ln218_fu_199_p1 and layer_mode_load);
+    empty_112_fu_195_p1 <= select_ln217_fu_187_p3(1 - 1 downto 0);
+    empty_113_fu_221_p2 <= (trunc_ln218_fu_199_p1 and layer_mode_load);
     icmp_ln210_fu_159_p2 <= "1" when (ap_sig_allocacmp_output_slot_1 = output_slots) else "0";
     output_slot_2_fu_165_p2 <= std_logic_vector(unsigned(ap_sig_allocacmp_output_slot_1) + unsigned(ap_const_lv3_1));
     p_Result_s_fu_215_p2 <= "1" when (and_ln779_fu_209_p2 = ap_const_lv2_0) else "0";

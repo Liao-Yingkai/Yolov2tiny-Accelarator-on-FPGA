@@ -172,7 +172,7 @@ cnn_accelerator_ddr_mux_21_64_1_1 #(
     .din1_WIDTH( 64 ),
     .din2_WIDTH( 1 ),
     .dout_WIDTH( 64 ))
-mux_21_64_1_1_U724(
+mux_21_64_1_1_U708(
     .din0(p_Result_s),
     .din1(tmp_fu_124_p2),
     .din2(tmp_fu_124_p3),

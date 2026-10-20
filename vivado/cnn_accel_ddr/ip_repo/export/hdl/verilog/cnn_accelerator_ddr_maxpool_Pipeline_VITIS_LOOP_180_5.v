@@ -198,10 +198,10 @@ wire   [3:0] top_valid_V_fu_522_p9;
 wire   [1:0] trunc_ln107_fu_542_p1;
 wire   [1:0] tmp_fu_552_p4;
 wire   [3:0] and_ln_fu_562_p3;
-wire   [0:0] tmp_1_fu_739_p3;
+wire   [0:0] tmp_3_fu_739_p3;
 wire   [0:0] p_Result_s_fu_762_p3;
 wire   [0:0] and_ln110_fu_770_p2;
-wire   [0:0] tmp_3_fu_781_p3;
+wire   [0:0] tmp_5_fu_781_p3;
 wire   [0:0] p_Result_9_fu_789_p3;
 wire   [0:0] and_ln112_fu_797_p2;
 wire   [0:0] p_Repl2_1_fu_803_p2;
@@ -316,7 +316,7 @@ cnn_accelerator_ddr_mux_73_4_1_1 #(
     .din6_WIDTH( 4 ),
     .din7_WIDTH( 3 ),
     .dout_WIDTH( 4 ))
-mux_73_4_1_1_U537(
+mux_73_4_1_1_U521(
     .din0(line_valid_V),
     .din1(line_valid_V_1),
     .din2(line_valid_V_2),
@@ -686,9 +686,9 @@ assign add_ln180_fu_508_p2 = (ap_sig_allocacmp_cout_tile_2 + 3'd1);
 
 assign add_ln201_fu_576_p2 = (ap_sig_allocacmp_line_address_load + 5'd1);
 
-assign and_ln110_fu_770_p2 = (tmp_1_fu_739_p3 & p_Result_s_fu_762_p3);
+assign and_ln110_fu_770_p2 = (tmp_3_fu_739_p3 & p_Result_s_fu_762_p3);
 
-assign and_ln112_fu_797_p2 = (tmp_3_fu_781_p3 & p_Result_9_fu_789_p3);
+assign and_ln112_fu_797_p2 = (tmp_5_fu_781_p3 & p_Result_9_fu_789_p3);
 
 assign and_ln_fu_562_p3 = {{tmp_fu_552_p4}, {2'd0}};
 
@@ -920,9 +920,9 @@ assign select_ln50_9_fu_1109_p3 = ((icmp_ln1035_13_fu_1103_p2[0:0] == 1'b1) ? bo
 
 assign select_ln50_fu_844_p3 = ((icmp_ln1035_fu_838_p2[0:0] == 1'b1) ? value_V_fu_824_p1 : value_V_1_fu_828_p4);
 
-assign tmp_1_fu_739_p3 = post_output_stream_dout[32'd128];
+assign tmp_3_fu_739_p3 = post_output_stream_dout[32'd128];
 
-assign tmp_3_fu_781_p3 = post_output_stream_dout[32'd130];
+assign tmp_5_fu_781_p3 = post_output_stream_dout[32'd130];
 
 assign tmp_fu_552_p4 = {{top_valid_V_fu_522_p9[3:2]}};
 

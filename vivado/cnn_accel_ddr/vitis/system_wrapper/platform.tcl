@@ -24,3 +24,6 @@ platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/viv
 platform generate
 platform clean
 platform generate
+platform active {system_wrapper}
+platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_ddr/vitis/system_wrapper.xsa}
+platform generate

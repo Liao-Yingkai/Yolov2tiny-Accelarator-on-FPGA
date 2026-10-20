@@ -4,7 +4,7 @@
     "xci_name": "system_cnn_accelerator_ddr_0_0",
     "cell_name": "cnn_accelerator_ddr_0",
     "component_reference": "xilinx.com:hls:cnn_accelerator_ddr:1.0",
-    "ip_revision": "2114833072",
+    "ip_revision": "2114837855",
     "gen_directory": "../../../../../../cnn_accel_ddr.gen/sources_1/bd/system/ip/system_cnn_accelerator_ddr_0_0",
     "parameters": {
       "component_parameters": {
@@ -48,7 +48,7 @@
         "clk_period": [ { "value": "10", "enabled": false, "usage": "all" } ],
         "machine": [ { "value": "64", "enabled": false, "usage": "all" } ],
         "combinational": [ { "value": "0", "enabled": false, "usage": "all" } ],
-        "latency": [ { "value": "8545", "enabled": false, "usage": "all" } ],
+        "latency": [ { "value": "11233", "enabled": false, "usage": "all" } ],
         "II": [ { "value": "x", "enabled": false, "usage": "all" } ]
       },
       "model_parameters": {
@@ -105,7 +105,7 @@
       },
       "runtime_parameters": {
         "IPCONTEXT": [ { "value": "IP_Integrator" } ],
-        "IPREVISION": [ { "value": "2114833072" } ],
+        "IPREVISION": [ { "value": "2114837855" } ],
         "MANAGED": [ { "value": "TRUE" } ],
         "OUTPUTDIR": [ { "value": "../../../../../../cnn_accel_ddr.gen/sources_1/bd/system/ip/system_cnn_accelerator_ddr_0_0" } ],
         "SELECTEDSIMMODEL": [ { "value": "" } ],

@@ -95,7 +95,7 @@ attribute shreg_extract : string;
     signal layer_mode_reg_115 : STD_LOGIC_VECTOR (0 downto 0);
     signal ap_CS_fsm_state2 : STD_LOGIC;
     attribute fsm_encoding of ap_CS_fsm_state2 : signal is "none";
-    signal icmp_ln254_fu_81_p2 : STD_LOGIC_VECTOR (0 downto 0);
+    signal icmp_ln259_fu_81_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal grp_p_anonymous_namespace_run_layer_phase_fu_50_pixels_read : STD_LOGIC;
     signal grp_p_anonymous_namespace_run_layer_phase_fu_50_w1_read : STD_LOGIC;
     signal grp_p_anonymous_namespace_run_layer_phase_fu_50_p1_read : STD_LOGIC;
@@ -227,7 +227,7 @@ begin
             else
                 if ((ap_continue = ap_const_logic_1)) then 
                     ap_done_reg <= ap_const_logic_0;
-                elsif (((icmp_ln254_fu_81_p2 = ap_const_lv1_1) and (ap_const_logic_1 = ap_CS_fsm_state2))) then 
+                elsif (((icmp_ln259_fu_81_p2 = ap_const_lv1_1) and (ap_const_logic_1 = ap_CS_fsm_state2))) then 
                     ap_done_reg <= ap_const_logic_1;
                 end if; 
             end if;
@@ -273,7 +273,7 @@ begin
             if (ap_rst = '1') then
                 grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= ap_const_logic_0;
             else
-                if ((((icmp_ln254_fu_81_p2 = ap_const_lv1_0) and (ap_const_logic_1 = ap_CS_fsm_state2)) or ((ap_const_logic_1 = ap_CS_fsm_state3) and (ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready = ap_const_logic_0)))) then 
+                if ((((icmp_ln259_fu_81_p2 = ap_const_lv1_0) and (ap_const_logic_1 = ap_CS_fsm_state2)) or ((ap_const_logic_1 = ap_CS_fsm_state3) and (ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready = ap_const_logic_0)))) then 
                     grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= ap_const_logic_1;
                 elsif ((grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready = ap_const_logic_1)) then 
                     grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= ap_const_logic_0;
@@ -304,7 +304,7 @@ begin
         if (ap_clk'event and ap_clk = '1') then
             if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
                 phase_fu_46 <= ap_const_lv2_0;
-            elsif (((icmp_ln254_fu_81_p2 = ap_const_lv1_0) and (ap_const_logic_1 = ap_CS_fsm_state2))) then 
+            elsif (((icmp_ln259_fu_81_p2 = ap_const_lv1_0) and (ap_const_logic_1 = ap_CS_fsm_state2))) then 
                 phase_fu_46 <= phase_2_fu_87_p2;
             end if; 
         end if;
@@ -312,13 +312,13 @@ begin
     process (ap_clk)
     begin
         if (ap_clk'event and ap_clk = '1') then
-            if (((icmp_ln254_fu_81_p2 = ap_const_lv1_0) and (ap_const_logic_1 = ap_CS_fsm_state2))) then
+            if (((icmp_ln259_fu_81_p2 = ap_const_lv1_0) and (ap_const_logic_1 = ap_CS_fsm_state2))) then
                 layer_mode_reg_115 <= layer_mode_fu_93_p2;
             end if;
         end if;
     end process;
 
-    ap_NS_fsm_assign_proc : process (real_start, ap_done_reg, ap_CS_fsm, ap_CS_fsm_state1, ap_CS_fsm_state2, icmp_ln254_fu_81_p2, ap_CS_fsm_state3, ap_block_state3_on_subcall_done)
+    ap_NS_fsm_assign_proc : process (real_start, ap_done_reg, ap_CS_fsm, ap_CS_fsm_state1, ap_CS_fsm_state2, icmp_ln259_fu_81_p2, ap_CS_fsm_state3, ap_block_state3_on_subcall_done)
     begin
         case ap_CS_fsm is
             when ap_ST_fsm_state1 => 
@@ -328,7 +328,7 @@ begin
                     ap_NS_fsm <= ap_ST_fsm_state1;
                 end if;
             when ap_ST_fsm_state2 => 
-                if (((icmp_ln254_fu_81_p2 = ap_const_lv1_1) and (ap_const_logic_1 = ap_CS_fsm_state2))) then
+                if (((icmp_ln259_fu_81_p2 = ap_const_lv1_1) and (ap_const_logic_1 = ap_CS_fsm_state2))) then
                     ap_NS_fsm <= ap_ST_fsm_state1;
                 else
                     ap_NS_fsm <= ap_ST_fsm_state3;
@@ -380,9 +380,9 @@ begin
     end process;
 
 
-    ap_done_assign_proc : process(ap_done_reg, ap_CS_fsm_state2, icmp_ln254_fu_81_p2)
+    ap_done_assign_proc : process(ap_done_reg, ap_CS_fsm_state2, icmp_ln259_fu_81_p2)
     begin
-        if (((icmp_ln254_fu_81_p2 = ap_const_lv1_1) and (ap_const_logic_1 = ap_CS_fsm_state2))) then 
+        if (((icmp_ln259_fu_81_p2 = ap_const_lv1_1) and (ap_const_logic_1 = ap_CS_fsm_state2))) then 
             ap_done <= ap_const_logic_1;
         else 
             ap_done <= ap_done_reg;
@@ -424,11 +424,11 @@ begin
     end process;
 
     grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start <= grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg;
-    icmp_ln254_fu_81_p2 <= "1" when (phase_fu_46 = ap_const_lv2_2) else "0";
+    icmp_ln259_fu_81_p2 <= "1" when (phase_fu_46 = ap_const_lv2_2) else "0";
 
-    internal_ap_ready_assign_proc : process(ap_CS_fsm_state2, icmp_ln254_fu_81_p2)
+    internal_ap_ready_assign_proc : process(ap_CS_fsm_state2, icmp_ln259_fu_81_p2)
     begin
-        if (((icmp_ln254_fu_81_p2 = ap_const_lv1_1) and (ap_const_logic_1 = ap_CS_fsm_state2))) then 
+        if (((icmp_ln259_fu_81_p2 = ap_const_lv1_1) and (ap_const_logic_1 = ap_CS_fsm_state2))) then 
             internal_ap_ready <= ap_const_logic_1;
         else 
             internal_ap_ready <= ap_const_logic_0;

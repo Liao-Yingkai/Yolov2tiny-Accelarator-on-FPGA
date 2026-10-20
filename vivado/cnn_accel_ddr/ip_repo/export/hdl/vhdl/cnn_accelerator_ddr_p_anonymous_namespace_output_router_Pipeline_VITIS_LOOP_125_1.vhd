@@ -9,7 +9,7 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
-entity cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1 is
+entity cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1 is
 port (
     ap_clk : IN STD_LOGIC;
     ap_rst : IN STD_LOGIC;
@@ -32,12 +32,12 @@ port (
     fc_input_stream_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
     fc_input_stream_full_n : IN STD_LOGIC;
     fc_input_stream_write : OUT STD_LOGIC;
-    select_ln122 : IN STD_LOGIC_VECTOR (7 downto 0);
+    select_ln123 : IN STD_LOGIC_VECTOR (7 downto 0);
     layer_mode_load : IN STD_LOGIC_VECTOR (0 downto 0) );
 end;
 
 
-architecture behav of cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1 is 
+architecture behav of cnn_accelerator_ddr_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1 is 
     constant ap_const_logic_1 : STD_LOGIC := '1';
     constant ap_const_logic_0 : STD_LOGIC := '0';
     constant ap_ST_fsm_pp0_stage0 : STD_LOGIC_VECTOR (0 downto 0) := "1";
@@ -61,7 +61,7 @@ attribute shreg_extract : string;
     signal ap_block_state1_pp0_stage0_iter0 : BOOLEAN;
     signal ap_block_state2_pp0_stage0_iter1 : BOOLEAN;
     signal ap_block_pp0_stage0_subdone : BOOLEAN;
-    signal icmp_ln124_fu_94_p2 : STD_LOGIC_VECTOR (0 downto 0);
+    signal icmp_ln125_fu_94_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal ap_condition_exit_pp0_iter0_stage0 : STD_LOGIC;
     signal ap_loop_exit_ready : STD_LOGIC;
     signal ap_ready_int : STD_LOGIC;
@@ -169,7 +169,7 @@ begin
     begin
         if (ap_clk'event and ap_clk = '1') then
             if (((ap_const_boolean_0 = ap_block_pp0_stage0_11001) and (ap_const_logic_1 = ap_CS_fsm_pp0_stage0))) then
-                if (((icmp_ln124_fu_94_p2 = ap_const_lv1_0) and (ap_enable_reg_pp0_iter0 = ap_const_logic_1))) then 
+                if (((icmp_ln125_fu_94_p2 = ap_const_lv1_0) and (ap_enable_reg_pp0_iter0 = ap_const_logic_1))) then 
                     index_fu_48 <= index_2_fu_100_p2;
                 elsif ((ap_loop_init = ap_const_logic_1)) then 
                     index_fu_48 <= ap_const_lv8_0;
@@ -215,9 +215,9 @@ begin
     end process;
 
 
-    ap_condition_exit_pp0_iter0_stage0_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_enable_reg_pp0_iter0, ap_block_pp0_stage0_subdone, icmp_ln124_fu_94_p2)
+    ap_condition_exit_pp0_iter0_stage0_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_enable_reg_pp0_iter0, ap_block_pp0_stage0_subdone, icmp_ln125_fu_94_p2)
     begin
-        if (((icmp_ln124_fu_94_p2 = ap_const_lv1_1) and (ap_const_boolean_0 = ap_block_pp0_stage0_subdone) and (ap_enable_reg_pp0_iter0 = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_pp0_stage0))) then 
+        if (((icmp_ln125_fu_94_p2 = ap_const_lv1_1) and (ap_const_boolean_0 = ap_block_pp0_stage0_subdone) and (ap_enable_reg_pp0_iter0 = ap_const_logic_1) and (ap_const_logic_1 = ap_CS_fsm_pp0_stage0))) then 
             ap_condition_exit_pp0_iter0_stage0 <= ap_const_logic_1;
         else 
             ap_condition_exit_pp0_iter0_stage0 <= ap_const_logic_0;
@@ -298,7 +298,7 @@ begin
         end if; 
     end process;
 
-    icmp_ln124_fu_94_p2 <= "1" when (ap_sig_allocacmp_index_1 = select_ln122) else "0";
+    icmp_ln125_fu_94_p2 <= "1" when (ap_sig_allocacmp_index_1 = select_ln123) else "0";
     index_2_fu_100_p2 <= std_logic_vector(unsigned(ap_sig_allocacmp_index_1) + unsigned(ap_const_lv8_1));
 
     pool1_feature_fifo_blk_n_assign_proc : process(ap_CS_fsm_pp0_stage0, ap_enable_reg_pp0_iter1, pool1_feature_fifo_full_n, layer_mode_load, ap_block_pp0_stage0)

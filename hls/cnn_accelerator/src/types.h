@@ -89,6 +89,18 @@ struct activation_tile_t {
     ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
 };
 
+//Systolic使用的activation数据+当前pe核中的activation是否valid
+struct pixel_with_valid_pack_t {
+    pixel_t pixel;
+    ap_uint<1> valid;
+};
+
+//Systolic使用的weight数据+当前pe核中的weight是否valid
+struct weight_with_valid_pack_t {
+    weight_lane_t weight;
+    ap_uint<1> valid;
+};
+
 // 一个参数 Pack 对应一个 Cout tile 的4条输出通道。所有字段都是已经由
 // exporter 离线生成的有符号 INT32：bias 位于 accumulator 域，multiplier 与
 // shift 共同表示 real_multiplier ~= multiplier / 2^shift。

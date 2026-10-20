@@ -18,4 +18,9 @@ void systolic(hls::stream<activation_pack_t>& activation_stream,
               hls::stream<acc_tile_t>& output_stream,
               layer_mode_t layer_mode);
 
+void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
+              hls::stream<weight_pack_t>& weight_stream,
+              hls::stream<acc_tile_t>& output_stream,
+              layer_mode_t layer_mode);
+
 #endif  // CNN_ACCELERATOR_SYSTOLIC_SYSTOLIC_H_

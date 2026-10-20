@@ -11,6 +11,7 @@ set_top cnn_accelerator_ddr
 add_files [file join $src_dir core/cnn_core.cpp]
 add_files [file join $src_dir im2row/im2row.cpp]
 add_files [file join $src_dir systolic/systolic.cpp]
+add_files [file join $src_dir systolic/systolic_OS.cpp]
 add_files [file join $src_dir postprocess/conv_postprocess.cpp]
 add_files [file join $src_dir pool/pool.cpp]
 add_files [file join $src_dir fc/fc.cpp]
