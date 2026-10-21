@@ -8,7 +8,7 @@
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv2_quant.h"
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv2_shift.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <stdint.h>
 #include <sys/stat.h>
 
@@ -30,13 +30,13 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -45,50 +45,50 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int systolic_value(bool conv2, int y, int x, int output) {
+int systolic_value(bool conv2, int y, int x, int output) {
     return conv2 ? trace_conv2_systolic_int32_nhwc[
                        (y * CNN_CONV2_W + x) * CNN_CONV2_COUT + output]
                  : trace_conv1_systolic_int32_nhwc[
                        (y * CNN_CONV1_W + x) * CNN_CONV1_COUT + output];
 }
 
-static int postprocess_value(bool conv2, int y, int x, int output) {
+int postprocess_value(bool conv2, int y, int x, int output) {
     return conv2 ? trace_conv2_postprocess_int32_nhwc[
                        (y * CNN_CONV2_W + x) * CNN_CONV2_COUT + output]
                  : trace_conv1_postprocess_int32_nhwc[
                        (y * CNN_CONV1_W + x) * CNN_CONV1_COUT + output];
 }
 
-static int requant_value(bool conv2, int y, int x, int output) {
+int requant_value(bool conv2, int y, int x, int output) {
     return conv2 ? trace_conv2_requant_int8_nhwc[
                        (y * CNN_CONV2_W + x) * CNN_CONV2_COUT + output]
                  : trace_conv1_requant_int8_nhwc[
                        (y * CNN_CONV1_W + x) * CNN_CONV1_COUT + output];
 }
 
-static int bias_value(bool conv2, int output) {
+int bias_value(bool conv2, int output) {
     return conv2 ? conv2_bias[output] : conv1_bias[output];
 }
 
-static int multiplier_value(bool conv2, int output) {
+int multiplier_value(bool conv2, int output) {
     return conv2 ? conv2_multiplier[output] : conv1_multiplier[output];
 }
 
-static int shift_value(bool conv2, int output) {
+int shift_value(bool conv2, int output) {
     return conv2 ? conv2_shift[output] : conv1_shift[output];
 }
 
-static int bias_relu_value(bool conv2, int y, int x, int output) {
+int bias_relu_value(bool conv2, int y, int x, int output) {
     const int64_t biased = (int64_t)systolic_value(conv2, y, x, output) +
                            bias_value(conv2, output);
     return biased > 0 ? (int)biased : 0;
 }
 
-static int run_layer(layer_mode_t layer_mode,
-                     hls::stream<acc_tile_t>& input_stream,
-                     hls::stream<postprocess_param_pack_t>& param_stream,
-                     hls::stream<activation_tile_t>& output_stream,
-                     const char* name, const std::string& directory) {
+int run_layer(layer_mode_t layer_mode,
+              hls::stream<acc_tile_t>& input_stream,
+              hls::stream<postprocess_param_pack_t>& param_stream,
+              hls::stream<activation_tile_t>& output_stream,
+              const char* name, const std::string& directory) {
     const bool conv2 = (layer_mode == LAYER2_MODE);
     const int H = conv2 ? CNN_CONV2_H : CNN_CONV1_H;
     const int W = conv2 ? CNN_CONV2_W : CNN_CONV1_W;

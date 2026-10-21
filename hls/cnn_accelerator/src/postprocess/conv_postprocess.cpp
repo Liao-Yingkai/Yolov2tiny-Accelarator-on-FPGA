@@ -1,15 +1,15 @@
 #include "conv_postprocess.h"
 
 #ifndef __SYNTHESIS__
-#include <assert.h>
+#include <cassert>
 #endif
 
 namespace {
 
 // 与 NumPy 对 signed integer 的 right_shift 语义一致。当前卷积的 ReLU
 // 使输入 product 非负；仍保留负值的符号扩展分支，便于函数数值语义完整。
-static ap_int<64> arithmetic_right_shift(ap_int<64> value,
-                                         ap_int<32> shift) {
+ap_int<64> arithmetic_right_shift(ap_int<64> value,
+                                  ap_int<32> shift) {
 #pragma HLS INLINE
 #ifndef __SYNTHESIS__
     assert(shift >= 0);
@@ -24,7 +24,7 @@ static ap_int<64> arithmetic_right_shift(ap_int<64> value,
     return value >> shift_amount;
 }
 
-static ap_int<32> checked_bias_add(acc_t accumulator, ap_int<32> bias) {
+ap_int<32> checked_bias_add(acc_t accumulator, ap_int<32> bias) {
 #pragma HLS INLINE
     const ap_int<33> biased_wide = (ap_int<33>)accumulator +
                                    (ap_int<33>)bias;
@@ -89,7 +89,7 @@ void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
         const bool first_spatial_tile = (spatial_tile == 0);
         for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
-            acc_tile_t input = input_stream.read();
+            const acc_tile_t input = input_stream.read();
 #ifndef __SYNTHESIS__
             ++input_read_count;
 #endif

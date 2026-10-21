@@ -4,14 +4,13 @@
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv1_weight.h"
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv2_weight.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 
 #include <fstream>
 #include <iostream>
 #include <string>
 
-#define SYSTOLIC_OS 1
 
 /*
  * Systolic 的 PyTorch 对照 testbench。
@@ -27,13 +26,13 @@ namespace {
 static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION == 2,
               "requires blocked convolution weight headers v2");
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -42,7 +41,7 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int unfold_value(bool conv2, int y, int x, int token, int channel) {
+int unfold_value(bool conv2, int y, int x, int token, int channel) {
     if (!conv2) {
         return channel == 0 ? trace_conv1_unfold_int8[
             (y * CNN_CONV1_W + x) * SYSTOLIC_KERNEL_TOKENS + token] : 0;
@@ -52,7 +51,7 @@ static int unfold_value(bool conv2, int y, int x, int token, int channel) {
         token * CNN_CONV2_CIN + channel];
 }
 
-static int weight_value(bool conv2, int token, int channel, int output) {
+int weight_value(bool conv2, int token, int channel, int output) {
     // v2 头已按 tile/token/lane/Cin 排好，不再从 [K,Cout] 转置。
     const int pack_lane = ((output / SYSTOLIC_COUT_PAR) * SYSTOLIC_KERNEL_TOKENS + token)
                           * SYSTOLIC_COUT_PAR + output % SYSTOLIC_COUT_PAR;
@@ -62,7 +61,7 @@ static int weight_value(bool conv2, int token, int channel, int output) {
     return conv2_weight[pack_lane * CNN_CONV2_CIN + channel];
 }
 
-static int golden_value(bool conv2, int y, int x, int output) {
+int golden_value(bool conv2, int y, int x, int output) {
     if (!conv2) {
         return trace_conv1_systolic_int32_nhwc[
             (y * CNN_CONV1_W + x) * CNN_CONV1_COUT + output];
@@ -71,11 +70,11 @@ static int golden_value(bool conv2, int y, int x, int output) {
         (y * CNN_CONV2_W + x) * CNN_CONV2_COUT + output];
 }
 
-static int run_layer(layer_mode_t layer_mode,
-                     hls::stream<activation_pack_t>& activation_stream,
-                     hls::stream<weight_pack_t>& weight_stream,
-                     hls::stream<acc_tile_t>& output_stream, const char* name,
-                     const std::string& directory) {
+int run_layer(layer_mode_t layer_mode,
+              hls::stream<activation_pack_t>& activation_stream,
+              hls::stream<weight_pack_t>& weight_stream,
+              hls::stream<acc_tile_t>& output_stream, const char* name,
+              const std::string& directory) {
     const bool conv2 = (layer_mode == LAYER2_MODE);
     const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
     const int spatial_tiles = conv2 ? CNN_CONV2_SPATIAL_TILES : CNN_CONV1_SPATIAL_TILES;
@@ -138,7 +137,7 @@ static int run_layer(layer_mode_t layer_mode,
         }
     }
 
-#if SYSTOLIC_OS
+#if CNN_SYSTOLIC_USE_OS
     systolic_OS(activation_stream, weight_stream, output_stream, layer_mode);
 #else
     systolic(activation_stream, weight_stream, output_stream, layer_mode);

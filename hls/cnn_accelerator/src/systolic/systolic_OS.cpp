@@ -2,19 +2,19 @@
 
 namespace {
 
-typedef ap_int<PRODUCT_BITS> product_t;
-typedef ap_int<SYSTOLIC_SUM2_BITS> sum2_t;
-typedef ap_int<SYSTOLIC_SUM4_BITS> sum4_t;
-typedef ap_int<SYSTOLIC_DOT_BITS> dot_t;
+using product_t = ap_int<PRODUCT_BITS>;
+using sum2_t = ap_int<SYSTOLIC_SUM2_BITS>;
+using sum4_t = ap_int<SYSTOLIC_SUM4_BITS>;
+using dot_t = ap_int<SYSTOLIC_DOT_BITS>;
 // Activation replay 的一个物理 Bank 字对应一个 spatial lane 的8个 INT8通道。
 // 显式打包避免 HLS 将 activation_pack_t 拆成32个窄存储器。
-typedef ap_uint<SYSTOLIC_ACTIVATION_LANE_BITS> packed_activation_lane_t;
-typedef ap_uint<SYSTOLIC_WEIGHT_LANE_BITS> packed_weight_lane_t;
+using packed_activation_lane_t = ap_uint<SYSTOLIC_ACTIVATION_LANE_BITS>;
+using packed_weight_lane_t = ap_uint<SYSTOLIC_WEIGHT_LANE_BITS>;
 
 // 使用显式平衡树，避免依赖累加表达式的默认位宽或综合器将其解释为不平衡链。
 // 8 个 signed INT8 乘积的精确和需要至少19位有符号数。
-static dot_t dot_product(const pixel_t& activation,
-                         const weight_lane_t& weight) {
+dot_t dot_product(const pixel_t& activation,
+                  const weight_lane_t& weight) {
 #pragma HLS INLINE
     product_t product0 =
         (product_t)(activation.channel[0] * weight.channel[0]);
@@ -44,7 +44,7 @@ static dot_t dot_product(const pixel_t& activation,
 }
 
 // Weight Buffer 的一个物理 Bank 字对应一个 Cout Lane 的8个 INT8权重。
-static packed_weight_lane_t pack_weight_lane(const weight_lane_t& lane) {
+packed_weight_lane_t pack_weight_lane(const weight_lane_t& lane) {
 #pragma HLS INLINE
     packed_weight_lane_t packed = 0;
     for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
@@ -56,7 +56,7 @@ static packed_weight_lane_t pack_weight_lane(const weight_lane_t& lane) {
     return packed;
 }
 
-static weight_lane_t unpack_weight_lane(packed_weight_lane_t packed) {
+weight_lane_t unpack_weight_lane(packed_weight_lane_t packed) {
 #pragma HLS INLINE
     weight_lane_t lane;
     for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
@@ -71,7 +71,7 @@ static weight_lane_t unpack_weight_lane(packed_weight_lane_t packed) {
 // activation 的 bit 顺序与 weight bank 一致：channel 0 位于最低8 bit，
 // channel 7 位于最高8 bit。转换为 ap_uint 只保留 INT8 的二进制补码位型，
 // unpack 时转换回 ap_int<8> 恢复有符号语义。
-static packed_activation_lane_t pack_activation_lane(const pixel_t& pixel) {
+packed_activation_lane_t pack_activation_lane(const pixel_t& pixel) {
 #pragma HLS INLINE
     packed_activation_lane_t packed = 0;
     for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
@@ -83,7 +83,7 @@ static packed_activation_lane_t pack_activation_lane(const pixel_t& pixel) {
     return packed;
 }
 
-static pixel_t unpack_activation_lane(packed_activation_lane_t packed) {
+pixel_t unpack_activation_lane(packed_activation_lane_t packed) {
 #pragma HLS INLINE
     pixel_t pixel;
     for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
@@ -95,46 +95,51 @@ static pixel_t unpack_activation_lane(packed_activation_lane_t packed) {
     return pixel;
 }
 
-static pixel_with_valid_pack_t zero_activation = {{{0, 0, 0, 0, 0, 0, 0, 0}}, 0};
-static weight_with_valid_pack_t zero_weight = {{{0, 0, 0, 0, 0, 0, 0, 0}}, 0};
+const pixel_with_valid_pack_t zero_activation = {{{0, 0, 0, 0, 0, 0, 0, 0}}, 0};
+const weight_with_valid_pack_t zero_weight = {{{0, 0, 0, 0, 0, 0, 0, 0}}, 0};
 
-static void clear_activation_trans(pixel_with_valid_pack_t (&activation_trans)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR]) {
+void clear_activation_trans(
+    pixel_with_valid_pack_t (&activation_trans)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR]) {
 #pragma HLS INLINE
-    for (int spatial_lane = 0; spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane){
+    for (int spatial_lane = 0; spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
 #pragma HLS UNROLL
-        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane){
+        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
             activation_trans[spatial_lane][cout_lane] = zero_activation;
         }
     }
-};
-static void clear_weight_trans(weight_with_valid_pack_t (&weight_trans)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR]){
-    #pragma HLS INLINE
-    for (int spatial_lane = 0; spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane){
+}
+
+void clear_weight_trans(
+    weight_with_valid_pack_t (&weight_trans)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR]) {
+#pragma HLS INLINE
+    for (int spatial_lane = 0; spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
 #pragma HLS UNROLL
-        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane){
+        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
             weight_trans[spatial_lane][cout_lane] = zero_weight;
         }
     }
-};
-static void clear_accumualtor(acc_t (&accumulator)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR]){
+}
+
+void clear_accumulator(
+    acc_t (&accumulator)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR]) {
 #pragma HLS INLINE
-    for (int spatial_lane = 0; spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane){
+    for (int spatial_lane = 0; spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
 #pragma HLS UNROLL
-        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane){
+        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
             accumulator[spatial_lane][cout_lane] = (acc_t) 0;
         }
     }
-};
+}
 
 }  // namespace
 
 void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
-              hls::stream<weight_pack_t>& weight_stream,
-              hls::stream<acc_tile_t>& output_stream,
-              layer_mode_t layer_mode) {
+                 hls::stream<weight_pack_t>& weight_stream,
+                 hls::stream<acc_tile_t>& output_stream,
+                 layer_mode_t layer_mode) {
     const bool is_conv2 = (layer_mode == LAYER2_MODE);
     // 同一个物理PE阵列由一位调用级模式在Conv1、Conv2之间分时复用。
     const int spatial_tiles = is_conv2 ? CNN_CONV2_SPATIAL_TILES :
@@ -162,197 +167,200 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
     // spatial_tile 与 Im2Row 的 row -> tile_x 顺序完全等价：Conv1 共有196个，
     // Conv2 共有56个。合并计数器不改变 activation 或 result 的事务顺序。
     for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
-            const bool first_spatial_tile = (spatial_tile == 0);
-            ap_uint<SYSTOLIC_SPATIAL_PAR> tile_spatial_valid = 0;
-            ap_uint<6> weight_base = 0;
+        const bool first_spatial_tile = (spatial_tile == 0);
+        ap_uint<SYSTOLIC_SPATIAL_PAR> tile_spatial_valid = 0;
+        ap_uint<6> weight_base = 0;
 
+        for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
+            // PE、入口和错拍状态仅属于当前 Cout Tile；全量初始化后再推进15步波前。
+            // replay BRAM 仍在完整层作用域，跨 Tile 数据与流事务顺序保持不变。
+            acc_t accumulator[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+#pragma HLS ARRAY_PARTITION variable=accumulator complete dim=0
 
-            for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
-                // PE、入口和错拍状态仅属于当前 Cout Tile；全量初始化后再推进15步波前。
-                // replay BRAM 仍在完整层作用域，跨 Tile 数据与流事务顺序保持不变。
-                acc_t accumulator[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
-                #pragma HLS ARRAY_PARTITION variable=accumulator complete dim=0
+            // activation传播寄存器
+            pixel_with_valid_pack_t activation_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+#pragma HLS ARRAY_PARTITION variable=activation_trans complete dim=0
 
-                //activation传播寄存器
-                pixel_with_valid_pack_t activation_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
-                #pragma HLS ARRAY_PARTITION variable=activation_trans complete dim=0
+            // weight传播寄存器
+            weight_with_valid_pack_t weight_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+#pragma HLS ARRAY_PARTITION variable=weight_trans complete dim=0
 
-                //weight传播寄存器
-                weight_with_valid_pack_t weight_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
-                #pragma HLS ARRAY_PARTITION variable=weight_trans complete dim=0
+            // activation pe边界输入寄存器
+            pixel_with_valid_pack_t activation_edge[SYSTOLIC_SPATIAL_PAR] = {
+                zero_activation, zero_activation, zero_activation, zero_activation};
+#pragma HLS ARRAY_PARTITION variable=activation_edge complete dim=0
 
-                //activation pe边界输入寄存器
-                pixel_with_valid_pack_t activation_edge[SYSTOLIC_SPATIAL_PAR] = {zero_activation,zero_activation,zero_activation,zero_activation};
-                #pragma HLS ARRAY_PARTITION variable=activation_edge complete dim=0
+            // weight pe边界输入寄存器
+            weight_with_valid_pack_t weight_edge[SYSTOLIC_COUT_PAR] = {
+                zero_weight, zero_weight, zero_weight, zero_weight};
+#pragma HLS ARRAY_PARTITION variable=weight_edge complete dim=0
 
-                //weight pe边界输入寄存器
-                weight_with_valid_pack_t weight_edge[SYSTOLIC_COUT_PAR] = {zero_weight,zero_weight,zero_weight,zero_weight};
-                #pragma HLS ARRAY_PARTITION variable=weight_edge complete dim=0
+            // activation错拍寄存器
+            pixel_with_valid_pack_t A1_delay[1] = {zero_activation, };
+            pixel_with_valid_pack_t A2_delay[2] = {zero_activation, zero_activation, };
+            pixel_with_valid_pack_t A3_delay[3] = {
+                zero_activation, zero_activation, zero_activation, };
+#pragma HLS ARRAY_PARTITION variable=A1_delay complete
+#pragma HLS ARRAY_PARTITION variable=A2_delay complete
+#pragma HLS ARRAY_PARTITION variable=A3_delay complete
 
-                //activation错拍寄存器
-                pixel_with_valid_pack_t A1_delay[1] = {zero_activation,};
-                pixel_with_valid_pack_t A2_delay[2] = {zero_activation,zero_activation,};
-                pixel_with_valid_pack_t A3_delay[3] = {zero_activation,zero_activation,zero_activation,};
-                #pragma HLS ARRAY_PARTITION variable=A1_delay complete
-                #pragma HLS ARRAY_PARTITION variable=A2_delay complete
-                #pragma HLS ARRAY_PARTITION variable=A3_delay complete
+            // weight错拍寄存器
+            weight_with_valid_pack_t W1_delay[1] = {zero_weight, };
+            weight_with_valid_pack_t W2_delay[2] = {zero_weight, zero_weight, };
+            weight_with_valid_pack_t W3_delay[3] = {
+                zero_weight, zero_weight, zero_weight, };
+#pragma HLS ARRAY_PARTITION variable=W1_delay complete
+#pragma HLS ARRAY_PARTITION variable=W2_delay complete
+#pragma HLS ARRAY_PARTITION variable=W3_delay complete
 
-                //weight错拍寄存器
-                weight_with_valid_pack_t W1_delay[1] = {zero_weight,};
-                weight_with_valid_pack_t W2_delay[2] = {zero_weight,zero_weight,};
-                weight_with_valid_pack_t W3_delay[3] = {zero_weight,zero_weight,zero_weight,};
-                #pragma HLS ARRAY_PARTITION variable=W1_delay complete
-                #pragma HLS ARRAY_PARTITION variable=W2_delay complete
-                #pragma HLS ARRAY_PARTITION variable=W3_delay complete
-
-                clear_accumualtor(accumulator);
-                clear_activation_trans(activation_trans);
-                clear_weight_trans(weight_trans);
-                for (int cycle = 0; cycle < SYSTOLIC_EXCU_TIME; ++cycle) {
+            clear_accumulator(accumulator);
+            clear_activation_trans(activation_trans);
+            clear_weight_trans(weight_trans);
+            for (int cycle = 0; cycle < SYSTOLIC_WAVEFRONT_STEPS; ++cycle) {
 #pragma HLS PIPELINE II=1
 
-                    //边界填充
-                    activation_edge[1] = A1_delay[0];
-                    activation_edge[2] = A2_delay[1];
-                    activation_edge[3] = A3_delay[2];
-                    weight_edge[1] = W1_delay[0];
-                    weight_edge[2] = W2_delay[1];
-                    weight_edge[3] = W3_delay[2];
+                // 边界填充
+                activation_edge[1] = A1_delay[0];
+                activation_edge[2] = A2_delay[1];
+                activation_edge[3] = A3_delay[2];
+                weight_edge[1] = W1_delay[0];
+                weight_edge[2] = W2_delay[1];
+                weight_edge[3] = W3_delay[2];
 
-                    //滞后寄存器
-                    A3_delay[2] = A3_delay[1];
-                    A3_delay[1] = A3_delay[0];
-                    A2_delay[1] = A2_delay[0];
+                // 滞后寄存器
+                A3_delay[2] = A3_delay[1];
+                A3_delay[1] = A3_delay[0];
+                A2_delay[1] = A2_delay[0];
 
-                    W3_delay[2] = W3_delay[1];
-                    W3_delay[1] = W3_delay[0];
-                    W2_delay[1] = W2_delay[0];
+                W3_delay[2] = W3_delay[1];
+                W3_delay[1] = W3_delay[0];
+                W2_delay[1] = W2_delay[0];
 
-                    activation_pack_t activation_raw;
-                    weight_pack_t weight_raw;
-                    if(cycle < SYSTOLIC_KERNEL_TOKENS) {
-                        const ap_uint<6> weight_address = weight_base + cycle;
+                activation_pack_t activation_raw;
+                weight_pack_t weight_raw;
+                if (cycle < SYSTOLIC_KERNEL_TOKENS) {
+                    const ap_uint<6> weight_address = weight_base + cycle;
 
-                        if (cout_tile == 0) {
-                            activation_raw = activation_stream.read();
+                    if (cout_tile == 0) {
+                        activation_raw = activation_stream.read();
 
-                            if (cycle == 0) {
-                                tile_spatial_valid = activation_raw.spatial_valid;
-                            }
+                        if (cycle == 0) {
+                            tile_spatial_valid = activation_raw.spatial_valid;
+                        }
 
-                            //填充activation
-                            activation_edge[0].pixel = activation_raw.pixel[0];
-                            A1_delay[0].pixel = activation_raw.pixel[1];
-                            A2_delay[0].pixel = activation_raw.pixel[2];
-                            A3_delay[0].pixel = activation_raw.pixel[3];
+                        // 填充activation
+                        activation_edge[0].pixel = activation_raw.pixel[0];
+                        A1_delay[0].pixel = activation_raw.pixel[1];
+                        A2_delay[0].pixel = activation_raw.pixel[2];
+                        A3_delay[0].pixel = activation_raw.pixel[3];
 
-                            //保存activation
-                            for (int spatial_lane = 0; spatial_lane < SYSTOLIC_SPATIAL_PAR;
-                             ++spatial_lane) {
+                        // 保存activation
+                        for (int spatial_lane = 0;
+                             spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
 #pragma HLS UNROLL
-                                activation_bank[spatial_lane][cycle] =
-                                    pack_activation_lane(activation_raw.pixel[spatial_lane]);
+                            activation_bank[spatial_lane][cycle] =
+                                pack_activation_lane(activation_raw.pixel[spatial_lane]);
+                        }
+                    } else {
+                        // 填充activation
+                        activation_edge[0].pixel = unpack_activation_lane(activation_bank[0][cycle]);
+                        A1_delay[0].pixel = unpack_activation_lane(activation_bank[1][cycle]);
+                        A2_delay[0].pixel = unpack_activation_lane(activation_bank[2][cycle]);
+                        A3_delay[0].pixel = unpack_activation_lane(activation_bank[3][cycle]);
+                    }
+                    activation_edge[0].valid = (ap_uint<1>) 1;
+                    A1_delay[0].valid = (ap_uint<1>) 1;
+                    A2_delay[0].valid = (ap_uint<1>) 1;
+                    A3_delay[0].valid = (ap_uint<1>) 1;
+
+                    if (first_spatial_tile) {
+                        weight_raw = weight_stream.read();
+
+                        // Conv1 即使输入权重的无效 Cin 非零，也在入口清零；
+                        weight_pack_t normalized_weight;
+                        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
+#pragma HLS UNROLL
+                            for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
+#pragma HLS UNROLL
+                                normalized_weight.lane[cout_lane].channel[channel] =
+                                    (channel == 0 || is_conv2) ?
+                                        weight_raw.lane[cout_lane].channel[channel] : weight_t(0);
                             }
                         }
-                        else {
-                            //填充activation
-                            activation_edge[0].pixel = unpack_activation_lane(activation_bank[0][cycle]);
-                            A1_delay[0].pixel = unpack_activation_lane(activation_bank[1][cycle]);
-                            A2_delay[0].pixel = unpack_activation_lane(activation_bank[2][cycle]);
-                            A3_delay[0].pixel = unpack_activation_lane(activation_bank[3][cycle]);
-                        }
-                            activation_edge[0].valid = (ap_uint<1>) 1;
-                            A1_delay[0].valid = (ap_uint<1>) 1;
-                            A2_delay[0].valid = (ap_uint<1>) 1;
-                            A3_delay[0].valid = (ap_uint<1>) 1;
 
-                        if(first_spatial_tile) {
-                            weight_raw = weight_stream.read();
+                        weight_edge[0].weight = normalized_weight.lane[0];
+                        W1_delay[0].weight = normalized_weight.lane[1];
+                        W2_delay[0].weight = normalized_weight.lane[2];
+                        W3_delay[0].weight = normalized_weight.lane[3];
 
-                            // Conv1 即使输入权重的无效 Cin 非零，也在入口清零；
-                            weight_pack_t normalized_weight;
-                            for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
-#pragma HLS UNROLL
-                                for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
-#pragma HLS UNROLL
-                                    normalized_weight.lane[cout_lane].channel[channel] =
-                                        (channel == 0 || is_conv2) ?
-                                            weight_raw.lane[cout_lane].channel[channel] : weight_t(0);
-                                }
-                            }
-
-                            weight_edge[0].weight = normalized_weight.lane[0];
-                            W1_delay[0].weight = normalized_weight.lane[1];
-                            W2_delay[0].weight = normalized_weight.lane[2];
-                            W3_delay[0].weight = normalized_weight.lane[3];
-
-                            //保存weight
-                            for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
+                        // 保存weight
+                        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
                             weight_bank[cout_lane][weight_address] =
                                 pack_weight_lane(normalized_weight.lane[cout_lane]);
-                            }
                         }
-                        else {
-                            weight_edge[0].weight = unpack_weight_lane(weight_bank[0][weight_address]);
-                            W1_delay[0].weight = unpack_weight_lane(weight_bank[1][weight_address]);
-                            W2_delay[0].weight = unpack_weight_lane(weight_bank[2][weight_address]);
-                            W3_delay[0].weight = unpack_weight_lane(weight_bank[3][weight_address]);
-                        }
-                            weight_edge[0].valid = (ap_uint<1>) 1;
-                            W1_delay[0].valid = (ap_uint<1>) 1;
-                            W2_delay[0].valid = (ap_uint<1>) 1;
-                            W3_delay[0].valid = (ap_uint<1>) 1;
-                        }
-                    else {
-                        // 9拍输入注入完毕，随后6拍注入零事务排空波前。
-                            activation_edge[0] = zero_activation;
-                            A1_delay[0] = zero_activation;
-                            A2_delay[0] = zero_activation;
-                            A3_delay[0] = zero_activation;
-                            weight_edge[0] = zero_weight;
-                            W1_delay[0] = zero_weight;
-                            W2_delay[0] = zero_weight;
-                            W3_delay[0] = zero_weight;
+                    } else {
+                        weight_edge[0].weight = unpack_weight_lane(weight_bank[0][weight_address]);
+                        W1_delay[0].weight = unpack_weight_lane(weight_bank[1][weight_address]);
+                        W2_delay[0].weight = unpack_weight_lane(weight_bank[2][weight_address]);
+                        W3_delay[0].weight = unpack_weight_lane(weight_bank[3][weight_address]);
                     }
+                    weight_edge[0].valid = (ap_uint<1>) 1;
+                    W1_delay[0].valid = (ap_uint<1>) 1;
+                    W2_delay[0].valid = (ap_uint<1>) 1;
+                    W3_delay[0].valid = (ap_uint<1>) 1;
+                } else {
+                    // 9拍输入注入完毕，随后6拍注入零事务排空波前。
+                    activation_edge[0] = zero_activation;
+                    A1_delay[0] = zero_activation;
+                    A2_delay[0] = zero_activation;
+                    A3_delay[0] = zero_activation;
+                    weight_edge[0] = zero_weight;
+                    W1_delay[0] = zero_weight;
+                    W2_delay[0] = zero_weight;
+                    W3_delay[0] = zero_weight;
+                }
 
-                    //Output-Stational脉动阵列
-                    for (int spatial_lane = SYSTOLIC_SPATIAL_PAR-1; spatial_lane >= 0; --spatial_lane) {
+                // Output-stationary脉动阵列
+                for (int spatial_lane = SYSTOLIC_SPATIAL_PAR - 1; spatial_lane >= 0; --spatial_lane) {
 #pragma HLS UNROLL
-                        for (int cout_lane = SYSTOLIC_COUT_PAR-1; cout_lane >= 0; --cout_lane) {
+                    for (int cout_lane = SYSTOLIC_COUT_PAR - 1; cout_lane >= 0; --cout_lane) {
 #pragma HLS UNROLL
-                            //activation与weight array脉动赋值
-                            weight_trans[spatial_lane][cout_lane] = (spatial_lane== 0) ?
-                                weight_edge[cout_lane] : weight_trans[spatial_lane-1][cout_lane];
-                            activation_trans[spatial_lane][cout_lane] = (cout_lane== 0) ?
-                                activation_edge[spatial_lane] : activation_trans[spatial_lane][cout_lane-1];
+                        // activation与weight array脉动赋值
+                        weight_trans[spatial_lane][cout_lane] = (spatial_lane == 0) ?
+                            weight_edge[cout_lane] : weight_trans[spatial_lane - 1][cout_lane];
+                        activation_trans[spatial_lane][cout_lane] = (cout_lane == 0) ?
+                            activation_edge[spatial_lane] : activation_trans[spatial_lane][cout_lane - 1];
 
-                            if (activation_trans[spatial_lane][cout_lane].valid
-                                && weight_trans[spatial_lane][cout_lane].valid && tile_spatial_valid[spatial_lane]) {
-                                    const dot_t dot = dot_product(activation_trans[spatial_lane][cout_lane].pixel,weight_trans[spatial_lane][cout_lane].weight);
-                                    accumulator[spatial_lane][cout_lane] += (acc_t) dot;
-                            }
+                        if (activation_trans[spatial_lane][cout_lane].valid &&
+                            weight_trans[spatial_lane][cout_lane].valid &&
+                            tile_spatial_valid[spatial_lane]) {
+                            const dot_t dot = dot_product(
+                                activation_trans[spatial_lane][cout_lane].pixel,
+                                weight_trans[spatial_lane][cout_lane].weight);
+                            accumulator[spatial_lane][cout_lane] += (acc_t) dot;
                         }
                     }
                 }
-
-                // token8 的累加已经写回 accumulator；本次 stream write 若阻塞，
-                // 外层控制器不会推进到下一 Cout Tile 或消费下一 activation。
-                acc_tile_t result;
-                result.spatial_valid = tile_spatial_valid;
-                for (int spatial_lane = 0;
-                     spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
-#pragma HLS UNROLL
-                    for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR;
-                         ++cout_lane) {
-#pragma HLS UNROLL
-                        result.value[spatial_lane][cout_lane] =
-                            accumulator[spatial_lane][cout_lane];
-                    }
-                }
-                output_stream.write(result);
-                weight_base += SYSTOLIC_KERNEL_TOKENS;
             }
-    }
 
+            // 9步注入与6步排空后，所有 PE 均已将 token8 累加写回 accumulator；
+            // 本次 stream write 若阻塞，
+            // 外层控制器不会推进到下一 Cout Tile 或消费下一 activation。
+            acc_tile_t result;
+            result.spatial_valid = tile_spatial_valid;
+            for (int spatial_lane = 0;
+                 spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
+#pragma HLS UNROLL
+                for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR;
+                     ++cout_lane) {
+#pragma HLS UNROLL
+                    result.value[spatial_lane][cout_lane] =
+                        accumulator[spatial_lane][cout_lane];
+                }
+            }
+            output_stream.write(result);
+            weight_base += SYSTOLIC_KERNEL_TOKENS;
+        }
+    }
 }

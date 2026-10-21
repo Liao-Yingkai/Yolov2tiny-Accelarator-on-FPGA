@@ -1,16 +1,16 @@
 #include "fc.h"
 
 #ifndef __SYNTHESIS__
-#include <assert.h>
+#include <cassert>
 #endif
 
 namespace {
 
-typedef ap_uint<FC_ACTIVATION_WORD_BITS> fc_activation_word_t;
+using fc_activation_word_t = ap_uint<FC_ACTIVATION_WORD_BITS>;
 
 // 保留 activation 的二进制补码位型；Pool2 channel_pack_t 的 channel[0..7]
 // 就是当前 NHWC token 的连续8个通道。
-static fc_activation_word_t pack_activation(const channel_pack_t& input) {
+fc_activation_word_t pack_activation(const channel_pack_t& input) {
 #pragma HLS INLINE
     fc_activation_word_t packed = 0;
     for (int cin_lane = 0; cin_lane < FC_CIN_PAR; ++cin_lane) {
@@ -22,8 +22,8 @@ static fc_activation_word_t pack_activation(const channel_pack_t& input) {
     return packed;
 }
 
-static activation_t unpack_activation(const fc_activation_word_t& packed,
-                                      int cin_lane) {
+activation_t unpack_activation(const fc_activation_word_t& packed,
+                               int cin_lane) {
 #pragma HLS INLINE
     activation_t result;
     const int low_bit = cin_lane * ACTIVATION_BITS;
@@ -34,9 +34,9 @@ static activation_t unpack_activation(const fc_activation_word_t& packed,
 
 // 固定8项INT8 dot的4层平衡加法树。中间位宽均从PRODUCT_BITS派生，避免
 // 工具将链式加法改写为不必要的长进位路径。
-static ap_int<FC_DOT_BITS> dot8(const fc_activation_word_t& activation_word,
-                       const fc_weight_pack_t& weights,
-                       int cout_lane) {
+ap_int<FC_DOT_BITS> dot8(const fc_activation_word_t& activation_word,
+                         const fc_weight_pack_t& weights,
+                         int cout_lane) {
 #pragma HLS INLINE
     ap_int<PRODUCT_BITS> product[FC_CIN_PAR];
 #pragma HLS ARRAY_PARTITION variable=product complete dim=1

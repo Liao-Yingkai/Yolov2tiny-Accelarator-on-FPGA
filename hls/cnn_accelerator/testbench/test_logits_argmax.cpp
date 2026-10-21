@@ -6,7 +6,7 @@
 
 namespace {
 
-static int scalar_reference(const logits_pack_t& logits) {
+int scalar_reference(const logits_pack_t& logits) {
     int best_index = 0;
     int best_value = logits.value[0].to_int();
     for (int i = 1; i < FC_OUTPUTS; ++i) {
@@ -20,8 +20,8 @@ static int scalar_reference(const logits_pack_t& logits) {
     return best_index;
 }
 
-static int run_case(const char* name, const logits_pack_t& logits,
-                    int expected_winner) {
+int run_case(const char* name, const logits_pack_t& logits,
+             int expected_winner) {
     hls::stream<logits_pack_t> input_stream;
     hls::stream<class_index_t> output_stream;
     input_stream.write(logits);

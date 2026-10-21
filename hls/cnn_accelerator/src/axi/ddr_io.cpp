@@ -1,6 +1,6 @@
 #include "ddr_io.h"
 #ifndef __SYNTHESIS__
-#include <assert.h>
+#include <cassert>
 #endif
 
 namespace ddr_io {

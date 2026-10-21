@@ -101,16 +101,21 @@ Vitis 工程元数据仍含原机器绝对路径，迁移工作区后可能需�
 - 注释、文档、断言和工程说明统一使用中文；
 - 性能和资源结论必须以综合与协同仿真报告为准。
 
+手写HLS代码按C++14整理：类型别名使用`using`，普通整数编译期配置使用
+`constexpr`，文件内辅助函数由匿名namespace限定，不重复添加`static`。
+跨调用保存状态的局部`static`、原生硬件数组、初始化和显式位宽转换仍按硬件语义
+保留；Vitis的C应用及工具生成的RTL/驱动不套用这套C++写法。
+
 ## 当前数据流
 
 ```text
 输入加载器或片上输入缓冲
            │
            ▼
-标量、通道打包 pixel_t 流
+NHWC 通道打包 pixel_t 流
            │
            ▼
-Im2Row ── P 路 activation_pack_t ──► 广播型 P×P Systolic
+Im2Row ── P 路 activation_pack_t ──► P×P Systolic（OS / Broadcast 编译期选择）
                                               │
                                               ▼
                                ConvPostProcess ──► Pool / 后续 Conv / 独立 FC
@@ -180,8 +185,10 @@ Systolic 采用 `4 spatial × 4 Cout` Broadcast / Output-Stationary PE Array，�
 
 另提供的 `systolic_OS.cpp`：Activation 向右传播、Weight 向下传播，边界按
 lane 延迟0/1/2/3步，部分和保留在 PE 内。每个 PE 仍是8路 Cin SIMD 点积，
-不是将 Cin 再串行化的标量阵列。当前计算核心和两个 Systolic testbench 的
-`SYSTOLIC_OS=1` 选择此实现；这是编译期选择，不是额外实例化第二套卷积阵列。
+不是将 Cin 再串行化的标量阵列。当前计算核心和两个 Systolic testbench
+统一读取`config.h`中的`CNN_SYSTOLIC_USE_OS`：默认`1`选择此实现，`0`选择广播式。
+也可通过编译选项`-DCNN_SYSTOLIC_USE_OS=0`切换，但必须在全部相关编译单元中
+保持一致。这是编译期选择，不是额外实例化第二套卷积阵列。
 
 ## Pool 第一版设计
 

@@ -10,8 +10,8 @@ struct argmax_candidate_t {
     class_index_t index;
 };
 
-static argmax_candidate_t choose_better(argmax_candidate_t left,
-                                        argmax_candidate_t right) {
+argmax_candidate_t choose_better(argmax_candidate_t left,
+                                 argmax_candidate_t right) {
 #pragma HLS INLINE
     // 固定平衡树中，每次调用的 left/right 分别来自严格递增且不重叠的
     // 类别索引区间，left 区间始终较小。因此 >= 在相等时保留 first index，

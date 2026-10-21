@@ -2,7 +2,7 @@
 
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0000.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 
 #include <fstream>
@@ -20,13 +20,13 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -35,24 +35,24 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int input_value(bool pool2, int y, int x, int channel) {
+int input_value(bool pool2, int y, int x, int channel) {
     return pool2 ? trace_conv2_requant_int8_nhwc[
                        (y * CNN_CONV2_W + x) * CNN_CONV2_COUT + channel]
                  : trace_conv1_requant_int8_nhwc[
                        (y * CNN_CONV1_W + x) * CNN_CONV1_COUT + channel];
 }
 
-static int golden_value(bool pool2, int y, int x, int channel) {
+int golden_value(bool pool2, int y, int x, int channel) {
     return pool2 ? trace_pool2_int8_nhwc[
                        (y * CNN_POOL2_W + x) * CNN_POOL2_C + channel]
                  : trace_pool1_int8_nhwc[
                        (y * CNN_POOL1_W + x) * CNN_POOL1_C + channel];
 }
 
-static int run_layer(layer_mode_t layer_mode,
-                     hls::stream<activation_tile_t>& input_stream,
-                     hls::stream<channel_pack_t>& output_stream,
-                     const char* name, const std::string& directory) {
+int run_layer(layer_mode_t layer_mode,
+              hls::stream<activation_tile_t>& input_stream,
+              hls::stream<channel_pack_t>& output_stream,
+              const char* name, const std::string& directory) {
     const bool pool2 = (layer_mode == LAYER2_MODE);
     const int H = pool2 ? CNN_CONV2_H : CNN_CONV1_H;
     const int W = pool2 ? CNN_CONV2_W : CNN_CONV1_W;

@@ -1,16 +1,16 @@
 #include "im2row.h"
 
 #ifndef __SYNTHESIS__
-#include <assert.h>
+#include <cassert>
 #endif
 
 namespace {
 
 // Line Buffer 的一个存储字完整包含一个空间位置的全部物理通道。
 // IM2ROW_MAX_CHANNELS 对应当前通道并行度 C_PAR；默认配置下字宽为 8×8=64 位。
-static const int IM2ROW_LINE_WORD_BITS =
+constexpr int IM2ROW_LINE_WORD_BITS =
     ACTIVATION_BITS * IM2ROW_MAX_CHANNELS;
-typedef ap_uint<IM2ROW_LINE_WORD_BITS> line_word_t;
+using line_word_t = ap_uint<IM2ROW_LINE_WORD_BITS>;
 
 // 把一个 pixel_t 的全部物理通道写成量化零点。
 void clear_pixel(pixel_t& pixel) {

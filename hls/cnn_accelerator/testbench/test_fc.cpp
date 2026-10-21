@@ -1,6 +1,6 @@
 #include "../src/fc/fc.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <stdint.h>
 #include <sys/stat.h>
 
@@ -20,13 +20,13 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -35,24 +35,24 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int activation_value(int case_id, int y, int x, int channel) {
+int activation_value(int case_id, int y, int x, int channel) {
     // 两个确定性模式必须不同，才能暴露跨调用残留；不使用随机数据。
     return case_id == 0 ?
         ((3 + y * 17 + x * 11 + channel * 7) % 31) - 15 :
         ((29 + y * 17 + x * 11 + channel * 7) % 31) - 15;
 }
 
-static int weight_value(int case_id, int output, int input) {
+int weight_value(int case_id, int output, int input) {
     return case_id == 0 ?
         ((3 + output * 13 + input * 5) % 15) - 7 :
         ((29 + output * 13 + input * 5) % 15) - 7;
 }
 
-static void write_case(hls::stream<channel_pack_t>& input_stream,
-                       hls::stream<fc_weight_pack_t>& weight_stream,
-                       int case_id, std::ofstream& input_csv,
-                       std::ofstream& weight_csv, int& inputs_written,
-                       int& weights_written) {
+void write_case(hls::stream<channel_pack_t>& input_stream,
+                hls::stream<fc_weight_pack_t>& weight_stream,
+                int case_id, std::ofstream& input_csv,
+                std::ofstream& weight_csv, int& inputs_written,
+                int& weights_written) {
     inputs_written = 0;
     weights_written = 0;
     // NHWC 49像素各写两个连续8通道pack，恰好98个输入事务。
@@ -97,9 +97,9 @@ static void write_case(hls::stream<channel_pack_t>& input_stream,
     }
 }
 
-static int check_mac(hls::stream<fc_acc_pack_t>& output_stream, int case_id,
-                     std::ofstream& mac_csv, int& comparisons,
-                     int& outputs_read) {
+int check_mac(hls::stream<fc_acc_pack_t>& output_stream, int case_id,
+              std::ofstream& mac_csv, int& comparisons,
+              int& outputs_read) {
     int32_t reference[FC_OUTPUTS] = {0};
     // 明确的784x10参考公式，不复用DUT的pack/replay实现。
     for (int y = 0; y < CNN_POOL2_H; ++y) {

@@ -1,6 +1,6 @@
 #include "../src/systolic/systolic.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <stdint.h>
 #include <sys/stat.h>
 
@@ -8,7 +8,6 @@
 #include <iostream>
 #include <string>
 
-#define SYSTOLIC_OS 1
 
 /*
  * Systolic 完整层定向 testbench。
@@ -24,13 +23,13 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -39,17 +38,17 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int activation_value(int spatial_tile, int token, int lane,
-                            int channel) {
+int activation_value(int spatial_tile, int token, int lane,
+                     int channel) {
     return ((spatial_tile * 3 + token * 5 + lane * 7 + channel * 11) % 15) - 7;
 }
 
-static int weight_value(int cout_tile, int token, int cout_lane,
-                        int channel) {
+int weight_value(int cout_tile, int token, int cout_lane,
+                 int channel) {
     return ((cout_tile * 5 + token * 3 + cout_lane * 7 + channel * 2) % 13) - 6;
 }
 
-static int token_contribution(bool conv2, int token) {
+int token_contribution(bool conv2, int token) {
     int sum = 0;
     for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
         const int activation = (conv2 || channel == 0) ?
@@ -59,11 +58,11 @@ static int token_contribution(bool conv2, int token) {
     return sum;
 }
 
-static int run_layer(hls::stream<activation_pack_t>& activation_stream,
-                     hls::stream<weight_pack_t>& weight_stream,
-                     hls::stream<acc_tile_t>& output_stream,
-                     layer_mode_t layer_mode, const char* name,
-                     const std::string& directory) {
+int run_layer(hls::stream<activation_pack_t>& activation_stream,
+              hls::stream<weight_pack_t>& weight_stream,
+              hls::stream<acc_tile_t>& output_stream,
+              layer_mode_t layer_mode, const char* name,
+              const std::string& directory) {
     const bool conv2 = (layer_mode == LAYER2_MODE);
     const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
     const int spatial_tiles = conv2 ? CNN_CONV2_SPATIAL_TILES : CNN_CONV1_SPATIAL_TILES;
@@ -143,7 +142,7 @@ static int run_layer(hls::stream<activation_pack_t>& activation_stream,
         }
     }
 
-#if SYSTOLIC_OS
+#if CNN_SYSTOLIC_USE_OS
     systolic_OS(activation_stream, weight_stream, output_stream, layer_mode);
 #else
     systolic(activation_stream, weight_stream, output_stream, layer_mode);

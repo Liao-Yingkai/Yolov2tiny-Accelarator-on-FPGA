@@ -6,13 +6,13 @@
 #include "config.h"
 
 // 对称八位有符号量化激活，数值0既是量化零点，也是卷积 Padding 的填充值。
-typedef ap_int<ACTIVATION_BITS> activation_t;
+using activation_t = ap_int<ACTIVATION_BITS>;
 
 // Systolic 第一版固定使用 8 位有符号权重和 32 位有符号累加器。虽然当前
 // IM2ROW_P 与输出通道并行度都为4，但二者在概念上独立，避免后续将空间
 // 并行度变化无意传递为 Cout 并行度变化。
-typedef ap_int<WEIGHT_BITS> weight_t;
-typedef ap_int<ACCUMULATOR_BITS> acc_t;
+using weight_t = ap_int<WEIGHT_BITS>;
+using acc_t = ap_int<ACCUMULATOR_BITS>;
 
 // 一个 FC 权重事务对应一个 out_tile 和一个8通道输入 token，逻辑位宽为
 // 5 x 8 x 8 = 320 bit。流顺序固定为 out_tile -> token。
@@ -33,9 +33,9 @@ struct fc_param_pack_t {
     ap_int<32> shift[FC_COUT_PAR];
 };
 
-typedef ap_int<ACTIVATION_BITS> logit_t;
+using logit_t = ap_int<ACTIVATION_BITS>;
 // MNIST 的类别索引范围为0..9，4 bit足以表达全部类别。
-typedef ap_uint<4> class_index_t;
+using class_index_t = ap_uint<4>;
 
 // FC 最终只写出一个完整的10类 signed INT8 logit Pack。
 struct logits_pack_t {
@@ -51,7 +51,7 @@ struct pixel_t {
 // Pool 与后续层之间也以一个空间位置的连续8个物理通道为基本事务。该别名
 // 明确表达其通道 pack 语义，同时保证 Pool1 的输出可直接作为 Conv2 Im2Row
 // 所需的 pixel_t 输入。
-typedef pixel_t channel_pack_t;
+using channel_pack_t = pixel_t;
 
 // activation_pack_t 是 Im2Row 到 Systolic 的基本流事务：P 个像素属于同一输出行、
 // 同一 Tile 和同一个 (kh,kw)。Systolic 的接口目标是在每个成功接收周期消费一个 Pack。
@@ -63,7 +63,8 @@ struct activation_pack_t {
 };
 
 // 一个 weight_lane_t 对应当前 Cout Tile 中的一条输出通道，并固定打包8个
-// 物理输入通道。Conv1 由权重导出端将 channel[1..7] 填零。
+// 物理输入通道。Conv1 的有效 Cin 由 Systolic 保证；stream 保持8个物理 Cin，
+// DDR 权重仍使用紧凑的原始逻辑 Cin 布局。
 struct weight_lane_t {
     weight_t channel[SYSTOLIC_CIN_PAR];
 };

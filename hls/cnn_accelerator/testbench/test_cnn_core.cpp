@@ -26,7 +26,7 @@ namespace trace_data_0002 {
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_shift.h"
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_weight.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 
 #include <fstream>
@@ -56,13 +56,13 @@ namespace {
 static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION == 2 &&
               FC_WEIGHT_LAYOUT_VERSION == 2, "requires blocked weight headers v2");
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -77,9 +77,9 @@ struct trace_sample_t {
     const int8_t* logits_int8;
 };
 
-static void write_image(const trace_sample_t& trace,
-                        hls::stream<pixel_t>& image_stream,
-                        std::ofstream& input_csv) {
+void write_image(const trace_sample_t& trace,
+                 hls::stream<pixel_t>& image_stream,
+                 std::ofstream& input_csv) {
     for (int y = 0; y < CNN_CONV1_H; ++y) {
         for (int x = 0; x < CNN_CONV1_W; ++x) {
             pixel_t pixel;
@@ -98,7 +98,7 @@ static void write_image(const trace_sample_t& trace,
     }
 }
 
-static int conv_weight_value(bool conv2, int token, int channel, int output) {
+int conv_weight_value(bool conv2, int token, int channel, int output) {
     // v2 卷积头：[cout_tile][kh*3+kw][cout_lane][实际 Cin]。
     const int pack_lane = ((output / SYSTOLIC_COUT_PAR) * SYSTOLIC_KERNEL_TOKENS + token)
                           * SYSTOLIC_COUT_PAR + output % SYSTOLIC_COUT_PAR;
@@ -109,8 +109,8 @@ static int conv_weight_value(bool conv2, int token, int channel, int output) {
     return conv2_weight[pack_lane * CNN_CONV2_CIN + channel];
 }
 
-static void write_conv_weights(bool conv2,
-                               hls::stream<weight_pack_t>& weight_stream) {
+void write_conv_weights(bool conv2,
+                        hls::stream<weight_pack_t>& weight_stream) {
     const int cout_tiles = conv2 ? CNN_CONV2_COUT_TILES : CNN_CONV1_COUT_TILES;
     for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
         for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS; ++token) {
@@ -128,20 +128,20 @@ static void write_conv_weights(bool conv2,
     }
 }
 
-static int conv_bias_value(bool conv2, int output) {
+int conv_bias_value(bool conv2, int output) {
     return conv2 ? conv2_bias[output] : conv1_bias[output];
 }
 
-static int conv_multiplier_value(bool conv2, int output) {
+int conv_multiplier_value(bool conv2, int output) {
     return conv2 ? conv2_multiplier[output] : conv1_multiplier[output];
 }
 
-static int conv_shift_value(bool conv2, int output) {
+int conv_shift_value(bool conv2, int output) {
     return conv2 ? conv2_shift[output] : conv1_shift[output];
 }
 
-static void write_conv_params(bool conv2,
-                              hls::stream<postprocess_param_pack_t>& param_stream) {
+void write_conv_params(bool conv2,
+                       hls::stream<postprocess_param_pack_t>& param_stream) {
     const int cout_tiles = conv2 ? CNN_CONV2_COUT_TILES : CNN_CONV1_COUT_TILES;
     for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
         postprocess_param_pack_t param;
@@ -155,7 +155,7 @@ static void write_conv_params(bool conv2,
     }
 }
 
-static void write_fc_weights(hls::stream<fc_weight_pack_t>& weight_stream) {
+void write_fc_weights(hls::stream<fc_weight_pack_t>& weight_stream) {
     for (int out_tile = 0; out_tile < FC_OUT_TILES; ++out_tile) {
         for (int token = 0; token < FC_INPUT_PACKS; ++token) {
             fc_weight_pack_t weight;
@@ -170,7 +170,7 @@ static void write_fc_weights(hls::stream<fc_weight_pack_t>& weight_stream) {
     }
 }
 
-static void write_fc_params(hls::stream<fc_param_pack_t>& param_stream) {
+void write_fc_params(hls::stream<fc_param_pack_t>& param_stream) {
     for (int out_tile = 0; out_tile < FC_OUT_TILES; ++out_tile) {
         fc_param_pack_t param;
         for (int lane = 0; lane < FC_COUT_PAR; ++lane) {

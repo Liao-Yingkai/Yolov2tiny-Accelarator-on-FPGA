@@ -3,7 +3,7 @@
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0000.h"
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_weight.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 
 #include <fstream>
@@ -22,13 +22,13 @@
 namespace {
 static_assert(FC_WEIGHT_LAYOUT_VERSION == 2, "requires blocked FC weight header v2");
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -37,10 +37,10 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int run_fc(hls::stream<channel_pack_t>& input_stream,
-                  hls::stream<fc_weight_pack_t>& weight_stream,
-                  hls::stream<fc_acc_pack_t>& output_stream,
-                  const std::string& directory) {
+int run_fc(hls::stream<channel_pack_t>& input_stream,
+           hls::stream<fc_weight_pack_t>& weight_stream,
+           hls::stream<fc_acc_pack_t>& output_stream,
+           const std::string& directory) {
     std::ofstream input_csv, weight_csv, output_csv;
     if (!open_csv(input_csv, directory + "/input.csv",
                   "transaction,pooled_y,pooled_x,channel_pack,cin_lane,channel,value") ||

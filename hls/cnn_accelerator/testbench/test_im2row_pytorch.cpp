@@ -4,7 +4,7 @@
 // 后续系统集成时可改为由构建脚本传入的相对 include 路径。
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0000.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 
 #include <fstream>
@@ -26,13 +26,13 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -41,7 +41,7 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int input_value(bool conv2, int y, int x, int channel) {
+int input_value(bool conv2, int y, int x, int channel) {
     if (!conv2) {
         // Conv1 实际只有 c0；非逻辑 physical channel 用 poison 验证规范化。
         return channel == 0 ? trace_input_int8_hwc[y * CNN_CONV1_W + x]
@@ -51,7 +51,7 @@ static int input_value(bool conv2, int y, int x, int channel) {
                                  channel];
 }
 
-static int unfold_value(bool conv2, int spatial, int token, int channel) {
+int unfold_value(bool conv2, int spatial, int token, int channel) {
     if (!conv2) {
         return channel == 0 ? trace_conv1_unfold_int8[
                                   spatial * SYSTOLIC_KERNEL_TOKENS + token]
@@ -62,9 +62,9 @@ static int unfold_value(bool conv2, int spatial, int token, int channel) {
         token * CNN_CONV2_CIN + channel];
 }
 
-static int run_layer(layer_mode_t layer_mode, hls::stream<pixel_t>& input_stream,
-                     hls::stream<activation_pack_t>& output_stream,
-                     const char* name, const std::string& directory) {
+int run_layer(layer_mode_t layer_mode, hls::stream<pixel_t>& input_stream,
+              hls::stream<activation_pack_t>& output_stream,
+              const char* name, const std::string& directory) {
     const bool conv2 = (layer_mode == LAYER2_MODE);
     const int H = conv2 ? CNN_CONV2_H : CNN_CONV1_H;
     const int W = conv2 ? CNN_CONV2_W : CNN_CONV1_W;

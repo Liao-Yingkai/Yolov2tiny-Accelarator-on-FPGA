@@ -1,6 +1,6 @@
 #include "../src/pool/pool.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 
 #include <fstream>
@@ -20,13 +20,13 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -35,16 +35,16 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int source_value(int y, int x, int channel) {
+int source_value(int y, int x, int channel) {
     return ((y * 19 + x * 11 + channel * 7) % 201) - 100;
 }
 
-static int source_index(int y, int x, int channel, int width, int cout) {
+int source_index(int y, int x, int channel, int width, int cout) {
     return (y * width + x) * cout + channel;
 }
 
-static int run_layer(layer_mode_t layer_mode, const char* name,
-                     const std::string& directory) {
+int run_layer(layer_mode_t layer_mode, const char* name,
+              const std::string& directory) {
     const bool pool2 = (layer_mode == LAYER2_MODE);
     const int H = pool2 ? CNN_CONV2_H : CNN_CONV1_H;
     const int W = pool2 ? CNN_CONV2_W : CNN_CONV1_W;

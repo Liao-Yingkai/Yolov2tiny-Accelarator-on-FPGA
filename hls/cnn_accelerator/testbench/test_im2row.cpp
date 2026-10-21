@@ -1,6 +1,6 @@
 #include "../src/im2row/im2row.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <stdint.h>
 #include <sys/stat.h>
 
@@ -20,17 +20,17 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static int sample_value(int row, int col, int channel) {
+int sample_value(int row, int col, int channel) {
     return ((row * 13 + col * 7 + channel * 5) % 31) - 15;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -39,10 +39,10 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int run_layer(hls::stream<pixel_t>& input_stream,
-                     hls::stream<activation_pack_t>& output_stream,
-                     layer_mode_t layer_mode, const char* name,
-                     const std::string& directory) {
+int run_layer(hls::stream<pixel_t>& input_stream,
+              hls::stream<activation_pack_t>& output_stream,
+              layer_mode_t layer_mode, const char* name,
+              const std::string& directory) {
     const bool conv2 = (layer_mode == LAYER2_MODE);
     const int H = conv2 ? CNN_CONV2_H : CNN_CONV1_H;
     const int W = conv2 ? CNN_CONV2_W : CNN_CONV1_W;

@@ -1,7 +1,7 @@
 #include "../src/postprocess/fc_postprocess.h"
 
-#include <assert.h>
-#include <errno.h>
+#include <cassert>
+#include <cerrno>
 #include <stdint.h>
 #include <sys/stat.h>
 
@@ -19,13 +19,13 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -34,8 +34,8 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int8_t reference_requantize(int32_t accumulator, int32_t bias,
-                                   int32_t multiplier, int32_t shift) {
+int8_t reference_requantize(int32_t accumulator, int32_t bias,
+                            int32_t multiplier, int32_t shift) {
     assert(multiplier >= 0 && shift >= 0);
     const int64_t biased = (int64_t)accumulator + bias;
     assert(biased >= INT32_MIN && biased <= INT32_MAX);
@@ -45,9 +45,9 @@ static int8_t reference_requantize(int32_t accumulator, int32_t bias,
     return scaled > 127 ? 127 : (scaled < -128 ? -128 : (int8_t)scaled);
 }
 
-static void make_case_value(int case_id, int output, int32_t& accumulator,
-                            int32_t& bias, int32_t& multiplier,
-                            int32_t& shift) {
+void make_case_value(int case_id, int output, int32_t& accumulator,
+                     int32_t& bias, int32_t& multiplier,
+                     int32_t& shift) {
     // 前五路显式覆盖负数 shift40/41、上饱和和下饱和；其余通道保持一般
     // signed bias/requant 组合。第二个 case 使用不同值检查没有上次调用残留。
     if (case_id == 0) {
@@ -70,11 +70,11 @@ static void make_case_value(int case_id, int output, int32_t& accumulator,
     }
 }
 
-static int run_case(int case_id, hls::stream<fc_acc_pack_t>& input_stream,
-                    hls::stream<fc_param_pack_t>& param_stream,
-                    hls::stream<logits_pack_t>& output_stream,
-                    std::ofstream& params_csv, std::ofstream& input_csv,
-                    std::ofstream& output_csv, int& comparisons) {
+int run_case(int case_id, hls::stream<fc_acc_pack_t>& input_stream,
+             hls::stream<fc_param_pack_t>& param_stream,
+             hls::stream<logits_pack_t>& output_stream,
+             std::ofstream& params_csv, std::ofstream& input_csv,
+             std::ofstream& output_csv, int& comparisons) {
     int32_t accumulator[FC_OUTPUTS];
     int32_t bias[FC_OUTPUTS];
     int32_t multiplier[FC_OUTPUTS];

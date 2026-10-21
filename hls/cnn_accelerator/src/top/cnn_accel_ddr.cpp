@@ -3,7 +3,7 @@
 #include "../axi/ddr_io.h"
 #include "../postprocess/logits_argmax.h"
 #ifndef __SYNTHESIS__
-#include <assert.h>
+#include <cassert>
 #endif
 
 namespace {

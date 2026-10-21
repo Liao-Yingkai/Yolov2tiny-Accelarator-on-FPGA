@@ -1,13 +1,13 @@
 #include "fc_postprocess.h"
 
 #ifndef __SYNTHESIS__
-#include <assert.h>
+#include <cassert>
 #endif
 
 namespace {
 
-static ap_int<64> arithmetic_right_shift(ap_int<64> value,
-                                         ap_int<32> shift) {
+ap_int<64> arithmetic_right_shift(ap_int<64> value,
+                                  ap_int<32> shift) {
 #pragma HLS INLINE
 #ifndef __SYNTHESIS__
     assert(shift >= 0);
@@ -20,7 +20,7 @@ static ap_int<64> arithmetic_right_shift(ap_int<64> value,
     return value >> (ap_uint<6>)shift;
 }
 
-static ap_int<32> checked_bias_add(acc_t accumulator, ap_int<32> bias) {
+ap_int<32> checked_bias_add(acc_t accumulator, ap_int<32> bias) {
 #pragma HLS INLINE
     const ap_int<33> biased_wide = (ap_int<33>)accumulator +
                                    (ap_int<33>)bias;

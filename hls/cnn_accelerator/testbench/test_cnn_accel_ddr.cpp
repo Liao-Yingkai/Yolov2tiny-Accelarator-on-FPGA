@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include "../src/top/cnn_accel_ddr.h"
-#include <errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 #include <fstream>
 #include <iostream>
@@ -44,16 +44,27 @@ static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION ==
 // 守卫紧邻有效区；输入和模型快照逐 word 比较，错误不依赖 assert/NDEBUG。
 template <typename T, int N> struct guarded_buffer {
     T storage[N + 2];
-    T* data() { return storage + 1; }
-    void initialize(T guard) {
-        storage[0] = guard; storage[N + 1] = guard;
-        for (int i = 0; i < N; ++i) data()[i] = 0;
+    T* data() {
+        return storage + 1;
     }
-    bool guards_ok(T guard) const { return storage[0] == guard && storage[N + 1] == guard; }
+    void initialize(T guard) {
+        storage[0] = guard;
+        storage[N + 1] = guard;
+        for (int i = 0; i < N; ++i) {
+            data()[i] = 0;
+        }
+    }
+    bool guards_ok(T guard) const {
+        return storage[0] == guard && storage[N + 1] == guard;
+    }
 };
 template <typename T, int N>
 bool unchanged(guarded_buffer<T, N>& buffer, const T (&copy)[N]) {
-    for (int i = 0; i < N; ++i) if (buffer.data()[i] != copy[i]) return false;
+    for (int i = 0; i < N; ++i) {
+        if (buffer.data()[i] != copy[i]) {
+            return false;
+        }
+    }
     return true;
 }
 void pack_conv_params(bool second, ap_int<32>* params) {
@@ -67,15 +78,18 @@ void pack_conv_params(bool second, ap_int<32>* params) {
     }
 }
 void pack_model(ap_uint<64>* weights, ap_int<32>* params) {
-    pack_conv_params(false, params); pack_conv_params(true, params);
+    pack_conv_params(false, params);
+    pack_conv_params(true, params);
     // v2 头已经是硬件消费顺序。仅逐字节连续拼接，不补通道、不重排。
     const int8_t* sources[] = {conv1_weight, conv2_weight, fc_weight};
     const int sizes[] = {sizeof(conv1_weight), sizeof(conv2_weight), sizeof(fc_weight)};
     int byte_offset = 0;
-    for (int layer = 0; layer < 3; ++layer)
-        for (int byte = 0; byte < sizes[layer]; ++byte, ++byte_offset)
+    for (int layer = 0; layer < 3; ++layer) {
+        for (int byte = 0; byte < sizes[layer]; ++byte, ++byte_offset) {
             weights[byte_offset / 8].range((byte_offset % 8) * 8 + 7, (byte_offset % 8) * 8) =
                 (ap_uint<8>)sources[layer][byte];
+        }
+    }
     for (int output = 0; output < FC_OUTPUTS; ++output) {
         params[ddr_layout::FC_PARAM_OFFSET + output] = fc_bias[output];
         params[ddr_layout::FC_PARAM_OFFSET + FC_OUTPUTS + output] = fc_multiplier[output];
@@ -114,21 +128,33 @@ int main() {
     guarded_buffer<ap_uint<64>, ddr_layout::WEIGHT_WORDS> weights;
     guarded_buffer<ap_int<32>, ddr_layout::PARAM_WORDS> params;
     guarded_buffer<ap_uint<64>, ddr_layout::RESULT_WORDS> result;
-    image.initialize(guard64); weights.initialize(guard64);
-    params.initialize(guard32); result.initialize(guard64);
+    image.initialize(guard64);
+    weights.initialize(guard64);
+    params.initialize(guard32);
+    result.initialize(guard64);
     // 模型仅准备一次，三次调用保留同一组基地址，只覆盖图像数据。
     pack_model(weights.data(), params.data());
     ap_uint<64> weight_copy[ddr_layout::WEIGHT_WORDS];
     ap_int<32> param_copy[ddr_layout::PARAM_WORDS];
-    for (int i = 0; i < ddr_layout::WEIGHT_WORDS; ++i) weight_copy[i] = weights.data()[i];
-    for (int i = 0; i < ddr_layout::PARAM_WORDS; ++i) param_copy[i] = params.data()[i];
+    for (int i = 0; i < ddr_layout::WEIGHT_WORDS; ++i) {
+        weight_copy[i] = weights.data()[i];
+    }
+    for (int i = 0; i < ddr_layout::PARAM_WORDS; ++i) {
+        param_copy[i] = params.data()[i];
+    }
     const char* dirs[] = {"simulation_data", "simulation_data/pytorch", "simulation_data/pytorch/ddr_wrapper"};
     for (int i = 0; i < 3; ++i) {
-        if (mkdir(dirs[i], 0777) != 0 && errno != EEXIST) { std::cerr << "无法创建 CSV 目录\n"; return 1; }
+        if (mkdir(dirs[i], 0777) != 0 && errno != EEXIST) {
+            std::cerr << "无法创建 CSV 目录\n";
+            return 1;
+        }
     }
     std::ofstream csv("simulation_data/pytorch/ddr_wrapper/output.csv");
     std::ofstream input_csv("simulation_data/pytorch/ddr_wrapper/input.csv");
-    if (!csv || !input_csv) { std::cerr << "无法打开 CSV\n"; return 1; }
+    if (!csv || !input_csv) {
+        std::cerr << "无法打开 CSV\n";
+        return 1;
+    }
     csv << "sample,output,expected,actual,match\n";
     input_csv << "sample,pixel,value\n";
     int errors = 0;
@@ -142,10 +168,13 @@ int main() {
                 input_csv << sample << ',' << word * ddr_layout::WORD_BYTES + byte << ','
                           << static_cast<int>(inputs[sample][word * ddr_layout::WORD_BYTES + byte]) << '\n';
             }
-            image.data()[word] = value; image_copy[word] = value;
+            image.data()[word] = value;
+            image_copy[word] = value;
         }
         // 非零旧值检测 writer 是否覆盖整个结果，包括所有保留高位。
-        for (int i = 0; i < ddr_layout::RESULT_WORDS; ++i) result.data()[i] = guard64;
+        for (int i = 0; i < ddr_layout::RESULT_WORDS; ++i) {
+            result.data()[i] = guard64;
+        }
         cnn_accelerator_ddr(image.data(), weights.data(), params.data(), result.data());
         int first_max = 0;
         for (int i = 0; i < FC_OUTPUTS; ++i) {
@@ -154,12 +183,15 @@ int main() {
             const bool match = wanted == actual;
             csv << sample << ',' << i << ',' << wanted << ',' << actual << ',' << match << '\n';
             if (!match) {
-                if (errors - errors_before < 4)
+                if (errors - errors_before < 4) {
                     std::cerr << "sample " << sample << " logit " << i << "：期望 " << wanted << "，实际 " << actual << '\n';
+                }
                 ++errors;
             }
             // 软件 scalar first-maximum，只在严格更大时更新。
-            if (expected[sample][i] > expected[sample][first_max]) first_max = i;
+            if (expected[sample][i] > expected[sample][first_max]) {
+                first_max = i;
+            }
         }
         const unsigned actual_class = result.data()[ddr_layout::CLASS_WORD_OFFSET].range(ddr_layout::CLASS_BIT_OFFSET + 31, ddr_layout::CLASS_BIT_OFFSET).to_uint();
         csv << sample << ",pred_class," << first_max << ',' << actual_class << ',' << (actual_class == (unsigned)first_max) << '\n';
@@ -168,18 +200,24 @@ int main() {
             ++errors;
         }
         if (result.data()[1].range(31, 16) != 0) {
-            std::cerr << "sample " << sample << " result word1 保留位非零\n"; ++errors;
+            std::cerr << "sample " << sample << " result word1 保留位非零\n";
+            ++errors;
         }
         if (!image.guards_ok(guard64) || !weights.guards_ok(guard64) || !params.guards_ok(guard32) || !result.guards_ok(guard64)) {
-            std::cerr << "sample " << sample << " buffer 守卫被修改\n"; ++errors;
+            std::cerr << "sample " << sample << " buffer 守卫被修改\n";
+            ++errors;
         }
         if (!unchanged(image, image_copy) || !unchanged(weights, weight_copy) || !unchanged(params, param_copy)) {
-            std::cerr << "sample " << sample << " 只读 DDR 区发生变化\n"; ++errors;
+            std::cerr << "sample " << sample << " 只读 DDR 区发生变化\n";
+            ++errors;
         }
         std::cout << "sample " << sample << (errors == errors_before ? " PASS" : " FAIL") << '\n';
     }
-    csv.flush(); input_csv.flush();
-    if (!csv.good() || !input_csv.good()) ++errors;
+    csv.flush();
+    input_csv.flush();
+    if (!csv.good() || !input_csv.good()) {
+        ++errors;
+    }
     std::cout << "DDR wrapper：三图、30 logits 与类别检查，错误数 " << errors << '\n';
     return errors == 0 ? 0 : 1;
 }

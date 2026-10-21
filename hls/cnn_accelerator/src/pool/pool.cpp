@@ -1,7 +1,7 @@
 #include "pool.h"
 
 #ifndef __SYNTHESIS__
-#include <assert.h>
+#include <cassert>
 #endif
 
 namespace {
@@ -10,9 +10,9 @@ namespace {
 // Line Buffer 字为128 bit。固定布局为 lane-major / cout-lane-minor：
 // word[(spatial_lane * 4 + cout_lane) * 8 +: 8] = value[spatial_lane][cout_lane]。
 // 写入和读取都复制INT8二进制补码位型；解包后再恢复为 activation_t 做有符号比较。
-static const int POOL_LINE_WORD_BITS =
+constexpr int POOL_LINE_WORD_BITS =
     SYSTOLIC_SPATIAL_PAR * SYSTOLIC_COUT_PAR * ACTIVATION_BITS;
-typedef ap_uint<POOL_LINE_WORD_BITS> pool_line_word_t;
+using pool_line_word_t = ap_uint<POOL_LINE_WORD_BITS>;
 
 pool_line_word_t pack_line_word(const activation_tile_t& input) {
 #pragma HLS INLINE

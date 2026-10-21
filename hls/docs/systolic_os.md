@@ -22,6 +22,10 @@
 - Conv2行尾继续继承 `spatial_valid=0011`；无效 spatial lane 不更新 accumulator。
   Bias、requant、ReLU仍由独立 ConvPostProcess 完成。
 
-当前计算核心与两个 Systolic testbench 通过各自的 `SYSTOLIC_OS=1` 选择该函数。
-切换实现时应同步检查这些编译期选择；本次未改变其设置或 Top 结构。
+计算核心与两个 Systolic testbench 统一读取 `config.h` 中的
+`CNN_SYSTOLIC_USE_OS`：默认 `1` 选择该函数，`0` 选择广播式实现。
+需要切换时修改唯一默认值，或对全部相关编译单元统一传入
+`-DCNN_SYSTOLIC_USE_OS=0`；不再在各个源文件分别定义选择宏。
+该选择不改变 Top 的调用接口或 DATAFLOW 拓扑。OS 的15步循环边界常量命名为
+`SYSTOLIC_WAVEFRONT_STEPS`，表示逻辑波前步数，而非整个 Tile 的实际时钟数。
 

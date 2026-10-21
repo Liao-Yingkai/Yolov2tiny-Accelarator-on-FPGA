@@ -1,7 +1,7 @@
 #include "../src/postprocess/conv_postprocess.h"
 
-#include <assert.h>
-#include <errno.h>
+#include <cassert>
+#include <cerrno>
 #include <stdint.h>
 #include <sys/stat.h>
 
@@ -22,13 +22,13 @@
  */
 namespace {
 
-static bool make_directory(const char* path) {
+bool make_directory(const char* path) {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
 }
 
-static bool open_csv(std::ofstream& file, const std::string& path,
-                     const char* header) {
-    file.open(path.c_str());
+bool open_csv(std::ofstream& file, const std::string& path,
+              const char* header) {
+    file.open(path);
     if (!file) {
         std::cerr << "无法打开 CSV: " << path << std::endl;
         return false;
@@ -37,8 +37,8 @@ static bool open_csv(std::ofstream& file, const std::string& path,
     return true;
 }
 
-static int8_t reference_requantize(int32_t accumulator, int32_t bias,
-                                   int32_t multiplier, int32_t shift) {
+int8_t reference_requantize(int32_t accumulator, int32_t bias,
+                            int32_t multiplier, int32_t shift) {
     assert(multiplier >= 0 && shift >= 0);
     const int64_t biased = (int64_t)accumulator + bias;
     assert(biased >= INT32_MIN && biased <= INT32_MAX);
@@ -47,8 +47,8 @@ static int8_t reference_requantize(int32_t accumulator, int32_t bias,
     return scaled > 127 ? 127 : (int8_t)scaled;
 }
 
-static int accumulator_value(int spatial_tile, int cout_tile,
-                             int lane, int cout_lane) {
+int accumulator_value(int spatial_tile, int cout_tile,
+                      int lane, int cout_lane) {
     if (spatial_tile == 0 && cout_tile == 0 && lane == 0) {
         // 与 make_param 的首个 Pack 对应：bias 后负、零、3>>1 的低位截断，
         // 以及恰好127的非饱和边界，均经完整 stream/DUT 路径覆盖。
@@ -64,7 +64,7 @@ static int accumulator_value(int spatial_tile, int cout_tile,
              cout_lane * 29) % 241) - 120;
 }
 
-static postprocess_param_pack_t make_param(int cout_tile) {
+postprocess_param_pack_t make_param(int cout_tile) {
     postprocess_param_pack_t param;
     for (int lane = 0; lane < SYSTOLIC_COUT_PAR; ++lane) {
         param.bias[lane] = -9 + cout_tile * 7 + lane * 3;
@@ -86,8 +86,8 @@ static postprocess_param_pack_t make_param(int cout_tile) {
     return param;
 }
 
-static int run_layer(layer_mode_t layer_mode, const char* name,
-                     const std::string& directory) {
+int run_layer(layer_mode_t layer_mode, const char* name,
+              const std::string& directory) {
     const bool conv2 = (layer_mode == LAYER2_MODE);
     const int spatial_tiles = conv2 ? CNN_CONV2_SPATIAL_TILES : CNN_CONV1_SPATIAL_TILES;
     const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;

@@ -8,9 +8,8 @@
 #include "../systolic/systolic.h"
 
 #ifndef __SYNTHESIS__
-#include <assert.h>
+#include <cassert>
 #endif
-#define SYSTOLIC_OS 1
 
 namespace {
 
@@ -226,7 +225,7 @@ void run_layer_phase(
     conv_param_router(conv1_param_stream, conv2_param_stream,
                       conv_param_stream, layer_mode);
     im2row(conv_input_stream, activation_stream, layer_mode);
-#if SYSTOLIC_OS
+#if CNN_SYSTOLIC_USE_OS
     systolic_OS(activation_stream, conv_weight_stream, acc_stream, layer_mode);
 #else
     systolic(activation_stream, conv_weight_stream, acc_stream, layer_mode);
