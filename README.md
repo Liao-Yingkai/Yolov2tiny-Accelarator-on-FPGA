@@ -19,11 +19,13 @@
 │   └── docs/                         各模块与顶层设计文档
 ├── vivado/
 │   ├── README.md                     硬件工程打开、重生成与版本管理说明
-│   └── cnn_accel_ddr/
-│       ├── cnn_accel_ddr.xpr          Vivado 工程入口
-│       ├── cnn_accel_ddr.srcs/        Block Design 与 IP 配置
-│       ├── ip_repo/export/           导出的 HLS 自定义 IP
-│       └── vitis/                    PS 裸机应用、平台与硬件交接文件
+│   ├── cnn_accel_ddr/
+│   │   ├── cnn_accel_ddr.xpr          Vivado 工程入口
+│   │   ├── cnn_accel_ddr.srcs/        Block Design 与 IP 配置
+│   │   ├── ip_repo/export/           导出的 HLS 自定义 IP
+│   │   └── vitis/                    PS 裸机应用、平台与硬件交接文件
+│   └── cnn_accel_cam/                OV5640 640×480 HDMI 预览与 PS 取图工程
+│       └── vitis/cnn_accel_cam/      停车取帧与原始彩色快照核对
 └── build/hls/                        本地 HLS 工程、日志和报告（Git 忽略）
 ```
 
@@ -84,6 +86,14 @@ Vitis 工作区位于 `vivado/cnn_accel_ddr/vitis/`，主要包含：
 先构建平台/BSP，再构建应用；使用与当前 HLS/DDR 布局一致的 bitstream 和 XSA，完成 PS 初始化及 PL 配置后运行 ELF。应用使用本地 `mnist_test_data.h`，默认依次测试三张图，不依赖训练目录的绝对 include；更新模型时，用应用中的 `tools/export_test_data.py` 重新提取模型和测试数据。详细步骤、结果格式和缓存说明见 [裸机应用说明](vivado/cnn_accel_ddr/vitis/cnn_accel_ddr/src/README.txt)。
 
 Vitis 工程元数据仍含原机器绝对路径，迁移工作区后可能需要重新绑定平台/XSA，再重建 BSP；不保证直接在任意路径打开即可编译。HLS、导出的 IP、bitstream、XSA、驱动及应用数据必须保持匹配，不能混用旧版 DDR 权重布局。
+
+### 摄像头：480p 预览与 PS 原始取帧验证
+
+摄像头工程入口为 [cnn_accel_cam.xpr](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，应用入口为 [main.c](vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/main.c)。640×480 HDMI 预览已由用户上板验证；新增的 PS 原始取帧仍需单独上板验证，当前尚未接入 CNN IP。
+
+PS 通过短暂固定 VDMA MM2S 读取帧，借助已有 Dynamic Genlock 保持目标帧稳定，将完整 640×480 原始 BGR888 数据复制到 CPU 自有快照缓冲，并在解除停车前逐字节核对复制结果。采样目标周期为 100ms，不改变摄像头采集或 HDMI 刷新率，也不等于已证明每秒取得十张不同的新帧。
+
+本阶段不做 ROI 裁剪、灰度、缩小、反色、归一化或量化，不使用输入查找表。串口只打印快照地址及每秒取帧统计；可在成功取帧并将快照 flush 到 DDR 后设置断点，通过 Vitis 调试器查看原始数据。详细流程、宏和变量含义、正常现象及验证限制见 [摄像头取帧说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。图像预处理留到下一阶段在 PS 中单独实现。
 
 ## 版本管理与验证范围
 
