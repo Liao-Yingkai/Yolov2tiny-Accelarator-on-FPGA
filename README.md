@@ -25,7 +25,7 @@
 │   │   ├── ip_repo/export/           导出的 HLS 自定义 IP
 │   │   └── vitis/                    PS 裸机应用、平台与硬件交接文件
 │   └── cnn_accel_cam/                OV5640 640×480 HDMI 预览与 PS 取图工程
-│       └── vitis/cnn_accel_cam/      停车取帧与原始彩色快照核对
+│       └── vitis/cnn_accel_cam/      停车取帧、PS预处理与调试数组
 └── build/hls/                        本地 HLS 工程、日志和报告（Git 忽略）
 ```
 
@@ -87,13 +87,13 @@ Vitis 工作区位于 `vivado/cnn_accel_ddr/vitis/`，主要包含：
 
 Vitis 工程元数据仍含原机器绝对路径，迁移工作区后可能需要重新绑定平台/XSA，再重建 BSP；不保证直接在任意路径打开即可编译。HLS、导出的 IP、bitstream、XSA、驱动及应用数据必须保持匹配，不能混用旧版 DDR 权重布局。
 
-### 摄像头：480p 预览与 PS 原始取帧验证
+### 摄像头：480p 预览、PS 取帧与预处理
 
 摄像头工程入口为 [cnn_accel_cam.xpr](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，应用入口为 [main.c](vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/main.c)。640×480 HDMI 预览已由用户上板验证；新增的 PS 原始取帧仍需单独上板验证，当前尚未接入 CNN IP。
 
 PS 通过短暂固定 VDMA MM2S 读取帧，借助已有 Dynamic Genlock 保持目标帧稳定，将完整 640×480 原始 BGR888 数据复制到 CPU 自有快照缓冲，并在解除停车前逐字节核对复制结果。采样目标周期为 100ms，不改变摄像头采集或 HDMI 刷新率，也不等于已证明每秒取得十张不同的新帧。
 
-本阶段不做 ROI 裁剪、灰度、缩小、反色、归一化或量化，不使用输入查找表。串口只打印快照地址及每秒取帧统计；可在成功取帧并将快照 flush 到 DDR 后设置断点，通过 Vitis 调试器查看原始数据。详细流程、宏和变量含义、正常现象及验证限制见 [摄像头取帧说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。图像预处理留到下一阶段在 PS 中单独实现。
+成功取帧后，PS 对中央280×280 ROI做整数灰度、10×10均值缩小至28×28、反色，再按训练端float32归一化及模型输入scale量化为单通道signed int8，不使用LUT，也不接入CNN。串口打印一次三个调试数组地址，以及每秒取帧成功/失败次数、取帧/纯预处理/本轮工作耗时；可在成功轮数据flush后通过Vitis查看raw、灰度和int8。输入scale由小型脚本从训练metadata生成，模型更新后须重新生成。详细流程、极性、参数更新、断点及验证限制见 [摄像头取帧与预处理说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。新增预处理尚未上板验证，100ms调度不保证10fps或识别精度。
 
 ## 版本管理与验证范围
 
