@@ -21,3 +21,6 @@ domain active {standalone_ps7_cortexa9_0}
 platform generate -quick
 platform generate
 platform generate
+platform active {system_wrapper}
+platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform generate -domains 

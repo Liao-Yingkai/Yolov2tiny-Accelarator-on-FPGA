@@ -12,6 +12,7 @@
 #include "ov5640/ov5640_init.h"
 #include "camera_input.h"
 #include "camera_preprocess.h"
+#include "camera_cnn.h"
 #include "xtime_l.h"
 
 #define VDMA_ID            XPAR_AXIVDMA_0_DEVICE_ID    //VDMA器件ID
@@ -22,12 +23,12 @@ static u8 camera_frames[CAMERA_FRAMES*CAMERA_FRAME_BYTES] __attribute__((aligned
 /* CPU独占的普通DDR数组，不是VDMA第四帧槽；VDMA仍只访问上方三帧，
  * 不会覆盖此快照。成功后可供调试器查看。 */
 static u8 camera_snapshot[CAMERA_FRAME_BYTES] __attribute__((aligned(64)));
-/* 前784字节有效，尾部填充到832字节；flush不会碰到相邻对象的cacheline。 */
+/* 前784字节有效，容量832字节；这些工作数组仅由CPU访问。 */
 static uint8_t camera_gray[CAMERA_DEBUG_BYTES] __attribute__((aligned(64)));
 static int8_t camera_model_input[CAMERA_DEBUG_BYTES] __attribute__((aligned(64)));
 _Static_assert(CAMERA_WIDTH == CAMERA_PREPROCESS_WIDTH &&
     CAMERA_HEIGHT == CAMERA_PREPROCESS_HEIGHT && CAMERA_BYTES_PER_PIXEL == 3U &&
-    CAMERA_FRAME_BYTES % 64U == 0U, "capture/preprocess geometry and alignment must match");
+    CAMERA_FRAME_BYTES % 64U == 0U && CAMERA_MODEL_PIXELS == CAMERA_CNN_INPUT_BYTES, "capture/preprocess geometry and alignment must match");
 //全局变量
 XAxiVdma     vdma;
 DisplayCtrl  dispCtrl;
@@ -55,7 +56,6 @@ int main(void)
 		xil_printf("ERROR: OV5640 initialization failed!\r\n");
 		return EXIT_FAILURE;
 	}
-	xil_printf("OV5640 detected successful!\r\n");
 
 	vd_mode = VMODE_640x480;
 
@@ -88,73 +88,38 @@ int main(void)
 	}
 
     {
-        XTime report_window_start; /* 当前一秒统计窗口的起点，单位为计时器tick。 */
-        XTime capture_start;       /* 本轮起点，同时是capture调用起点。 */
-        XTime capture_end;         /* capture返回时刻，不含预处理和调试flush。 */
-        XTime preprocess_end;      /* 成功轮预处理结束时刻。 */
-        XTime cycle_end;           /* 本轮工作结束，包含flush、不含串口及周期等待。 */
-        XTime current_time;        /* 周期等待时读取的当前时间。 */
-        unsigned int capture_success_count = 0; /* 当前窗口成功次数。 */
-        unsigned int capture_failure_count = 0; /* 当前窗口失败次数。 */
-        unsigned int last_capture_us = 0;       /* 最近capture调用耗时，单位微秒。 */
-        unsigned int last_preprocess_us = 0;    /* 本轮纯预处理耗时，微秒；失败轮为0。 */
-        unsigned int last_cycle_us = 0;         /* 本轮capture+预处理+flush耗时，微秒。 */
-        int last_failure = CAMERA_OK;           /* 当前窗口最后失败原因。 */
-        int capture_result;                    /* 本轮返回码，失败输出不能用。 */
-
-        xil_printf("snapshot_address=0x%x frame_bytes=%u gray_address=0x%x int8_address=0x%x valid_pixels=%u buffer_bytes=%u\r\n",
-            (unsigned int)(UINTPTR)camera_snapshot, CAMERA_FRAME_BYTES,
-            (unsigned int)(UINTPTR)camera_gray, (unsigned int)(UINTPTR)camera_model_input,
-            CAMERA_MODEL_PIXELS, CAMERA_DEBUG_BYTES);
-        XTime_GetTime(&report_window_start);
+        camera_cnn_status_t cnn_status = camera_cnn_init();
+        camera_cnn_result_t result;
+        XTime cycle_start, now;
+        if (cnn_status != CAMERA_CNN_OK) {
+            xil_printf("CNN: %s\r\n", camera_cnn_reason(cnn_status));
+            return EXIT_FAILURE;
+        }
         for (;;) {
-            XTime_GetTime(&capture_start);
-            capture_result = camera_input_capture(&vdma, camera_frames, camera_snapshot);
-            XTime_GetTime(&capture_end);
-            last_capture_us = (unsigned int)((capture_end-capture_start) *
-                1000000ULL / COUNTS_PER_SECOND);
-            last_preprocess_us = 0;
-            if (capture_result == CAMERA_OK) {
-                ++capture_success_count;
+            int capture_status;
+            XTime_GetTime(&cycle_start);
+            capture_status = camera_input_capture(&vdma, camera_frames, camera_snapshot);
+            if (capture_status == CAMERA_OK) {
                 camera_preprocess(camera_snapshot, camera_gray, camera_model_input);
-                XTime_GetTime(&preprocess_end);
-                last_preprocess_us = (unsigned int)((preprocess_end-capture_end) *
-                    1000000ULL / COUNTS_PER_SECOND);
-                /* CPU写入snapshot后可能只在Cache中；flush仅为让调试器从DDR
-                 * 看到完整快照；CPU自己读取snapshot不需要这次flush。
-                 * 这不同于读取DMA源帧前的invalidate。
-                 * 在下方XTime_GetTime(&cycle_end)处设条件断点
-                 * (capture_result==CAMERA_OK)，此时三份有效数据已flush。 */
-                Xil_DCacheFlushRange((INTPTR)camera_snapshot, sizeof(camera_snapshot));
-                Xil_DCacheFlushRange((INTPTR)camera_gray, sizeof(camera_gray));
-                Xil_DCacheFlushRange((INTPTR)camera_model_input, sizeof(camera_model_input));
+                cnn_status = camera_cnn_predict(camera_model_input, &result);
+                if (cnn_status != CAMERA_CNN_OK) {
+                    xil_printf("CNN: %s\r\n", camera_cnn_reason(cnn_status));
+                    /* PL可能仍访问DDR，立即结束且不复用buffer；需板级复位重启，
+                     * 不能仅自动reset CNN后继续，以免未完成AXI访问破坏数据。 */
+                    return EXIT_FAILURE;
+                }
+                xil_printf("digit=%u\r\n", (unsigned)result.class_index);
             } else {
-                ++capture_failure_count;
-                last_failure = capture_result;
+                /* 失败快照无效，跳过预处理和CNN，下一节拍再取帧。 */
+                xil_printf("capture: %s\r\n", camera_input_reason(capture_status));
             }
-            XTime_GetTime(&cycle_end);
-            last_cycle_us = (unsigned int)((cycle_end-capture_start) *
-                1000000ULL / COUNTS_PER_SECOND);
-            if (cycle_end-report_window_start >= COUNTS_PER_SECOND) {
-                /* 正常目标约10次成功/秒、失败0、无VDMA错误；复制期间预览
-                 * 可能短暂定格。成功代表原始字节比较一致，不证明相机图像
-                 * 内容/颜色正确，也不保证每次成功都是独立新帧。 */
-                xil_printf("capture_success_count=%u capture_failure_count=%u last_capture_us=%u last_preprocess_us=%u last_cycle_us=%u last_failure=%s\r\n",
-                    capture_success_count, capture_failure_count, last_capture_us,
-                    last_preprocess_us, last_cycle_us,
-                    camera_input_reason(last_failure));
-                /* 输出约一秒窗口后清零，只统计下一窗口；last_capture_us保留
-                 * 最近一轮耗时，last_failure重置以免旧故障冒充新故障。 */
-                capture_success_count = 0;
-                capture_failure_count = 0;
-                last_failure = CAMERA_OK;
-                report_window_start = cycle_end;
-            }
-            /* 从本轮起点到下一轮目标100ms，包含复制、flush及串口工作；
-             * 若已经超时则直接进入下一轮，不在工作后额外再等100ms。 */
+            /* 从本轮开始计100ms，含capture/预处理/CNN/串口；超时则立即
+             * 进入下一轮。这是调度目标，不保证10fps或每次都是独立新帧。
+             * snapshot/gray/model_input仅CPU读写，不做调试器专用flush；
+             * CNN模块独立输入buffer的flush负责CPU→PL的数据可见性。 */
             do {
-                XTime_GetTime(&current_time);
-            } while (current_time-capture_start < COUNTS_PER_SECOND/10);
+                XTime_GetTime(&now);
+            } while (now - cycle_start < COUNTS_PER_SECOND / 10);
         }
     }
 }
