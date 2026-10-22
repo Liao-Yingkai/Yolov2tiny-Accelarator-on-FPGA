@@ -56,28 +56,30 @@
 !/vivado/cnn_accel_ddr/cnn_accel_ddr.gen/sources_1/bd/system/hdl/
 !/vivado/cnn_accel_ddr/cnn_accel_ddr.gen/sources_1/bd/system/hdl/system_wrapper.v
 
-# 此 Vitis 工作区：保留源码/工程描述/XSA/BSP 配置，排除可重新生成内容。
-/vivado/cnn_accel_ddr/vitis/.workspace
-/vivado/cnn_accel_ddr/vitis/.metadata/
-/vivado/cnn_accel_ddr/vitis/.analytics
-/vivado/cnn_accel_ddr/vitis/IDE.log
-/vivado/cnn_accel_ddr/vitis/RemoteSystemsTempFiles/
-/vivado/cnn_accel_ddr/vitis/**/Debug/
-/vivado/cnn_accel_ddr/vitis/**/Release/
-/vivado/cnn_accel_ddr/vitis/**/_ide/
-/vivado/cnn_accel_ddr/vitis/**/.log/
-/vivado/cnn_accel_ddr/vitis/**/tempdsa/
-/vivado/cnn_accel_ddr/vitis/**/*.elf
-/vivado/cnn_accel_ddr/vitis/system_wrapper/export/
-/vivado/cnn_accel_ddr/vitis/system_wrapper/logs/
+# Vitis 工作区：适用于所有 Vivado 工程及平台名称（含 system_wrappe）。
+/vivado/*/vitis/.workspace
+/vivado/*/vitis/.metadata/
+/vivado/*/vitis/.analytics
+/vivado/*/vitis/IDE.log
+/vivado/*/vitis/RemoteSystemsTempFiles/
+/vivado/*/vitis/**/Debug/
+/vivado/*/vitis/**/Release/
+/vivado/*/vitis/**/_ide/
+/vivado/*/vitis/**/.log/
+/vivado/*/vitis/**/tempdsa/
+/vivado/*/vitis/**/*.elf
+/vivado/*/vitis/*/export/
+/vivado/*/vitis/*/logs/
 
-# XSA 解包副本（驱动、bitstream、ps7_init 等）；平台描述引用的内部 XSA 保留。
-/vivado/cnn_accel_ddr/vitis/system_wrapper/hw/*
-!/vivado/cnn_accel_ddr/vitis/system_wrapper/hw/system_wrapper.xsa
+# 平台 hw 的解包副本可重生成；保留平台描述引用的内部硬件交接 XSA。
+/vivado/*/vitis/*/hw/*
+!/vivado/*/vitis/*/hw/*.xsa
 
-# BSP 源码/头/库及构建规则由平台重生成；只保留可编辑配置 system.mss。
-# 不忽略 BSP 父目录，确保配置例外能生效；不影响 FSBL 自身源码与 Makefile。
-/vivado/cnn_accel_ddr/vitis/system_wrapper/ps7_cortexa9_0/standalone_ps7_cortexa9_0/bsp/*
-!/vivado/cnn_accel_ddr/vitis/system_wrapper/ps7_cortexa9_0/standalone_ps7_cortexa9_0/bsp/system.mss
-/vivado/cnn_accel_ddr/vitis/system_wrapper/zynq_fsbl/zynq_fsbl_bsp/*
-!/vivado/cnn_accel_ddr/vitis/system_wrapper/zynq_fsbl/zynq_fsbl_bsp/system.mss
+# 仅排除 BSP 生成内容，不影响应用、自定义 IP 或 FSBL 自身源码。
+/vivado/*/vitis/*/ps7_cortexa9_0/*/bsp/*
+!/vivado/*/vitis/*/ps7_cortexa9_0/*/bsp/system.mss
+/vivado/*/vitis/*/zynq_fsbl/zynq_fsbl_bsp/*
+!/vivado/*/vitis/*/zynq_fsbl/zynq_fsbl_bsp/system.mss
+
+# NFS 延迟删除的工具临时文件；不删除本地正在使用的文件。
+/vivado/**/.nfs*
