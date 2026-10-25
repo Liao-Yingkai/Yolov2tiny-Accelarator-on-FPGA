@@ -9,28 +9,39 @@ _Static_assert(CAMERA_PREPROCESS_WIDTH == 640U &&
     CAMERA_PREPROCESS_HEIGHT == 480U && CAMERA_MODEL_PIXELS == 784U &&
     CAMERA_BLOCK_SIZE == 10U, "fixed camera/model geometry required");
 #ifdef __FAST_MATH__
-#error "camera_preprocess requires strict floating-point operations (no fast-math)"
+#error "camera_preprocess must not use fast-math"
 #endif
+_Static_assert(CAMERA_MODEL_INPUT_SHIFT >= 1 && CAMERA_MODEL_INPUT_SHIFT <= 30,
+    "quantization shift must be 1..30");
+_Static_assert(CAMERA_MODEL_INPUT_ZERO_POINT == 0 && CAMERA_MODEL_INPUT_MULTIPLIER >= 0,
+    "symmetric quantization and nonnegative multiplier required");
+_Static_assert((int64_t)CAMERA_MODEL_INPUT_MULTIPLIER <= INT32_MAX &&
+    255LL * CAMERA_MODEL_INPUT_MULTIPLIER <= INT32_MAX &&
+    (int64_t)CAMERA_MODEL_INPUT_OFFSET >= INT32_MIN &&
+    (int64_t)CAMERA_MODEL_INPUT_OFFSET <= INT32_MAX &&
+    255LL * CAMERA_MODEL_INPUT_MULTIPLIER + CAMERA_MODEL_INPUT_OFFSET >= INT32_MIN &&
+    255LL * CAMERA_MODEL_INPUT_MULTIPLIER + CAMERA_MODEL_INPUT_OFFSET <= INT32_MAX,
+    "quantization intermediate must fit int32");
+
+/* 先取无符号幅值，避免负数右移；半整数向偶数舍入。 */
+static inline int32_t round_shift_even(int32_t value)
+{
+    uint32_t magnitude = value < 0 ? 0U - (uint32_t)value : (uint32_t)value;
+    uint32_t integer = magnitude >> CAMERA_MODEL_INPUT_SHIFT;
+    uint32_t remainder = magnitude & ((1U << CAMERA_MODEL_INPUT_SHIFT) - 1U);
+    uint32_t half = 1U << (CAMERA_MODEL_INPUT_SHIFT - 1);
+    if (remainder > half || (remainder == half && (integer & 1U))) ++integer;
+    /* SHIFT>=1，舍入后的幅值可安全转换为int32，包括输入INT32_MIN。 */
+    return value < 0 ? -(int32_t)integer : (int32_t)integer;
+}
 
 int8_t camera_gray_to_int8(uint8_t gray)
 {
-    /* volatile强制每一步写回float32，保留ToTensor、Normalize的运算顺序，
-     * 不允许把减法和除法合并或提前用double计算。模型scale则为导出的double。 */
-    volatile float tensor = (float)gray / 255.0f;
-    volatile float centered = tensor - CAMERA_MODEL_MEAN;
-    volatile float normalized = centered / CAMERA_MODEL_STD;
-    double scaled = (double)normalized / CAMERA_MODEL_INPUT_SCALE;
-    int rounded;
-    double fraction;
-
-    /* 先截向零，再比较余数；正负半整数都向偶数舍入，不依赖roundf
-     * (它在半整数处远离零)，也不依赖当前浮点舍入模式的整数转换函数。 */
-    if (scaled <= -128.0) return -128;
-    if (scaled >= 127.0) return 127;
-    rounded = (int)scaled;
-    fraction = scaled - (double)rounded;
-    if (fraction > 0.5 || (fraction == 0.5 && rounded % 2 != 0)) ++rounded;
-    if (fraction < -0.5 || (fraction == -0.5 && rounded % 2 != 0)) --rounded;
+    int32_t value = (int32_t)gray * (int32_t)CAMERA_MODEL_INPUT_MULTIPLIER +
+        (int32_t)CAMERA_MODEL_INPUT_OFFSET;
+    int32_t rounded = round_shift_even(value);
+    if (rounded < -128) return -128;
+    if (rounded > 127) return 127;
     return (int8_t)rounded;
 }
 

@@ -17,18 +17,18 @@ main提供64字节对齐的静态连续三帧数组，共2764800字节，VDMA只
 1. 每个输入像素先计算整型灰度 `(77*R+150*G+29*B+128)>>8`。
 2. 对100个已舍入的灰度求和，再用 `(sum+50)/100` 做整数均值；不是先求彩色均值再灰度。
 3. 默认 `255-均值` 反色，对应白纸黑字转暗背景亮笔画；camera_gray保存此时的uint8灰度。宏CAMERA_PREPROCESS_INVERT=0可关闭反色，适用于已是黑底白字的输入。
-4. 每个灰度严格分步float32：除255、减float32的0.1307、除float32的0.3081；对应dataset.py的ToTensor/Normalize。局部volatile float确保各步落到float32，禁止fast-math；不将运算合并为double或融合表达式。
-5. 将归一化float32转double，除metadata导出的double scale，确定性nearest-ties-even后clamp至[-128,127]。不使用半整数远离零的roundf，不依赖libm，无像素映射表。zero_point必须为0。输出signed int8仅784字节，不扩展8通道。
+4. 离线参考保留原语义：灰度除255、减float32的0.1307、除float32的0.3081，每步舍入为float32，再转double除metadata导出的scale，nearest-ties-even后clamp至[-128,127]。
+5. PS运行时将归一化和除scale合并为 `clamp(round_even((gray*M+OFFSET)/2^SHIFT),-128,127)`，只用int32/uint32加乘、比较和位移。当前M=603115、OFFSET=-20100923、SHIFT=20；全部256灰度与上述旧参考严格一致。舍入先取无符号幅值，比较移位余数并在half-tie时向偶数进位，再恢复符号，饱和后才窄化int8；不依赖负数右移。输入仍是nearest-even，区别于Conv/FC直接右移。无运行时浮点、LUT、动态分配或libm；zero_point必须为0，禁止fast-math。输出signed int8仅784字节，不扩展8通道。
 
 当前scale=0.022129308432340622。白纸纯白经反色变0，量化背景约-19，不是0；纯黑笔画经反色变255，量化约127（上限）。没有阈值分割、居中、笔画提取或自动极性检测，纸面阴影/位置/大小仍会影响输入。
 
-camera_model_input.h只是少量标量常量，来源写在头注释，不是LUT。mean/std固定与dataset.py一致；训练模型重新导出后，在仓库根执行：
+camera_model_input.h只有三个整数参数及零点，scale和mean/std的来源保留在注释，不是LUT。mean/std使用与dataset.py一致的真实FP32值0.1307000070810318、0.30809998512268066，不将mean乘255先舍入为33。训练模型重新导出后，在仓库根执行：
 
 ```sh
 python3 vivado/cnn_accel_cam/tools/export_camera_model.py --generated-dir /path/to/generated
 ```
 
-此命令同一generated目录读取headers及metadata.json，生成camera_model_data.h与camera_model_input.h，不能只换权重不换scale。默认generated路径沿用当前训练工程。脚本仅用Python标准库，校验scale有限且正、zero_point为0或[0]；不会修改训练工程。若dataset.py的归一化常量改变，应同步修改脚本中的mean/std并重生成头。公开camera_gray_to_int8入口用于独立核对全部256个灰度值。
+此命令同一generated目录读取headers及metadata.json，生成camera_model_data.h与camera_model_input.h，不能只换权重不换scale。默认generated路径沿用当前训练工程。脚本仅用Python标准库，以struct逐步模拟FP32，校验scale有限且正、zero_point为0或[0]；不会修改训练工程。更新scale会自动重验全部256灰度。优先尝试Q20，再尝试Q21..Q30及Q19..Q1；乘数、偏移、独立乘积255*M和加法两端都必须在有符号INT32范围内且256值完全等价，否则明确失败、不覆盖已有头，不回退运行时浮点。C编译期再次断言移位1..30和INT32安全范围。极小scale可能无法满足这些限制；极大scale在参考全为零时允许生成零参数。若dataset.py的归一化常量改变，应同步修改脚本中的mean/std并重生成头。公开camera_gray_to_int8入口用于独立核对全部256个灰度值。
 
 ## 取帧每一步及其原因
 
@@ -55,12 +55,16 @@ main仅用XTime从本轮开始计100ms目标周期，包含复制、预处理、
 ## 上板步骤
 
 1. 在训练端完成一次一致的模型导出，再用上面的export_camera_model命令同步两个模型头；无需trace，不修改训练工程。
-2. 使用用户已更新的Vivado硬件/XSA和对应新平台BSP，确认包含cnn_accelerator_ddr驱动（DeviceID 0、控制基址0x40000000，Set_image_r/weights/params/result为u64），重建平台及相机应用。将camera_cnn.c纳入应用源码；不要手工改IDE生成Makefile。
+2. 使用用户已更新的Vivado硬件/XSA和对应新平台BSP，确认包含cnn_accelerator_ddr驱动（DeviceID 0、控制基址0x40000000，Set_image_r/weights/params/result为u64），重建平台及相机应用。将camera_cnn.c纳入应用源码；不要手工改IDE生成Makefile。在Vitis选择Release（现有配置为-O2）；Debug保留-O0供调试，未强改默认配置，不启用fast-math。
 3. 下载与此BSP一致的bitstream，初始化PS/DDR后加载新ELF；保留摄像头与HDMI连接，用白纸黑字放入中央280×280 ROI，观察串口digit与预览。
 4. 确认实际BGR颜色、ROI/极性、快照稳定及类别变化；检查取帧错误会重试、CNN错误会停止。CNN busy/timeout后板级复位，不能直接继续运行旧缓冲。
 5. 如需观察工作数组，在成功轮完成后通过符号定位，注意CPU缓存中的新值可能尚未写DDR；正常路径不为调试器flush，也不打印数组地址。不要把失败轮或半更新数组当有效输入。
 
 ## 验证边界
+
+本次整数化仅是数值等价优化，保留原灰度、100点均值和反色顺序，也保留完整复制后的memcmp检查，没有新增计时打印。统一导出已复现当前三个整数参数并通过256灰度离线等价检查，12个模型数组未改变。用户反馈当前新版baseline已能推理但场景敏感；此优化不承诺改善识别，未测板上加速，不以离线检查替代板测。
+
+本次独立验收在O0/O2下核对全部256种灰度、黑白/随机BGR/块图及ROI外扰动，灰度和量化结果均与独立NumPy FP32参考一致；实际C舍入helper通过18个正负half-tie及相邻最低位案例。多组scale可成功生成等价参数，非法或无法满足32位限制的参数生成失败且保留原输出。全部8个应用C文件通过ARM编译，并按现有Vitis specs和BSP链接ELF；预处理对象反汇编未见浮点指令或数学helper，100点均值的常数除法使用整数乘法序列。验证脚本、validation.log、ARM产物与反汇编位于仓库build/hls/camera_integer_check，不在源码树生成检查文件。这些检查不能代替板上耗时测量；主循环100ms调度目标未改变。
 
 此前预处理阶段ARM GCC检查7个应用C文件通过；未修改的vdma_api.c仍有一条原有的有符号/无符号比较警告，新预处理文件没有新增警告或libm依赖。独立主机数值测试在O0/O2下覆盖全部256种灰度、全白/全黑、随机BGR、逐块颜色编码及ROI外扰动，灰度和INT8结果均与NumPy reference逐元素一致，输出保护区未被改写。参数脚本能复现当前标量头并拒绝13种非法参数；当前256种灰度不产生精确半整数，不能把这次枚举当作half-tie边界测试。
 

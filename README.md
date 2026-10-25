@@ -89,11 +89,11 @@ Vitis 工程元数据仍含原机器绝对路径，迁移工作区后可能需�
 
 ### 摄像头：480p 预览、PS 取帧与CNN推理
 
-摄像头工程入口为 [cnn_accel_cam.xpr](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，应用入口为 [main.c](vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/main.c)。640×480 HDMI 预览已由用户上板验证；PS应用现已接入用户新增的CNN IP，取帧、预处理及新CNN推理链路仍需联合上板验证。
+摄像头工程入口为 [cnn_accel_cam.xpr](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，应用入口为 [main.c](vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/main.c)。640×480 HDMI 预览及基础摄像头CNN推理已由用户进行上板测试，当前识别仍对位置、距离和光照敏感；本次PS整数化优化尚未上板验证。
 
 PS 通过短暂固定 VDMA MM2S 读取帧，借助已有 Dynamic Genlock 保持目标帧稳定，将完整 640×480 原始 BGR888 数据复制到 CPU 自有快照缓冲，并在解除停车前逐字节核对复制结果。采样目标周期为 100ms，不改变摄像头采集或 HDMI 刷新率，也不等于已证明每秒取得十张不同的新帧。
 
-成功取帧后，PS 对中央280×280 ROI做整数灰度、10×10均值缩小至28×28、反色，再按训练端float32归一化及模型输入scale量化为单通道signed int8，不使用LUT。camera_cnn模块把784字节输入送入DDR CNN IP，模型只加载一次，通过轮询读取16字节结果并检查类别/首次argmax/保留字节。正常每轮仅输出`digit=<类别>`，不打印调试数组地址、统计或耗时；取帧失败跳过推理并重试，CNN busy/5秒超时等错误立即结束，须板级复位后重启，不能复用可能仍被PL访问的缓冲。使用`python3 vivado/cnn_accel_cam/tools/export_camera_model.py --generated-dir /path/to/generated`同一命令同步12个模型数组与输入scale，无trace图片。详细DDR布局、缓存方向、上板步骤及验证边界见 [摄像头推理说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。100ms调度目标不保证10fps或识别精度，新链路尚未完成板测。
+成功取帧后，PS 对中央280×280 ROI做整数灰度、10×10均值缩小至28×28、反色，再用纯32位整数加乘和nearest-even移位量化为单通道signed int8，不使用LUT。归一化与除scale在离线合并，当前M=603115、OFFSET=-20100923、SHIFT=20，对全部256种灰度与旧分步FP32归一化、double除scale参考严格等价；输入舍入仍是nearest-even，区别于Conv/FC直接右移。camera_cnn模块把784字节输入送入DDR CNN IP，模型只加载一次，通过轮询读取16字节结果并检查类别/首次argmax/保留字节。正常每轮仅输出`digit=<类别>`，不打印调试数组地址、统计或耗时；保留完整复制后的memcmp，取帧失败跳过推理并重试，CNN busy/5秒超时等错误立即结束，须板级复位后重启，不能复用可能仍被PL访问的缓冲。使用`python3 vivado/cnn_accel_cam/tools/export_camera_model.py --generated-dir /path/to/generated`同一命令同步12个模型数组与整数输入参数；scale更新自动重验256值及INT32范围，不满足则拒绝生成，无trace图片。Vitis请选择现有Release配置（-O2）；Debug保留-O0供调试，不启用fast-math。详细DDR布局、缓存方向、上板步骤及验证边界见 [摄像头推理说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。用户反馈新版baseline已能推理但场景敏感；本次仅做数值等价优化，未测板上加速，不承诺改善识别。100ms调度目标不保证10fps或识别精度，新链路仍需联合板测。
 
 ## 版本管理与验证范围
 
