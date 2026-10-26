@@ -42,6 +42,13 @@ struct logits_pack_t {
     logit_t value[FC_OUTPUTS];
 };
 
+using probability_t = ap_uint<16>;
+// 概率与原始 signed logits 的 first-max 类别始终作为同一个事务传递。
+struct inference_result_t {
+    probability_t probability[FC_OUTPUTS];
+    class_index_t class_index;
+};
+
 // 一个 pixel_t 表示一个空间位置的全部8个物理输入通道。
 // Im2Row 在输入读取时完成规范化：Conv1 仅 channel0 有效，Conv2 使用全部通道。
 struct pixel_t {

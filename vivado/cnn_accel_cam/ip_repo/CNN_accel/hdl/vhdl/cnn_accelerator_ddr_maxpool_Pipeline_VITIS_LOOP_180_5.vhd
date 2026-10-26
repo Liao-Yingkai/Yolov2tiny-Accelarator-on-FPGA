@@ -198,12 +198,12 @@ attribute shreg_extract : string;
     signal p_Result_s_fu_762_p3 : STD_LOGIC_VECTOR (0 downto 0);
     signal and_ln110_fu_770_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal tmp_5_fu_781_p3 : STD_LOGIC_VECTOR (0 downto 0);
-    signal p_Result_9_fu_789_p3 : STD_LOGIC_VECTOR (0 downto 0);
+    signal p_Result_10_fu_789_p3 : STD_LOGIC_VECTOR (0 downto 0);
     signal and_ln112_fu_797_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal p_Repl2_1_fu_803_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal p_Repl2_s_fu_776_p2 : STD_LOGIC_VECTOR (0 downto 0);
     signal icmp_ln187_fu_757_p2 : STD_LOGIC_VECTOR (0 downto 0);
-    signal p_Result_21_fu_808_p3 : STD_LOGIC_VECTOR (1 downto 0);
+    signal p_Result_22_fu_808_p3 : STD_LOGIC_VECTOR (1 downto 0);
     signal value_V_fu_824_p1 : STD_LOGIC_VECTOR (7 downto 0);
     signal value_V_1_fu_828_p4 : STD_LOGIC_VECTOR (7 downto 0);
     signal icmp_ln1035_fu_838_p2 : STD_LOGIC_VECTOR (0 downto 0);
@@ -337,7 +337,7 @@ attribute shreg_extract : string;
 
 
 begin
-    mux_73_4_1_1_U521 : component cnn_accelerator_ddr_mux_73_4_1_1
+    mux_73_4_1_1_U523 : component cnn_accelerator_ddr_mux_73_4_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -621,7 +621,7 @@ begin
     add_ln180_fu_508_p2 <= std_logic_vector(unsigned(ap_sig_allocacmp_cout_tile_2) + unsigned(ap_const_lv3_1));
     add_ln201_fu_576_p2 <= std_logic_vector(unsigned(ap_sig_allocacmp_line_address_load) + unsigned(ap_const_lv5_1));
     and_ln110_fu_770_p2 <= (tmp_3_fu_739_p3 and p_Result_s_fu_762_p3);
-    and_ln112_fu_797_p2 <= (tmp_5_fu_781_p3 and p_Result_9_fu_789_p3);
+    and_ln112_fu_797_p2 <= (tmp_5_fu_781_p3 and p_Result_10_fu_789_p3);
     and_ln_fu_562_p3 <= (tmp_fu_552_p4 & ap_const_lv2_0);
     ap_CS_fsm_pp0_stage0 <= ap_CS_fsm(0);
         ap_block_pp0_stage0 <= not((ap_const_boolean_1 = ap_const_boolean_1));
@@ -786,11 +786,11 @@ begin
     or_ln199_fu_1369_p2 <= (icmp_ln199_2_fu_1364_p2 or icmp_ln199_1_fu_1359_p2);
     p_Repl2_1_fu_803_p2 <= (icmp_ln112_reg_1635 and and_ln112_fu_797_p2);
     p_Repl2_s_fu_776_p2 <= (icmp_ln110_reg_1630 and and_ln110_fu_770_p2);
-    p_Result_21_fu_808_p3 <= (p_Repl2_1_fu_803_p2 & p_Repl2_s_fu_776_p2);
-    p_Result_9_fu_789_p3 <= post_output_stream_dout(131 downto 131);
+    p_Result_10_fu_789_p3 <= post_output_stream_dout(131 downto 131);
+    p_Result_22_fu_808_p3 <= (p_Repl2_1_fu_803_p2 & p_Repl2_s_fu_776_p2);
     p_Result_s_fu_762_p3 <= post_output_stream_dout(129 downto 129);
     pool_valid_V_2_fu_816_p3 <= 
-        p_Result_21_fu_808_p3 when (icmp_ln187_fu_757_p2(0) = '1') else 
+        p_Result_22_fu_808_p3 when (icmp_ln187_fu_757_p2(0) = '1') else 
         pool_valid_V_fu_210;
     pool_valid_V_out <= pool_valid_V_fu_210;
 

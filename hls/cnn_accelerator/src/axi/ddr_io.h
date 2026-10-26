@@ -15,11 +15,7 @@ void param_loader(const ap_int<32>* params,
                   hls::stream<postprocess_param_pack_t>& conv1,
                   hls::stream<postprocess_param_pack_t>& conv2,
                   hls::stream<fc_param_pack_t>& fc);
-void logits_split(hls::stream<logits_pack_t>& input,
-                  hls::stream<logits_pack_t>& writer,
-                  hls::stream<logits_pack_t>& argmax);
-void result_writer(hls::stream<logits_pack_t>& logits,
-                   hls::stream<class_index_t>& classes, ap_uint<64>* result);
+void result_writer(hls::stream<inference_result_t>& input, ap_uint<64>* result);
 }  // 命名空间 ddr_io
 
 #endif

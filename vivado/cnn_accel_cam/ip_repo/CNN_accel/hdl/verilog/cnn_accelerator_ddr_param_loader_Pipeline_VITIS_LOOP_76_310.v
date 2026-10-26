@@ -288,7 +288,7 @@ reg   [31:0] value_shift_V_10_fu_182;
 reg    ap_block_pp0_stage0_01001;
 wire   [0:0] icmp_ln76_fu_362_p2;
 wire   [1:0] add_ln75_2_fu_382_p2;
-wire   [4:0] tmp_103_mid1_fu_388_p4;
+wire   [4:0] tmp_102_mid1_fu_388_p4;
 wire   [4:0] tmp_s_fu_398_p4;
 wire   [4:0] select_ln70_2_fu_408_p3;
 wire   [6:0] zext_ln70_fu_416_p1;
@@ -977,7 +977,7 @@ assign m_axi_gmem_params_WVALID = 1'b0;
 
 assign or_ln70_fu_368_p2 = (icmp_ln76_fu_362_p2 | ap_phi_mux_first_iter_2_phi_fu_318_p4);
 
-assign select_ln70_2_fu_408_p3 = ((icmp_ln76_fu_362_p2[0:0] == 1'b1) ? tmp_103_mid1_fu_388_p4 : tmp_s_fu_398_p4);
+assign select_ln70_2_fu_408_p3 = ((icmp_ln76_fu_362_p2[0:0] == 1'b1) ? tmp_102_mid1_fu_388_p4 : tmp_s_fu_398_p4);
 
 assign select_ln70_fu_374_p3 = ((icmp_ln76_fu_362_p2[0:0] == 1'b1) ? 3'd0 : ap_sig_allocacmp_lane_load);
 
@@ -987,7 +987,7 @@ assign sext_ln70_fu_483_p1 = $signed(sext_ln76_2_mid2_v_reg_757);
 
 assign sext_ln76_2_mid2_v_v_v_v_v_fu_426_p3 = {{add_ln70_fu_420_p2}, {2'd0}};
 
-assign tmp_103_mid1_fu_388_p4 = {{{add_ln75_2_fu_382_p2}, {add_ln75_2_fu_382_p2}}, {1'd0}};
+assign tmp_102_mid1_fu_388_p4 = {{{add_ln75_2_fu_382_p2}, {add_ln75_2_fu_382_p2}}, {1'd0}};
 
 assign tmp_s_fu_398_p4 = {{{ap_sig_allocacmp_field_load}, {ap_sig_allocacmp_field_load}}, {1'd0}};
 

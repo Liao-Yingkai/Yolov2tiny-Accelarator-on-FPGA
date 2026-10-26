@@ -13,8 +13,8 @@ entity cnn_accelerator_ddr_start_for_result_writer_U0 is
     generic (
         MEM_STYLE         : string  := "shiftReg"; 
         DATA_WIDTH        : integer := 1;
-        ADDR_WIDTH        : integer := 3;
-        DEPTH             : integer := 5);
+        ADDR_WIDTH        : integer := 2;
+        DEPTH             : integer := 4);
     port (
         clk               : in  std_logic;
         reset             : in  std_logic;
@@ -38,8 +38,8 @@ architecture rtl of cnn_accelerator_ddr_start_for_result_writer_U0 is
     component cnn_accelerator_ddr_start_for_result_writer_U0_ShiftReg is
     generic (
         DATA_WIDTH : integer := 1;
-        ADDR_WIDTH : integer := 3;
-        DEPTH      : integer := 5);
+        ADDR_WIDTH : integer := 2;
+        DEPTH      : integer := 4);
     port (
         clk        : in std_logic;
         we         : in std_logic;
@@ -137,8 +137,8 @@ use IEEE.std_logic_unsigned.all;
 entity cnn_accelerator_ddr_start_for_result_writer_U0_ShiftReg is
     generic (
         DATA_WIDTH : integer := 1;
-        ADDR_WIDTH : integer := 3;
-        DEPTH      : integer := 5);
+        ADDR_WIDTH : integer := 2;
+        DEPTH      : integer := 4);
     port (
         clk        : in std_logic;
         we         : in std_logic;

@@ -555,7 +555,7 @@ begin
         d0 => fc_input_stream_dout,
         q0 => activation_buffer_V_q0);
 
-    mul_8s_8s_16_1_1_U586 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U588 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -567,7 +567,7 @@ begin
         din1 => trunc_ln101_2_reg_1861_pp0_iter3_reg,
         dout => ret_V_128_fu_1002_p2);
 
-    mul_8s_8s_16_1_1_U587 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U589 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -579,7 +579,7 @@ begin
         din1 => trunc_ln101_4_reg_1866_pp0_iter3_reg,
         dout => ret_V_130_fu_1014_p2);
 
-    mul_8s_8s_16_1_1_U588 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U590 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -591,7 +591,7 @@ begin
         din1 => trunc_ln101_6_reg_1871_pp0_iter3_reg,
         dout => ret_V_132_fu_1026_p2);
 
-    mul_8s_8s_16_1_1_U589 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U591 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -603,7 +603,7 @@ begin
         din1 => trunc_ln101_8_reg_1876_pp0_iter3_reg,
         dout => ret_V_134_fu_1038_p2);
 
-    mul_8s_8s_16_1_1_U590 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U592 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -615,7 +615,7 @@ begin
         din1 => trunc_ln101_s_reg_1881_pp0_iter3_reg,
         dout => ret_V_136_fu_1063_p2);
 
-    mul_8s_8s_16_1_1_U591 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U593 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -627,7 +627,7 @@ begin
         din1 => trunc_ln101_10_reg_1886_pp0_iter3_reg,
         dout => ret_V_138_fu_1072_p2);
 
-    mul_8s_8s_16_1_1_U592 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U594 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -639,7 +639,7 @@ begin
         din1 => trunc_ln101_12_reg_1891_pp0_iter3_reg,
         dout => ret_V_140_fu_1081_p2);
 
-    mul_8s_8s_16_1_1_U593 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U595 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -651,7 +651,7 @@ begin
         din1 => tmp_s_reg_1956_pp0_iter3_reg,
         dout => ret_V_142_fu_1090_p2);
 
-    mul_8s_8s_16_1_1_U594 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U596 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -663,7 +663,7 @@ begin
         din1 => trunc_ln101_15_reg_1896_pp0_iter3_reg,
         dout => ret_V_144_fu_1115_p2);
 
-    mul_8s_8s_16_1_1_U595 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U597 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -675,7 +675,7 @@ begin
         din1 => trunc_ln101_17_reg_1901_pp0_iter3_reg,
         dout => ret_V_146_fu_1124_p2);
 
-    mul_8s_8s_16_1_1_U596 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U598 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -687,7 +687,7 @@ begin
         din1 => trunc_ln101_19_reg_1906_pp0_iter3_reg,
         dout => ret_V_148_fu_1133_p2);
 
-    mul_8s_8s_16_1_1_U597 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U599 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -699,7 +699,7 @@ begin
         din1 => trunc_ln101_21_reg_1911_pp0_iter3_reg,
         dout => ret_V_150_fu_1142_p2);
 
-    mul_8s_8s_16_1_1_U598 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U600 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -711,7 +711,7 @@ begin
         din1 => trunc_ln101_22_reg_1916_pp0_iter3_reg,
         dout => ret_V_152_fu_1167_p2);
 
-    mul_8s_8s_16_1_1_U599 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U601 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -723,7 +723,7 @@ begin
         din1 => trunc_ln101_24_reg_1921_pp0_iter3_reg,
         dout => ret_V_154_fu_1176_p2);
 
-    mul_8s_8s_16_1_1_U600 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U602 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -735,7 +735,7 @@ begin
         din1 => trunc_ln101_26_reg_1926_pp0_iter3_reg,
         dout => ret_V_156_fu_1185_p2);
 
-    mul_8s_8s_16_1_1_U601 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U603 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -747,7 +747,7 @@ begin
         din1 => trunc_ln101_28_reg_1931_pp0_iter3_reg,
         dout => ret_V_158_fu_1194_p2);
 
-    mul_8s_8s_16_1_1_U602 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U604 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -759,7 +759,7 @@ begin
         din1 => trunc_ln101_30_reg_1936_pp0_iter3_reg,
         dout => ret_V_160_fu_1219_p2);
 
-    mul_8s_8s_16_1_1_U603 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U605 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -771,7 +771,7 @@ begin
         din1 => trunc_ln101_32_reg_1941_pp0_iter3_reg,
         dout => ret_V_162_fu_1228_p2);
 
-    mul_8s_8s_16_1_1_U604 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U606 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -783,7 +783,7 @@ begin
         din1 => trunc_ln101_34_reg_1946_pp0_iter3_reg,
         dout => ret_V_164_fu_1237_p2);
 
-    mul_8s_8s_16_1_1_U605 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
+    mul_8s_8s_16_1_1_U607 : component cnn_accelerator_ddr_mul_8s_8s_16_1_1
     generic map (
         ID => 1,
         NUM_STAGE => 1,
@@ -795,7 +795,7 @@ begin
         din1 => trunc_ln101_36_reg_1951_pp0_iter3_reg,
         dout => ret_V_166_fu_1246_p2);
 
-    mac_muladd_8s_8s_16s_17_4_1_U606 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U608 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -812,7 +812,7 @@ begin
         ce => grp_fu_1593_ce,
         dout => grp_fu_1593_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U607 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U609 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -829,7 +829,7 @@ begin
         ce => grp_fu_1602_ce,
         dout => grp_fu_1602_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U608 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U610 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -846,7 +846,7 @@ begin
         ce => grp_fu_1611_ce,
         dout => grp_fu_1611_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U609 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U611 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -863,7 +863,7 @@ begin
         ce => grp_fu_1620_ce,
         dout => grp_fu_1620_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U610 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U612 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -880,7 +880,7 @@ begin
         ce => grp_fu_1629_ce,
         dout => grp_fu_1629_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U611 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U613 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -897,7 +897,7 @@ begin
         ce => grp_fu_1638_ce,
         dout => grp_fu_1638_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U612 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U614 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -914,7 +914,7 @@ begin
         ce => grp_fu_1647_ce,
         dout => grp_fu_1647_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U613 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U615 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -931,7 +931,7 @@ begin
         ce => grp_fu_1656_ce,
         dout => grp_fu_1656_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U614 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U616 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -948,7 +948,7 @@ begin
         ce => grp_fu_1665_ce,
         dout => grp_fu_1665_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U615 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U617 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -965,7 +965,7 @@ begin
         ce => grp_fu_1674_ce,
         dout => grp_fu_1674_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U616 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U618 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -982,7 +982,7 @@ begin
         ce => grp_fu_1683_ce,
         dout => grp_fu_1683_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U617 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U619 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -999,7 +999,7 @@ begin
         ce => grp_fu_1692_ce,
         dout => grp_fu_1692_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U618 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U620 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1016,7 +1016,7 @@ begin
         ce => grp_fu_1701_ce,
         dout => grp_fu_1701_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U619 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U621 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1033,7 +1033,7 @@ begin
         ce => grp_fu_1710_ce,
         dout => grp_fu_1710_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U620 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U622 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1050,7 +1050,7 @@ begin
         ce => grp_fu_1719_ce,
         dout => grp_fu_1719_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U621 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U623 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1067,7 +1067,7 @@ begin
         ce => grp_fu_1728_ce,
         dout => grp_fu_1728_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U622 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U624 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1084,7 +1084,7 @@ begin
         ce => grp_fu_1737_ce,
         dout => grp_fu_1737_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U623 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U625 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1101,7 +1101,7 @@ begin
         ce => grp_fu_1746_ce,
         dout => grp_fu_1746_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U624 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U626 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,
@@ -1118,7 +1118,7 @@ begin
         ce => grp_fu_1755_ce,
         dout => grp_fu_1755_p3);
 
-    mac_muladd_8s_8s_16s_17_4_1_U625 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
+    mac_muladd_8s_8s_16s_17_4_1_U627 : component cnn_accelerator_ddr_mac_muladd_8s_8s_16s_17_4_1
     generic map (
         ID => 1,
         NUM_STAGE => 4,

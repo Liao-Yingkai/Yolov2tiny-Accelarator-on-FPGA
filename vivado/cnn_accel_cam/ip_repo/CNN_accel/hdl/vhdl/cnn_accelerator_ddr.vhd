@@ -11,7 +11,7 @@ use IEEE.numeric_std.all;
 
 entity cnn_accelerator_ddr is
 generic (
-    C_S_AXI_CONTROL_ADDR_WIDTH : INTEGER := 6;
+    C_S_AXI_CONTROL_ADDR_WIDTH : INTEGER := 7;
     C_S_AXI_CONTROL_DATA_WIDTH : INTEGER := 32;
     C_M_AXI_GMEM_IO_ADDR_WIDTH : INTEGER := 64;
     C_M_AXI_GMEM_IO_ID_WIDTH : INTEGER := 1;
@@ -208,7 +208,7 @@ end;
 architecture behav of cnn_accelerator_ddr is 
     attribute CORE_GENERATION_INFO : STRING;
     attribute CORE_GENERATION_INFO of behav : architecture is
-    "cnn_accelerator_ddr_cnn_accelerator_ddr,hls_ip_2022_2,{HLS_INPUT_TYPE=cxx,HLS_INPUT_FLOAT=0,HLS_INPUT_FIXED=0,HLS_INPUT_PART=xc7z020-clg400-2,HLS_INPUT_CLOCK=10.000000,HLS_INPUT_ARCH=dataflow,HLS_SYN_CLOCK=7.300000,HLS_SYN_LAT=-1,HLS_SYN_TPT=-1,HLS_SYN_MEM=42,HLS_SYN_DSP=0,HLS_SYN_FF=28205,HLS_SYN_LUT=35673,HLS_VERSION=2022_2}";
+    "cnn_accelerator_ddr_cnn_accelerator_ddr,hls_ip_2022_2,{HLS_INPUT_TYPE=cxx,HLS_INPUT_FLOAT=0,HLS_INPUT_FIXED=0,HLS_INPUT_PART=xc7z020-clg400-2,HLS_INPUT_CLOCK=10.000000,HLS_INPUT_ARCH=dataflow,HLS_SYN_CLOCK=7.300000,HLS_SYN_LAT=-1,HLS_SYN_TPT=-1,HLS_SYN_MEM=47,HLS_SYN_DSP=0,HLS_SYN_FF=34348,HLS_SYN_LUT=39655,HLS_VERSION=2022_2}";
     constant C_S_AXI_DATA_WIDTH : INTEGER range 63 downto 0 := 20;
     constant ap_const_logic_1 : STD_LOGIC := '1';
     constant C_M_AXI_DATA_WIDTH : INTEGER range 63 downto 0 := 20;
@@ -227,6 +227,7 @@ architecture behav of cnn_accelerator_ddr is
     signal weights : STD_LOGIC_VECTOR (63 downto 0);
     signal params : STD_LOGIC_VECTOR (63 downto 0);
     signal result : STD_LOGIC_VECTOR (63 downto 0);
+    signal softmax_scale_q20 : STD_LOGIC_VECTOR (31 downto 0);
     signal ap_start : STD_LOGIC;
     signal ap_ready : STD_LOGIC;
     signal ap_done : STD_LOGIC;
@@ -268,6 +269,7 @@ architecture behav of cnn_accelerator_ddr is
     signal gmem_weights_RRESP : STD_LOGIC_VECTOR (1 downto 0);
     signal gmem_weights_BVALID : STD_LOGIC;
     signal entry_proc_U0_ap_start : STD_LOGIC;
+    signal entry_proc_U0_start_full_n : STD_LOGIC;
     signal entry_proc_U0_ap_done : STD_LOGIC;
     signal entry_proc_U0_ap_continue : STD_LOGIC;
     signal entry_proc_U0_ap_idle : STD_LOGIC;
@@ -276,6 +278,8 @@ architecture behav of cnn_accelerator_ddr is
     signal entry_proc_U0_start_write : STD_LOGIC;
     signal entry_proc_U0_result_c_din : STD_LOGIC_VECTOR (63 downto 0);
     signal entry_proc_U0_result_c_write : STD_LOGIC;
+    signal entry_proc_U0_softmax_scale_q20_c_din : STD_LOGIC_VECTOR (31 downto 0);
+    signal entry_proc_U0_softmax_scale_q20_c_write : STD_LOGIC;
     signal image_loader_U0_ap_start : STD_LOGIC;
     signal image_loader_U0_ap_done : STD_LOGIC;
     signal image_loader_U0_ap_continue : STD_LOGIC;
@@ -408,8 +412,6 @@ architecture behav of cnn_accelerator_ddr is
     signal p_anonymous_namespace_compute_runner_U0_ap_continue : STD_LOGIC;
     signal p_anonymous_namespace_compute_runner_U0_ap_idle : STD_LOGIC;
     signal p_anonymous_namespace_compute_runner_U0_ap_ready : STD_LOGIC;
-    signal p_anonymous_namespace_compute_runner_U0_start_out : STD_LOGIC;
-    signal p_anonymous_namespace_compute_runner_U0_start_write : STD_LOGIC;
     signal p_anonymous_namespace_compute_runner_U0_pixels_read : STD_LOGIC;
     signal p_anonymous_namespace_compute_runner_U0_w1_read : STD_LOGIC;
     signal p_anonymous_namespace_compute_runner_U0_p1_read : STD_LOGIC;
@@ -419,33 +421,21 @@ architecture behav of cnn_accelerator_ddr is
     signal p_anonymous_namespace_compute_runner_U0_pf_read : STD_LOGIC;
     signal p_anonymous_namespace_compute_runner_U0_computed_din : STD_LOGIC_VECTOR (79 downto 0);
     signal p_anonymous_namespace_compute_runner_U0_computed_write : STD_LOGIC;
-    signal logits_split_U0_ap_start : STD_LOGIC;
-    signal logits_split_U0_ap_done : STD_LOGIC;
-    signal logits_split_U0_ap_continue : STD_LOGIC;
-    signal logits_split_U0_ap_idle : STD_LOGIC;
-    signal logits_split_U0_ap_ready : STD_LOGIC;
-    signal logits_split_U0_start_out : STD_LOGIC;
-    signal logits_split_U0_start_write : STD_LOGIC;
-    signal logits_split_U0_computed_read : STD_LOGIC;
-    signal logits_split_U0_write_logits_din : STD_LOGIC_VECTOR (79 downto 0);
-    signal logits_split_U0_write_logits_write : STD_LOGIC;
-    signal logits_split_U0_argmax_logits_din : STD_LOGIC_VECTOR (79 downto 0);
-    signal logits_split_U0_argmax_logits_write : STD_LOGIC;
-    signal p_anonymous_namespace_argmax_runner_U0_ap_start : STD_LOGIC;
-    signal p_anonymous_namespace_argmax_runner_U0_ap_done : STD_LOGIC;
-    signal p_anonymous_namespace_argmax_runner_U0_ap_continue : STD_LOGIC;
-    signal p_anonymous_namespace_argmax_runner_U0_ap_idle : STD_LOGIC;
-    signal p_anonymous_namespace_argmax_runner_U0_ap_ready : STD_LOGIC;
-    signal p_anonymous_namespace_argmax_runner_U0_argmax_logits_read : STD_LOGIC;
-    signal p_anonymous_namespace_argmax_runner_U0_classes1_din : STD_LOGIC_VECTOR (3 downto 0);
-    signal p_anonymous_namespace_argmax_runner_U0_classes1_write : STD_LOGIC;
+    signal softmax_U0_ap_start : STD_LOGIC;
+    signal softmax_U0_ap_done : STD_LOGIC;
+    signal softmax_U0_ap_continue : STD_LOGIC;
+    signal softmax_U0_ap_idle : STD_LOGIC;
+    signal softmax_U0_ap_ready : STD_LOGIC;
+    signal softmax_U0_computed_read : STD_LOGIC;
+    signal softmax_U0_inference_din : STD_LOGIC_VECTOR (163 downto 0);
+    signal softmax_U0_inference_write : STD_LOGIC;
+    signal softmax_U0_scale_q20_read : STD_LOGIC;
     signal result_writer_U0_ap_start : STD_LOGIC;
     signal result_writer_U0_ap_done : STD_LOGIC;
     signal result_writer_U0_ap_continue : STD_LOGIC;
     signal result_writer_U0_ap_idle : STD_LOGIC;
     signal result_writer_U0_ap_ready : STD_LOGIC;
-    signal result_writer_U0_write_logits_read : STD_LOGIC;
-    signal result_writer_U0_classes1_read : STD_LOGIC;
+    signal result_writer_U0_inference_read : STD_LOGIC;
     signal result_writer_U0_m_axi_gmem_io_AWVALID : STD_LOGIC;
     signal result_writer_U0_m_axi_gmem_io_AWADDR : STD_LOGIC_VECTOR (63 downto 0);
     signal result_writer_U0_m_axi_gmem_io_AWID : STD_LOGIC_VECTOR (0 downto 0);
@@ -484,6 +474,11 @@ architecture behav of cnn_accelerator_ddr is
     signal result_c_num_data_valid : STD_LOGIC_VECTOR (3 downto 0);
     signal result_c_fifo_cap : STD_LOGIC_VECTOR (3 downto 0);
     signal result_c_empty_n : STD_LOGIC;
+    signal softmax_scale_q20_c_full_n : STD_LOGIC;
+    signal softmax_scale_q20_c_dout : STD_LOGIC_VECTOR (31 downto 0);
+    signal softmax_scale_q20_c_num_data_valid : STD_LOGIC_VECTOR (2 downto 0);
+    signal softmax_scale_q20_c_fifo_cap : STD_LOGIC_VECTOR (2 downto 0);
+    signal softmax_scale_q20_c_empty_n : STD_LOGIC;
     signal pixels_full_n : STD_LOGIC;
     signal pixels_dout : STD_LOGIC_VECTOR (63 downto 0);
     signal pixels_num_data_valid : STD_LOGIC_VECTOR (1 downto 0);
@@ -524,21 +519,11 @@ architecture behav of cnn_accelerator_ddr is
     signal computed_num_data_valid : STD_LOGIC_VECTOR (1 downto 0);
     signal computed_fifo_cap : STD_LOGIC_VECTOR (1 downto 0);
     signal computed_empty_n : STD_LOGIC;
-    signal write_logits_full_n : STD_LOGIC;
-    signal write_logits_dout : STD_LOGIC_VECTOR (79 downto 0);
-    signal write_logits_num_data_valid : STD_LOGIC_VECTOR (1 downto 0);
-    signal write_logits_fifo_cap : STD_LOGIC_VECTOR (1 downto 0);
-    signal write_logits_empty_n : STD_LOGIC;
-    signal argmax_logits_full_n : STD_LOGIC;
-    signal argmax_logits_dout : STD_LOGIC_VECTOR (79 downto 0);
-    signal argmax_logits_num_data_valid : STD_LOGIC_VECTOR (1 downto 0);
-    signal argmax_logits_fifo_cap : STD_LOGIC_VECTOR (1 downto 0);
-    signal argmax_logits_empty_n : STD_LOGIC;
-    signal classes_full_n : STD_LOGIC;
-    signal classes_dout : STD_LOGIC_VECTOR (3 downto 0);
-    signal classes_num_data_valid : STD_LOGIC_VECTOR (1 downto 0);
-    signal classes_fifo_cap : STD_LOGIC_VECTOR (1 downto 0);
-    signal classes_empty_n : STD_LOGIC;
+    signal inference_full_n : STD_LOGIC;
+    signal inference_dout : STD_LOGIC_VECTOR (163 downto 0);
+    signal inference_num_data_valid : STD_LOGIC_VECTOR (1 downto 0);
+    signal inference_fifo_cap : STD_LOGIC_VECTOR (1 downto 0);
+    signal inference_empty_n : STD_LOGIC;
     signal ap_sync_ready : STD_LOGIC;
     signal ap_sync_reg_entry_proc_U0_ap_ready : STD_LOGIC := '0';
     signal ap_sync_entry_proc_U0_ap_ready : STD_LOGIC;
@@ -548,6 +533,10 @@ architecture behav of cnn_accelerator_ddr is
     signal ap_sync_weight_loader_U0_ap_ready : STD_LOGIC;
     signal ap_sync_reg_param_loader_U0_ap_ready : STD_LOGIC := '0';
     signal ap_sync_param_loader_U0_ap_ready : STD_LOGIC;
+    signal start_for_softmax_U0_din : STD_LOGIC_VECTOR (0 downto 0);
+    signal start_for_softmax_U0_full_n : STD_LOGIC;
+    signal start_for_softmax_U0_dout : STD_LOGIC_VECTOR (0 downto 0);
+    signal start_for_softmax_U0_empty_n : STD_LOGIC;
     signal start_for_result_writer_U0_din : STD_LOGIC_VECTOR (0 downto 0);
     signal start_for_result_writer_U0_full_n : STD_LOGIC;
     signal start_for_result_writer_U0_dout : STD_LOGIC_VECTOR (0 downto 0);
@@ -556,14 +545,6 @@ architecture behav of cnn_accelerator_ddr is
     signal start_for_p_anonymous_namespace_compute_runner_U0_full_n : STD_LOGIC;
     signal start_for_p_anonymous_namespace_compute_runner_U0_dout : STD_LOGIC_VECTOR (0 downto 0);
     signal start_for_p_anonymous_namespace_compute_runner_U0_empty_n : STD_LOGIC;
-    signal start_for_logits_split_U0_din : STD_LOGIC_VECTOR (0 downto 0);
-    signal start_for_logits_split_U0_full_n : STD_LOGIC;
-    signal start_for_logits_split_U0_dout : STD_LOGIC_VECTOR (0 downto 0);
-    signal start_for_logits_split_U0_empty_n : STD_LOGIC;
-    signal start_for_p_anonymous_namespace_argmax_runner_U0_din : STD_LOGIC_VECTOR (0 downto 0);
-    signal start_for_p_anonymous_namespace_argmax_runner_U0_full_n : STD_LOGIC;
-    signal start_for_p_anonymous_namespace_argmax_runner_U0_dout : STD_LOGIC_VECTOR (0 downto 0);
-    signal start_for_p_anonymous_namespace_argmax_runner_U0_empty_n : STD_LOGIC;
     signal ap_ce_reg : STD_LOGIC;
 
     component cnn_accelerator_ddr_entry_proc IS
@@ -583,7 +564,13 @@ architecture behav of cnn_accelerator_ddr is
         result_c_num_data_valid : IN STD_LOGIC_VECTOR (3 downto 0);
         result_c_fifo_cap : IN STD_LOGIC_VECTOR (3 downto 0);
         result_c_full_n : IN STD_LOGIC;
-        result_c_write : OUT STD_LOGIC );
+        result_c_write : OUT STD_LOGIC;
+        softmax_scale_q20 : IN STD_LOGIC_VECTOR (31 downto 0);
+        softmax_scale_q20_c_din : OUT STD_LOGIC_VECTOR (31 downto 0);
+        softmax_scale_q20_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+        softmax_scale_q20_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+        softmax_scale_q20_c_full_n : IN STD_LOGIC;
+        softmax_scale_q20_c_write : OUT STD_LOGIC );
     end component;
 
 
@@ -807,13 +794,10 @@ architecture behav of cnn_accelerator_ddr is
         ap_clk : IN STD_LOGIC;
         ap_rst : IN STD_LOGIC;
         ap_start : IN STD_LOGIC;
-        start_full_n : IN STD_LOGIC;
         ap_done : OUT STD_LOGIC;
         ap_continue : IN STD_LOGIC;
         ap_idle : OUT STD_LOGIC;
         ap_ready : OUT STD_LOGIC;
-        start_out : OUT STD_LOGIC;
-        start_write : OUT STD_LOGIC;
         pixels_dout : IN STD_LOGIC_VECTOR (63 downto 0);
         pixels_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
         pixels_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
@@ -857,55 +841,30 @@ architecture behav of cnn_accelerator_ddr is
     end component;
 
 
-    component cnn_accelerator_ddr_logits_split IS
+    component cnn_accelerator_ddr_softmax IS
     port (
         ap_clk : IN STD_LOGIC;
         ap_rst : IN STD_LOGIC;
         ap_start : IN STD_LOGIC;
-        start_full_n : IN STD_LOGIC;
         ap_done : OUT STD_LOGIC;
         ap_continue : IN STD_LOGIC;
         ap_idle : OUT STD_LOGIC;
         ap_ready : OUT STD_LOGIC;
-        start_out : OUT STD_LOGIC;
-        start_write : OUT STD_LOGIC;
         computed_dout : IN STD_LOGIC_VECTOR (79 downto 0);
         computed_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
         computed_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
         computed_empty_n : IN STD_LOGIC;
         computed_read : OUT STD_LOGIC;
-        write_logits_din : OUT STD_LOGIC_VECTOR (79 downto 0);
-        write_logits_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
-        write_logits_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
-        write_logits_full_n : IN STD_LOGIC;
-        write_logits_write : OUT STD_LOGIC;
-        argmax_logits_din : OUT STD_LOGIC_VECTOR (79 downto 0);
-        argmax_logits_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
-        argmax_logits_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
-        argmax_logits_full_n : IN STD_LOGIC;
-        argmax_logits_write : OUT STD_LOGIC );
-    end component;
-
-
-    component cnn_accelerator_ddr_p_anonymous_namespace_argmax_runner IS
-    port (
-        ap_clk : IN STD_LOGIC;
-        ap_rst : IN STD_LOGIC;
-        ap_start : IN STD_LOGIC;
-        ap_done : OUT STD_LOGIC;
-        ap_continue : IN STD_LOGIC;
-        ap_idle : OUT STD_LOGIC;
-        ap_ready : OUT STD_LOGIC;
-        argmax_logits_dout : IN STD_LOGIC_VECTOR (79 downto 0);
-        argmax_logits_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
-        argmax_logits_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
-        argmax_logits_empty_n : IN STD_LOGIC;
-        argmax_logits_read : OUT STD_LOGIC;
-        classes1_din : OUT STD_LOGIC_VECTOR (3 downto 0);
-        classes1_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
-        classes1_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
-        classes1_full_n : IN STD_LOGIC;
-        classes1_write : OUT STD_LOGIC );
+        inference_din : OUT STD_LOGIC_VECTOR (163 downto 0);
+        inference_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
+        inference_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
+        inference_full_n : IN STD_LOGIC;
+        inference_write : OUT STD_LOGIC;
+        scale_q20_dout : IN STD_LOGIC_VECTOR (31 downto 0);
+        scale_q20_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+        scale_q20_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+        scale_q20_empty_n : IN STD_LOGIC;
+        scale_q20_read : OUT STD_LOGIC );
     end component;
 
 
@@ -918,16 +877,11 @@ architecture behav of cnn_accelerator_ddr is
         ap_continue : IN STD_LOGIC;
         ap_idle : OUT STD_LOGIC;
         ap_ready : OUT STD_LOGIC;
-        write_logits_dout : IN STD_LOGIC_VECTOR (79 downto 0);
-        write_logits_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
-        write_logits_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
-        write_logits_empty_n : IN STD_LOGIC;
-        write_logits_read : OUT STD_LOGIC;
-        classes1_dout : IN STD_LOGIC_VECTOR (3 downto 0);
-        classes1_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
-        classes1_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
-        classes1_empty_n : IN STD_LOGIC;
-        classes1_read : OUT STD_LOGIC;
+        inference_dout : IN STD_LOGIC_VECTOR (163 downto 0);
+        inference_num_data_valid : IN STD_LOGIC_VECTOR (1 downto 0);
+        inference_fifo_cap : IN STD_LOGIC_VECTOR (1 downto 0);
+        inference_empty_n : IN STD_LOGIC;
+        inference_read : OUT STD_LOGIC;
         m_axi_gmem_io_AWVALID : OUT STD_LOGIC;
         m_axi_gmem_io_AWREADY : IN STD_LOGIC;
         m_axi_gmem_io_AWADDR : OUT STD_LOGIC_VECTOR (63 downto 0);
@@ -982,7 +936,7 @@ architecture behav of cnn_accelerator_ddr is
     end component;
 
 
-    component cnn_accelerator_ddr_fifo_w64_d6_S IS
+    component cnn_accelerator_ddr_fifo_w64_d5_S IS
     port (
         clk : IN STD_LOGIC;
         reset : IN STD_LOGIC;
@@ -994,6 +948,23 @@ architecture behav of cnn_accelerator_ddr is
         if_dout : OUT STD_LOGIC_VECTOR (63 downto 0);
         if_num_data_valid : OUT STD_LOGIC_VECTOR (3 downto 0);
         if_fifo_cap : OUT STD_LOGIC_VECTOR (3 downto 0);
+        if_empty_n : OUT STD_LOGIC;
+        if_read : IN STD_LOGIC );
+    end component;
+
+
+    component cnn_accelerator_ddr_fifo_w32_d4_S IS
+    port (
+        clk : IN STD_LOGIC;
+        reset : IN STD_LOGIC;
+        if_read_ce : IN STD_LOGIC;
+        if_write_ce : IN STD_LOGIC;
+        if_din : IN STD_LOGIC_VECTOR (31 downto 0);
+        if_full_n : OUT STD_LOGIC;
+        if_write : IN STD_LOGIC;
+        if_dout : OUT STD_LOGIC_VECTOR (31 downto 0);
+        if_num_data_valid : OUT STD_LOGIC_VECTOR (2 downto 0);
+        if_fifo_cap : OUT STD_LOGIC_VECTOR (2 downto 0);
         if_empty_n : OUT STD_LOGIC;
         if_read : IN STD_LOGIC );
     end component;
@@ -1101,18 +1072,33 @@ architecture behav of cnn_accelerator_ddr is
     end component;
 
 
-    component cnn_accelerator_ddr_fifo_w4_d2_S IS
+    component cnn_accelerator_ddr_fifo_w164_d2_S IS
     port (
         clk : IN STD_LOGIC;
         reset : IN STD_LOGIC;
         if_read_ce : IN STD_LOGIC;
         if_write_ce : IN STD_LOGIC;
-        if_din : IN STD_LOGIC_VECTOR (3 downto 0);
+        if_din : IN STD_LOGIC_VECTOR (163 downto 0);
         if_full_n : OUT STD_LOGIC;
         if_write : IN STD_LOGIC;
-        if_dout : OUT STD_LOGIC_VECTOR (3 downto 0);
+        if_dout : OUT STD_LOGIC_VECTOR (163 downto 0);
         if_num_data_valid : OUT STD_LOGIC_VECTOR (1 downto 0);
         if_fifo_cap : OUT STD_LOGIC_VECTOR (1 downto 0);
+        if_empty_n : OUT STD_LOGIC;
+        if_read : IN STD_LOGIC );
+    end component;
+
+
+    component cnn_accelerator_ddr_start_for_softmax_U0 IS
+    port (
+        clk : IN STD_LOGIC;
+        reset : IN STD_LOGIC;
+        if_read_ce : IN STD_LOGIC;
+        if_write_ce : IN STD_LOGIC;
+        if_din : IN STD_LOGIC_VECTOR (0 downto 0);
+        if_full_n : OUT STD_LOGIC;
+        if_write : IN STD_LOGIC;
+        if_dout : OUT STD_LOGIC_VECTOR (0 downto 0);
         if_empty_n : OUT STD_LOGIC;
         if_read : IN STD_LOGIC );
     end component;
@@ -1134,36 +1120,6 @@ architecture behav of cnn_accelerator_ddr is
 
 
     component cnn_accelerator_ddr_start_for_p_anonymous_namespace_compute_runner_U0 IS
-    port (
-        clk : IN STD_LOGIC;
-        reset : IN STD_LOGIC;
-        if_read_ce : IN STD_LOGIC;
-        if_write_ce : IN STD_LOGIC;
-        if_din : IN STD_LOGIC_VECTOR (0 downto 0);
-        if_full_n : OUT STD_LOGIC;
-        if_write : IN STD_LOGIC;
-        if_dout : OUT STD_LOGIC_VECTOR (0 downto 0);
-        if_empty_n : OUT STD_LOGIC;
-        if_read : IN STD_LOGIC );
-    end component;
-
-
-    component cnn_accelerator_ddr_start_for_logits_split_U0 IS
-    port (
-        clk : IN STD_LOGIC;
-        reset : IN STD_LOGIC;
-        if_read_ce : IN STD_LOGIC;
-        if_write_ce : IN STD_LOGIC;
-        if_din : IN STD_LOGIC_VECTOR (0 downto 0);
-        if_full_n : OUT STD_LOGIC;
-        if_write : IN STD_LOGIC;
-        if_dout : OUT STD_LOGIC_VECTOR (0 downto 0);
-        if_empty_n : OUT STD_LOGIC;
-        if_read : IN STD_LOGIC );
-    end component;
-
-
-    component cnn_accelerator_ddr_start_for_p_anonymous_namespace_argmax_runner_U0 IS
     port (
         clk : IN STD_LOGIC;
         reset : IN STD_LOGIC;
@@ -1207,6 +1163,7 @@ architecture behav of cnn_accelerator_ddr is
         weights : OUT STD_LOGIC_VECTOR (63 downto 0);
         params : OUT STD_LOGIC_VECTOR (63 downto 0);
         result : OUT STD_LOGIC_VECTOR (63 downto 0);
+        softmax_scale_q20 : OUT STD_LOGIC_VECTOR (31 downto 0);
         ap_start : OUT STD_LOGIC;
         interrupt : OUT STD_LOGIC;
         ap_ready : IN STD_LOGIC;
@@ -1522,6 +1479,7 @@ begin
         weights => weights,
         params => params,
         result => result,
+        softmax_scale_q20 => softmax_scale_q20,
         ap_start => ap_start,
         interrupt => interrupt,
         ap_ready => ap_ready,
@@ -1803,7 +1761,7 @@ begin
         ap_clk => ap_clk,
         ap_rst => ap_rst_n_inv,
         ap_start => entry_proc_U0_ap_start,
-        start_full_n => start_for_result_writer_U0_full_n,
+        start_full_n => entry_proc_U0_start_full_n,
         ap_done => entry_proc_U0_ap_done,
         ap_continue => entry_proc_U0_ap_continue,
         ap_idle => entry_proc_U0_ap_idle,
@@ -1815,7 +1773,13 @@ begin
         result_c_num_data_valid => result_c_num_data_valid,
         result_c_fifo_cap => result_c_fifo_cap,
         result_c_full_n => result_c_full_n,
-        result_c_write => entry_proc_U0_result_c_write);
+        result_c_write => entry_proc_U0_result_c_write,
+        softmax_scale_q20 => softmax_scale_q20,
+        softmax_scale_q20_c_din => entry_proc_U0_softmax_scale_q20_c_din,
+        softmax_scale_q20_c_num_data_valid => softmax_scale_q20_c_num_data_valid,
+        softmax_scale_q20_c_fifo_cap => softmax_scale_q20_c_fifo_cap,
+        softmax_scale_q20_c_full_n => softmax_scale_q20_c_full_n,
+        softmax_scale_q20_c_write => entry_proc_U0_softmax_scale_q20_c_write);
 
     image_loader_U0 : component cnn_accelerator_ddr_image_loader
     port map (
@@ -2031,13 +1995,10 @@ begin
         ap_clk => ap_clk,
         ap_rst => ap_rst_n_inv,
         ap_start => p_anonymous_namespace_compute_runner_U0_ap_start,
-        start_full_n => start_for_logits_split_U0_full_n,
         ap_done => p_anonymous_namespace_compute_runner_U0_ap_done,
         ap_continue => p_anonymous_namespace_compute_runner_U0_ap_continue,
         ap_idle => p_anonymous_namespace_compute_runner_U0_ap_idle,
         ap_ready => p_anonymous_namespace_compute_runner_U0_ap_ready,
-        start_out => p_anonymous_namespace_compute_runner_U0_start_out,
-        start_write => p_anonymous_namespace_compute_runner_U0_start_write,
         pixels_dout => pixels_dout,
         pixels_num_data_valid => pixels_num_data_valid,
         pixels_fifo_cap => pixels_fifo_cap,
@@ -2079,53 +2040,30 @@ begin
         computed_full_n => computed_full_n,
         computed_write => p_anonymous_namespace_compute_runner_U0_computed_write);
 
-    logits_split_U0 : component cnn_accelerator_ddr_logits_split
+    softmax_U0 : component cnn_accelerator_ddr_softmax
     port map (
         ap_clk => ap_clk,
         ap_rst => ap_rst_n_inv,
-        ap_start => logits_split_U0_ap_start,
-        start_full_n => start_for_p_anonymous_namespace_argmax_runner_U0_full_n,
-        ap_done => logits_split_U0_ap_done,
-        ap_continue => logits_split_U0_ap_continue,
-        ap_idle => logits_split_U0_ap_idle,
-        ap_ready => logits_split_U0_ap_ready,
-        start_out => logits_split_U0_start_out,
-        start_write => logits_split_U0_start_write,
+        ap_start => softmax_U0_ap_start,
+        ap_done => softmax_U0_ap_done,
+        ap_continue => softmax_U0_ap_continue,
+        ap_idle => softmax_U0_ap_idle,
+        ap_ready => softmax_U0_ap_ready,
         computed_dout => computed_dout,
         computed_num_data_valid => computed_num_data_valid,
         computed_fifo_cap => computed_fifo_cap,
         computed_empty_n => computed_empty_n,
-        computed_read => logits_split_U0_computed_read,
-        write_logits_din => logits_split_U0_write_logits_din,
-        write_logits_num_data_valid => write_logits_num_data_valid,
-        write_logits_fifo_cap => write_logits_fifo_cap,
-        write_logits_full_n => write_logits_full_n,
-        write_logits_write => logits_split_U0_write_logits_write,
-        argmax_logits_din => logits_split_U0_argmax_logits_din,
-        argmax_logits_num_data_valid => argmax_logits_num_data_valid,
-        argmax_logits_fifo_cap => argmax_logits_fifo_cap,
-        argmax_logits_full_n => argmax_logits_full_n,
-        argmax_logits_write => logits_split_U0_argmax_logits_write);
-
-    p_anonymous_namespace_argmax_runner_U0 : component cnn_accelerator_ddr_p_anonymous_namespace_argmax_runner
-    port map (
-        ap_clk => ap_clk,
-        ap_rst => ap_rst_n_inv,
-        ap_start => p_anonymous_namespace_argmax_runner_U0_ap_start,
-        ap_done => p_anonymous_namespace_argmax_runner_U0_ap_done,
-        ap_continue => p_anonymous_namespace_argmax_runner_U0_ap_continue,
-        ap_idle => p_anonymous_namespace_argmax_runner_U0_ap_idle,
-        ap_ready => p_anonymous_namespace_argmax_runner_U0_ap_ready,
-        argmax_logits_dout => argmax_logits_dout,
-        argmax_logits_num_data_valid => argmax_logits_num_data_valid,
-        argmax_logits_fifo_cap => argmax_logits_fifo_cap,
-        argmax_logits_empty_n => argmax_logits_empty_n,
-        argmax_logits_read => p_anonymous_namespace_argmax_runner_U0_argmax_logits_read,
-        classes1_din => p_anonymous_namespace_argmax_runner_U0_classes1_din,
-        classes1_num_data_valid => classes_num_data_valid,
-        classes1_fifo_cap => classes_fifo_cap,
-        classes1_full_n => classes_full_n,
-        classes1_write => p_anonymous_namespace_argmax_runner_U0_classes1_write);
+        computed_read => softmax_U0_computed_read,
+        inference_din => softmax_U0_inference_din,
+        inference_num_data_valid => inference_num_data_valid,
+        inference_fifo_cap => inference_fifo_cap,
+        inference_full_n => inference_full_n,
+        inference_write => softmax_U0_inference_write,
+        scale_q20_dout => softmax_scale_q20_c_dout,
+        scale_q20_num_data_valid => softmax_scale_q20_c_num_data_valid,
+        scale_q20_fifo_cap => softmax_scale_q20_c_fifo_cap,
+        scale_q20_empty_n => softmax_scale_q20_c_empty_n,
+        scale_q20_read => softmax_U0_scale_q20_read);
 
     result_writer_U0 : component cnn_accelerator_ddr_result_writer
     port map (
@@ -2136,16 +2074,11 @@ begin
         ap_continue => result_writer_U0_ap_continue,
         ap_idle => result_writer_U0_ap_idle,
         ap_ready => result_writer_U0_ap_ready,
-        write_logits_dout => write_logits_dout,
-        write_logits_num_data_valid => write_logits_num_data_valid,
-        write_logits_fifo_cap => write_logits_fifo_cap,
-        write_logits_empty_n => write_logits_empty_n,
-        write_logits_read => result_writer_U0_write_logits_read,
-        classes1_dout => classes_dout,
-        classes1_num_data_valid => classes_num_data_valid,
-        classes1_fifo_cap => classes_fifo_cap,
-        classes1_empty_n => classes_empty_n,
-        classes1_read => result_writer_U0_classes1_read,
+        inference_dout => inference_dout,
+        inference_num_data_valid => inference_num_data_valid,
+        inference_fifo_cap => inference_fifo_cap,
+        inference_empty_n => inference_empty_n,
+        inference_read => result_writer_U0_inference_read,
         m_axi_gmem_io_AWVALID => result_writer_U0_m_axi_gmem_io_AWVALID,
         m_axi_gmem_io_AWREADY => gmem_io_AWREADY,
         m_axi_gmem_io_AWADDR => result_writer_U0_m_axi_gmem_io_AWADDR,
@@ -2198,7 +2131,7 @@ begin
         result_empty_n => result_c_empty_n,
         result_read => result_writer_U0_result_read);
 
-    result_c_U : component cnn_accelerator_ddr_fifo_w64_d6_S
+    result_c_U : component cnn_accelerator_ddr_fifo_w64_d5_S
     port map (
         clk => ap_clk,
         reset => ap_rst_n_inv,
@@ -2212,6 +2145,21 @@ begin
         if_fifo_cap => result_c_fifo_cap,
         if_empty_n => result_c_empty_n,
         if_read => result_writer_U0_result_read);
+
+    softmax_scale_q20_c_U : component cnn_accelerator_ddr_fifo_w32_d4_S
+    port map (
+        clk => ap_clk,
+        reset => ap_rst_n_inv,
+        if_read_ce => ap_const_logic_1,
+        if_write_ce => ap_const_logic_1,
+        if_din => entry_proc_U0_softmax_scale_q20_c_din,
+        if_full_n => softmax_scale_q20_c_full_n,
+        if_write => entry_proc_U0_softmax_scale_q20_c_write,
+        if_dout => softmax_scale_q20_c_dout,
+        if_num_data_valid => softmax_scale_q20_c_num_data_valid,
+        if_fifo_cap => softmax_scale_q20_c_fifo_cap,
+        if_empty_n => softmax_scale_q20_c_empty_n,
+        if_read => softmax_U0_scale_q20_read);
 
     pixels_U : component cnn_accelerator_ddr_fifo_w64_d2_S_x
     port map (
@@ -2331,52 +2279,35 @@ begin
         if_num_data_valid => computed_num_data_valid,
         if_fifo_cap => computed_fifo_cap,
         if_empty_n => computed_empty_n,
-        if_read => logits_split_U0_computed_read);
+        if_read => softmax_U0_computed_read);
 
-    write_logits_U : component cnn_accelerator_ddr_fifo_w80_d2_S
+    inference_U : component cnn_accelerator_ddr_fifo_w164_d2_S
     port map (
         clk => ap_clk,
         reset => ap_rst_n_inv,
         if_read_ce => ap_const_logic_1,
         if_write_ce => ap_const_logic_1,
-        if_din => logits_split_U0_write_logits_din,
-        if_full_n => write_logits_full_n,
-        if_write => logits_split_U0_write_logits_write,
-        if_dout => write_logits_dout,
-        if_num_data_valid => write_logits_num_data_valid,
-        if_fifo_cap => write_logits_fifo_cap,
-        if_empty_n => write_logits_empty_n,
-        if_read => result_writer_U0_write_logits_read);
+        if_din => softmax_U0_inference_din,
+        if_full_n => inference_full_n,
+        if_write => softmax_U0_inference_write,
+        if_dout => inference_dout,
+        if_num_data_valid => inference_num_data_valid,
+        if_fifo_cap => inference_fifo_cap,
+        if_empty_n => inference_empty_n,
+        if_read => result_writer_U0_inference_read);
 
-    argmax_logits_U : component cnn_accelerator_ddr_fifo_w80_d2_S
+    start_for_softmax_U0_U : component cnn_accelerator_ddr_start_for_softmax_U0
     port map (
         clk => ap_clk,
         reset => ap_rst_n_inv,
         if_read_ce => ap_const_logic_1,
         if_write_ce => ap_const_logic_1,
-        if_din => logits_split_U0_argmax_logits_din,
-        if_full_n => argmax_logits_full_n,
-        if_write => logits_split_U0_argmax_logits_write,
-        if_dout => argmax_logits_dout,
-        if_num_data_valid => argmax_logits_num_data_valid,
-        if_fifo_cap => argmax_logits_fifo_cap,
-        if_empty_n => argmax_logits_empty_n,
-        if_read => p_anonymous_namespace_argmax_runner_U0_argmax_logits_read);
-
-    classes_U : component cnn_accelerator_ddr_fifo_w4_d2_S
-    port map (
-        clk => ap_clk,
-        reset => ap_rst_n_inv,
-        if_read_ce => ap_const_logic_1,
-        if_write_ce => ap_const_logic_1,
-        if_din => p_anonymous_namespace_argmax_runner_U0_classes1_din,
-        if_full_n => classes_full_n,
-        if_write => p_anonymous_namespace_argmax_runner_U0_classes1_write,
-        if_dout => classes_dout,
-        if_num_data_valid => classes_num_data_valid,
-        if_fifo_cap => classes_fifo_cap,
-        if_empty_n => classes_empty_n,
-        if_read => result_writer_U0_classes1_read);
+        if_din => start_for_softmax_U0_din,
+        if_full_n => start_for_softmax_U0_full_n,
+        if_write => entry_proc_U0_start_write,
+        if_dout => start_for_softmax_U0_dout,
+        if_empty_n => start_for_softmax_U0_empty_n,
+        if_read => softmax_U0_ap_ready);
 
     start_for_result_writer_U0_U : component cnn_accelerator_ddr_start_for_result_writer_U0
     port map (
@@ -2403,32 +2334,6 @@ begin
         if_dout => start_for_p_anonymous_namespace_compute_runner_U0_dout,
         if_empty_n => start_for_p_anonymous_namespace_compute_runner_U0_empty_n,
         if_read => p_anonymous_namespace_compute_runner_U0_ap_ready);
-
-    start_for_logits_split_U0_U : component cnn_accelerator_ddr_start_for_logits_split_U0
-    port map (
-        clk => ap_clk,
-        reset => ap_rst_n_inv,
-        if_read_ce => ap_const_logic_1,
-        if_write_ce => ap_const_logic_1,
-        if_din => start_for_logits_split_U0_din,
-        if_full_n => start_for_logits_split_U0_full_n,
-        if_write => p_anonymous_namespace_compute_runner_U0_start_write,
-        if_dout => start_for_logits_split_U0_dout,
-        if_empty_n => start_for_logits_split_U0_empty_n,
-        if_read => logits_split_U0_ap_ready);
-
-    start_for_p_anonymous_namespace_argmax_runner_U0_U : component cnn_accelerator_ddr_start_for_p_anonymous_namespace_argmax_runner_U0
-    port map (
-        clk => ap_clk,
-        reset => ap_rst_n_inv,
-        if_read_ce => ap_const_logic_1,
-        if_write_ce => ap_const_logic_1,
-        if_din => start_for_p_anonymous_namespace_argmax_runner_U0_din,
-        if_full_n => start_for_p_anonymous_namespace_argmax_runner_U0_full_n,
-        if_write => logits_split_U0_start_write,
-        if_dout => start_for_p_anonymous_namespace_argmax_runner_U0_dout,
-        if_empty_n => start_for_p_anonymous_namespace_argmax_runner_U0_empty_n,
-        if_read => p_anonymous_namespace_argmax_runner_U0_ap_ready);
 
 
 
@@ -2498,7 +2403,7 @@ begin
     end process;
 
     ap_done <= result_writer_U0_ap_done;
-    ap_idle <= (weight_loader_U0_ap_idle and result_writer_U0_ap_idle and param_loader_U0_ap_idle and p_anonymous_namespace_compute_runner_U0_ap_idle and p_anonymous_namespace_argmax_runner_U0_ap_idle and logits_split_U0_ap_idle and image_loader_U0_ap_idle and entry_proc_U0_ap_idle);
+    ap_idle <= (weight_loader_U0_ap_idle and softmax_U0_ap_idle and result_writer_U0_ap_idle and param_loader_U0_ap_idle and p_anonymous_namespace_compute_runner_U0_ap_idle and image_loader_U0_ap_idle and entry_proc_U0_ap_idle);
     ap_ready <= ap_sync_ready;
 
     ap_rst_n_inv_assign_proc : process(ap_rst_n)
@@ -2513,6 +2418,7 @@ begin
     ap_sync_weight_loader_U0_ap_ready <= (weight_loader_U0_ap_ready or ap_sync_reg_weight_loader_U0_ap_ready);
     entry_proc_U0_ap_continue <= ap_const_logic_1;
     entry_proc_U0_ap_start <= ((ap_sync_reg_entry_proc_U0_ap_ready xor ap_const_logic_1) and ap_start);
+    entry_proc_U0_start_full_n <= (start_for_softmax_U0_full_n and start_for_result_writer_U0_full_n);
     gmem_io_BID <= ap_const_lv1_0;
     gmem_io_BRESP <= ap_const_lv2_0;
     gmem_io_BUSER <= ap_const_lv1_0;
@@ -2530,20 +2436,17 @@ begin
     gmem_weights_RUSER <= ap_const_lv1_0;
     image_loader_U0_ap_continue <= ap_const_logic_1;
     image_loader_U0_ap_start <= ((ap_sync_reg_image_loader_U0_ap_ready xor ap_const_logic_1) and ap_start);
-    logits_split_U0_ap_continue <= ap_const_logic_1;
-    logits_split_U0_ap_start <= start_for_logits_split_U0_empty_n;
-    p_anonymous_namespace_argmax_runner_U0_ap_continue <= ap_const_logic_1;
-    p_anonymous_namespace_argmax_runner_U0_ap_start <= start_for_p_anonymous_namespace_argmax_runner_U0_empty_n;
     p_anonymous_namespace_compute_runner_U0_ap_continue <= ap_const_logic_1;
     p_anonymous_namespace_compute_runner_U0_ap_start <= start_for_p_anonymous_namespace_compute_runner_U0_empty_n;
     param_loader_U0_ap_continue <= ap_const_logic_1;
     param_loader_U0_ap_start <= ((ap_sync_reg_param_loader_U0_ap_ready xor ap_const_logic_1) and ap_start);
     result_writer_U0_ap_continue <= ap_const_logic_1;
     result_writer_U0_ap_start <= start_for_result_writer_U0_empty_n;
-    start_for_logits_split_U0_din <= (0=>ap_const_logic_1, others=>'-');
-    start_for_p_anonymous_namespace_argmax_runner_U0_din <= (0=>ap_const_logic_1, others=>'-');
+    softmax_U0_ap_continue <= ap_const_logic_1;
+    softmax_U0_ap_start <= start_for_softmax_U0_empty_n;
     start_for_p_anonymous_namespace_compute_runner_U0_din <= (0=>ap_const_logic_1, others=>'-');
     start_for_result_writer_U0_din <= (0=>ap_const_logic_1, others=>'-');
+    start_for_softmax_U0_din <= (0=>ap_const_logic_1, others=>'-');
     weight_loader_U0_ap_continue <= ap_const_logic_1;
     weight_loader_U0_ap_start <= ((ap_sync_reg_weight_loader_U0_ap_ready xor ap_const_logic_1) and ap_start);
 end behav;

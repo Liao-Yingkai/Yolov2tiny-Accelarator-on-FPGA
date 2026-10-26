@@ -178,20 +178,9 @@ void param_loader(const ap_int<32>* params,
     load_params<fc_param_pack_t, FC_COUT_PAR>(params, ddr_layout::FC_PARAM_OFFSET, FC_OUT_TILES, fc);
 }
 
-void logits_split(hls::stream<logits_pack_t>& input,
-                  hls::stream<logits_pack_t>& writer,
-                  hls::stream<logits_pack_t>& argmax) {
+void result_writer(hls::stream<inference_result_t>& input, ap_uint<64>* result) {
 #pragma HLS INLINE off
-    const logits_pack_t value = input.read();
-    writer.write(value);
-    argmax.write(value);
-}
-
-void result_writer(hls::stream<logits_pack_t>& logits,
-                   hls::stream<class_index_t>& classes, ap_uint<64>* result) {
-#pragma HLS INLINE off
-    const logits_pack_t value = logits.read();
-    const class_index_t predicted = classes.read();
+    const inference_result_t value = input.read();
     ap_uint<64> words[ddr_layout::RESULT_WORDS];
 #pragma HLS ARRAY_PARTITION variable=words complete
     for (int i = 0; i < ddr_layout::RESULT_WORDS; ++i) {
@@ -200,10 +189,10 @@ void result_writer(hls::stream<logits_pack_t>& logits,
     }
     for (int i = 0; i < FC_OUTPUTS; ++i) {
 #pragma HLS UNROLL
-        // 显式转 unsigned byte 保留 signed INT8 的二补码，不做符号扩展。
-        words[i / ddr_layout::WORD_BYTES].range((i % ddr_layout::WORD_BYTES) * 8 + 7, (i % ddr_layout::WORD_BYTES) * 8) = (ap_uint<8>)value.value[i];
+        // 每word四个uint16，较早channel占低位。
+        words[i / 4].range((i % 4) * 16 + 15, (i % 4) * 16) = value.probability[i];
     }
-    words[ddr_layout::CLASS_WORD_OFFSET].range(ddr_layout::CLASS_BIT_OFFSET + 31, ddr_layout::CLASS_BIT_OFFSET) = (ap_uint<32>)predicted;
+    words[ddr_layout::CLASS_WORD_OFFSET].range(ddr_layout::CLASS_BIT_OFFSET + 31, ddr_layout::CLASS_BIT_OFFSET) = (ap_uint<32>)value.class_index;
     for (int i = 0; i < ddr_layout::RESULT_WORDS; ++i) {
 #pragma HLS PIPELINE II=1
         result[i] = words[i];

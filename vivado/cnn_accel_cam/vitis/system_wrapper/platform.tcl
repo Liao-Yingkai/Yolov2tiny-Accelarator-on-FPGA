@@ -27,3 +27,6 @@ platform generate -domains
 platform active {system_wrapper}
 platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
 platform generate -domains 
+platform active {system_wrapper}
+platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform generate

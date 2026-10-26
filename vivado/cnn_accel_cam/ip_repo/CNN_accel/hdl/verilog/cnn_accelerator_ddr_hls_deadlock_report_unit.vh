@@ -1,5 +1,5 @@
    
-    parameter PROC_NUM = 18;
+    parameter PROC_NUM = 17;
     parameter ST_IDLE = 3'b000;
     parameter ST_FILTER_FAKE = 3'b001;
     parameter ST_DL_DETECTED = 3'b010;
@@ -236,12 +236,9 @@
                     proc_path = "cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_fc_postprocess_guard_U0";
                 end
                 15 : begin
-                    proc_path = "cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0";
+                    proc_path = "cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_U0";
                 end
                 16 : begin
-                    proc_path = "cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_argmax_runner_U0";
-                end
-                17 : begin
                     proc_path = "cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0";
                 end
                 default : begin
@@ -306,7 +303,7 @@
             case (index1)
                 0 : begin
                     case(index2)
-                    17: begin
+                    16: begin
                         if (~entry_proc_U0.result_c_blk_n) begin
                             if (~result_c_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_c_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0'");
@@ -319,8 +316,25 @@
                                 $fdisplay(fp, "Dependence_Channel_status FULL");
                             end
                         end
-                        if (~start_for_result_writer_U0_U.if_full_n & entry_proc_U0.ap_start & ~entry_proc_U0.real_start & (trans_in_cnt_10 == trans_out_cnt_10) & ~start_for_result_writer_U0_U.if_read) begin
+                        if (~start_for_result_writer_U0_U.if_full_n & entry_proc_U0.ap_start & ~entry_proc_U0.real_start & (trans_in_cnt_8 == trans_out_cnt_8) & ~start_for_result_writer_U0_U.if_read) begin
                             $display("//      Blocked by full output start propagation FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.start_for_result_writer_U0_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0',");
+                        end
+                    end
+                    15: begin
+                        if (~entry_proc_U0.softmax_scale_q20_c_blk_n) begin
+                            if (~softmax_scale_q20_c_U.if_empty_n) begin
+                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_scale_q20_c_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_U0'");
+                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_scale_q20_c_U");
+                                $fdisplay(fp, "Dependence_Channel_status EMPTY");
+                            end
+                            else if (~softmax_scale_q20_c_U.if_full_n) begin
+                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_scale_q20_c_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_U0'");
+                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_scale_q20_c_U");
+                                $fdisplay(fp, "Dependence_Channel_status FULL");
+                            end
+                        end
+                        if (~start_for_softmax_U0_U.if_full_n & entry_proc_U0.ap_start & ~entry_proc_U0.real_start & (trans_in_cnt_8 == trans_out_cnt_8) & ~start_for_softmax_U0_U.if_read) begin
+                            $display("//      Blocked by full output start propagation FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.start_for_softmax_U0_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_U0',");
                         end
                     end
                     1: begin
@@ -493,7 +507,7 @@
                 4 : begin
                     case(index2)
                     1: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_31_1_fu_64.pixels_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_30_1_fu_64.pixels_blk_n) begin
                             if (~pixels_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.pixels_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.image_loader_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.pixels_U");
@@ -588,18 +602,15 @@
                     15: begin
                         if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_fc_postprocess_guard_U0.grp_fc_postprocess_fu_38.computed_blk_n) begin
                             if (~computed_U.if_empty_n) begin
-                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.computed_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0'");
+                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.computed_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.computed_U");
                                 $fdisplay(fp, "Dependence_Channel_status EMPTY");
                             end
                             else if (~computed_U.if_full_n) begin
-                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.computed_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0'");
+                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.computed_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.computed_U");
                                 $fdisplay(fp, "Dependence_Channel_status FULL");
                             end
-                        end
-                        if (~start_for_logits_split_U0_U.if_full_n & p_anonymous_namespace_compute_runner_U0.ap_start & ~p_anonymous_namespace_compute_runner_U0.real_start & (trans_in_cnt_8 == trans_out_cnt_8) & ~start_for_logits_split_U0_U.if_read) begin
-                            $display("//      Blocked by full output start propagation FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.start_for_logits_split_U0_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0',");
                         end
                     end
                     endcase
@@ -607,7 +618,7 @@
                 5 : begin
                     case(index2)
                     8: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_31_1_fu_64.conv_input_stream_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_30_1_fu_64.conv_input_stream_blk_n) begin
                             if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.conv_input_stream_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.conv_input_stream_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.im2row_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.conv_input_stream_U");
@@ -636,7 +647,7 @@
                         end
                     end
                     12: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_31_1_fu_64.pool1_feature_fifo_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0.grp_p_anonymous_namespace_input_router_Pipeline_VITIS_LOOP_30_1_fu_64.pool1_feature_fifo_blk_n) begin
                             if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool1_feature_fifo_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool1_feature_fifo_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool1_feature_fifo_U");
@@ -785,7 +796,7 @@
                 9 : begin
                     case(index2)
                     8: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.grp_systolic_OS_Pipeline_VITIS_LOOP_211_3_fu_235.activation_stream_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.grp_systolic_OS_Pipeline_VITIS_LOOP_219_3_fu_235.activation_stream_blk_n) begin
                             if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.activation_stream_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.activation_stream_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.im2row_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.activation_stream_U");
@@ -811,7 +822,7 @@
                         end
                     end
                     6: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.grp_systolic_OS_Pipeline_VITIS_LOOP_211_3_fu_235.conv_weight_stream_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.systolic_OS_U0.grp_systolic_OS_Pipeline_VITIS_LOOP_219_3_fu_235.conv_weight_stream_blk_n) begin
                             if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.conv_weight_stream_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.conv_weight_stream_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_conv_weight_router_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.conv_weight_stream_U");
@@ -934,7 +945,7 @@
                 11 : begin
                     case(index2)
                     10: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.maxpool_U0.grp_maxpool_Pipeline_VITIS_LOOP_156_3_fu_274.post_output_stream_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.maxpool_U0.grp_maxpool_Pipeline_VITIS_LOOP_180_5_fu_301.post_output_stream_blk_n) begin
                             if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.post_output_stream_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.post_output_stream_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.conv_postprocess_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.post_output_stream_U");
@@ -996,7 +1007,7 @@
                 12 : begin
                     case(index2)
                     11: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64.pool_output_stream_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64.pool_output_stream_blk_n) begin
                             if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool_output_stream_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool_output_stream_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.maxpool_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool_output_stream_U");
@@ -1025,7 +1036,7 @@
                         end
                     end
                     13: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64.fc_input_stream_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64.fc_input_stream_blk_n) begin
                             if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.fc_input_stream_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.fc_input_stream_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_fully_connected_guard_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.fc_input_stream_U");
@@ -1054,7 +1065,7 @@
                         end
                     end
                     5: begin
-                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_125_1_fu_64.pool1_feature_fifo_blk_n) begin
+                        if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_output_router_U0.grp_p_anonymous_namespace_output_router_Pipeline_VITIS_LOOP_124_1_fu_64.pool1_feature_fifo_blk_n) begin
                             if (~p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool1_feature_fifo_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool1_feature_fifo_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.p_anonymous_namespace_input_router_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0.grp_p_anonymous_namespace_run_layer_phase_fu_50.pool1_feature_fifo_U");
@@ -1167,7 +1178,7 @@
                 15 : begin
                     case(index2)
                     4: begin
-                        if (~logits_split_U0.computed_blk_n) begin
+                        if (~softmax_U0.computed_blk_n) begin
                             if (~computed_U.if_empty_n) begin
                                 $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.computed_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0'");
                                 $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.computed_U");
@@ -1179,39 +1190,36 @@
                                 $fdisplay(fp, "Dependence_Channel_status FULL");
                             end
                         end
-                        if (~start_for_logits_split_U0_U.if_empty_n & logits_split_U0.ap_idle & ~start_for_logits_split_U0_U.if_write) begin
-                            $display("//      Blocked by missing 'ap_start' from start propagation FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.start_for_logits_split_U0_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_compute_runner_U0',");
-                        end
-                    end
-                    17: begin
-                        if (~logits_split_U0.write_logits_blk_n) begin
-                            if (~write_logits_U.if_empty_n) begin
-                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.write_logits_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.write_logits_U");
-                                $fdisplay(fp, "Dependence_Channel_status EMPTY");
-                            end
-                            else if (~write_logits_U.if_full_n) begin
-                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.write_logits_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.write_logits_U");
-                                $fdisplay(fp, "Dependence_Channel_status FULL");
-                            end
-                        end
                     end
                     16: begin
-                        if (~logits_split_U0.argmax_logits_blk_n) begin
-                            if (~argmax_logits_U.if_empty_n) begin
-                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.argmax_logits_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_argmax_runner_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.argmax_logits_U");
+                        if (~softmax_U0.inference_blk_n) begin
+                            if (~inference_U.if_empty_n) begin
+                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.inference_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0'");
+                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.inference_U");
                                 $fdisplay(fp, "Dependence_Channel_status EMPTY");
                             end
-                            else if (~argmax_logits_U.if_full_n) begin
-                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.argmax_logits_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_argmax_runner_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.argmax_logits_U");
+                            else if (~inference_U.if_full_n) begin
+                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.inference_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0'");
+                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.inference_U");
                                 $fdisplay(fp, "Dependence_Channel_status FULL");
                             end
                         end
-                        if (~start_for_p_anonymous_namespace_argmax_runner_U0_U.if_full_n & logits_split_U0.ap_start & ~logits_split_U0.real_start & (trans_in_cnt_9 == trans_out_cnt_9) & ~start_for_p_anonymous_namespace_argmax_runner_U0_U.if_read) begin
-                            $display("//      Blocked by full output start propagation FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.start_for_p_anonymous_namespace_argmax_runner_U0_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_argmax_runner_U0',");
+                    end
+                    0: begin
+                        if (~softmax_U0.scale_q20_blk_n) begin
+                            if (~softmax_scale_q20_c_U.if_empty_n) begin
+                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_scale_q20_c_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.entry_proc_U0'");
+                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_scale_q20_c_U");
+                                $fdisplay(fp, "Dependence_Channel_status EMPTY");
+                            end
+                            else if (~softmax_scale_q20_c_U.if_full_n) begin
+                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_scale_q20_c_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.entry_proc_U0'");
+                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_scale_q20_c_U");
+                                $fdisplay(fp, "Dependence_Channel_status FULL");
+                            end
+                        end
+                        if (~start_for_softmax_U0_U.if_empty_n & softmax_U0.ap_idle & ~start_for_softmax_U0_U.if_write) begin
+                            $display("//      Blocked by missing 'ap_start' from start propagation FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.start_for_softmax_U0_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.entry_proc_U0',");
                         end
                     end
                     endcase
@@ -1219,64 +1227,15 @@
                 16 : begin
                     case(index2)
                     15: begin
-                        if (~p_anonymous_namespace_argmax_runner_U0.grp_logits_argmax_fu_16.argmax_logits_blk_n) begin
-                            if (~argmax_logits_U.if_empty_n) begin
-                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.argmax_logits_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.argmax_logits_U");
+                        if (~result_writer_U0.inference_blk_n) begin
+                            if (~inference_U.if_empty_n) begin
+                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.inference_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_U0'");
+                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.inference_U");
                                 $fdisplay(fp, "Dependence_Channel_status EMPTY");
                             end
-                            else if (~argmax_logits_U.if_full_n) begin
-                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.argmax_logits_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.argmax_logits_U");
-                                $fdisplay(fp, "Dependence_Channel_status FULL");
-                            end
-                        end
-                        if (~start_for_p_anonymous_namespace_argmax_runner_U0_U.if_empty_n & p_anonymous_namespace_argmax_runner_U0.ap_idle & ~start_for_p_anonymous_namespace_argmax_runner_U0_U.if_write) begin
-                            $display("//      Blocked by missing 'ap_start' from start propagation FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.start_for_p_anonymous_namespace_argmax_runner_U0_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0',");
-                        end
-                    end
-                    17: begin
-                        if (~p_anonymous_namespace_argmax_runner_U0.grp_logits_argmax_fu_16.classes1_blk_n) begin
-                            if (~classes_U.if_empty_n) begin
-                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.classes_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.classes_U");
-                                $fdisplay(fp, "Dependence_Channel_status EMPTY");
-                            end
-                            else if (~classes_U.if_full_n) begin
-                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.classes_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.result_writer_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.classes_U");
-                                $fdisplay(fp, "Dependence_Channel_status FULL");
-                            end
-                        end
-                    end
-                    endcase
-                end
-                17 : begin
-                    case(index2)
-                    15: begin
-                        if (~result_writer_U0.write_logits_blk_n) begin
-                            if (~write_logits_U.if_empty_n) begin
-                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.write_logits_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.write_logits_U");
-                                $fdisplay(fp, "Dependence_Channel_status EMPTY");
-                            end
-                            else if (~write_logits_U.if_full_n) begin
-                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.write_logits_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.logits_split_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.write_logits_U");
-                                $fdisplay(fp, "Dependence_Channel_status FULL");
-                            end
-                        end
-                    end
-                    16: begin
-                        if (~result_writer_U0.classes1_blk_n) begin
-                            if (~classes_U.if_empty_n) begin
-                                $display("//      Blocked by empty input FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.classes_U' written by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_argmax_runner_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.classes_U");
-                                $fdisplay(fp, "Dependence_Channel_status EMPTY");
-                            end
-                            else if (~classes_U.if_full_n) begin
-                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.classes_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.p_anonymous_namespace_argmax_runner_U0'");
-                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.classes_U");
+                            else if (~inference_U.if_full_n) begin
+                                $display("//      Blocked by full output FIFO 'cnn_accelerator_ddr_cnn_accelerator_ddr.inference_U' read by process 'cnn_accelerator_ddr_cnn_accelerator_ddr.softmax_U0'");
+                                $fdisplay(fp, "Dependence_Channel_path cnn_accelerator_ddr_cnn_accelerator_ddr.inference_U");
                                 $fdisplay(fp, "Dependence_Channel_status FULL");
                             end
                         end

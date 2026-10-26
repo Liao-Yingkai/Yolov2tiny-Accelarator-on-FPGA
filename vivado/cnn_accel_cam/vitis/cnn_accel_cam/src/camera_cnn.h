@@ -2,11 +2,13 @@
 #define CAMERA_CNN_H
 #include <stdint.h>
 
-enum { CAMERA_CNN_INPUT_BYTES = 784, CAMERA_CNN_CLASSES = 10 };
-/* PL写入16字节：10个signed INT8 logit、两个零保留字节、offset12类别。 */
+/* PS-owned constants: keep in sync with the independently maintained PL layout. */
+enum { CAMERA_CNN_INPUT_BYTES = 784, CAMERA_CNN_CLASSES = 10,
+    CAMERA_CNN_PROBABILITY_SCALE = 10000, CAMERA_CNN_RESULT_BYTES = 24,
+    CAMERA_CNN_CLASS_BYTE_OFFSET = 20, CAMERA_CNN_SOFTMAX_SCALE_FRAC_BITS = 20 };
+/* ABI v2: ten uint16 probabilities, followed by uint32 class. */
 typedef struct {
-    int8_t logits[CAMERA_CNN_CLASSES];
-    uint8_t reserved[2];
+    uint16_t probability[CAMERA_CNN_CLASSES];
     uint32_t class_index;
 } camera_cnn_result_t;
 typedef enum {

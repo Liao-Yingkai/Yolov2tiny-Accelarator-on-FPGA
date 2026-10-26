@@ -93,10 +93,10 @@ wire   [1:0] select_ln217_fu_187_p3;
 wire   [1:0] shl_ln779_fu_203_p2;
 wire   [1:0] and_ln779_fu_209_p2;
 wire   [0:0] trunc_ln218_fu_199_p1;
-wire   [0:0] empty_113_fu_221_p2;
+wire   [0:0] empty_141_fu_221_p2;
 wire   [31:0] tmp_s_fu_227_p4;
 wire   [31:0] tmp_1_fu_237_p4;
-wire   [0:0] empty_112_fu_195_p1;
+wire   [0:0] empty_140_fu_195_p1;
 wire   [31:0] tmp_2_fu_257_p4;
 wire   [31:0] tmp_3_fu_267_p4;
 reg    ap_done_reg;
@@ -121,10 +121,10 @@ cnn_accelerator_ddr_mux_21_32_1_1 #(
     .din1_WIDTH( 32 ),
     .din2_WIDTH( 1 ),
     .dout_WIDTH( 32 ))
-mux_21_32_1_1_U552(
+mux_21_32_1_1_U554(
     .din0(pooled_half_V_250_reload),
     .din1(pooled_half_V_2_2_reload),
-    .din2(empty_113_fu_221_p2),
+    .din2(empty_141_fu_221_p2),
     .dout(tmp_s_fu_227_p4)
 );
 
@@ -135,10 +135,10 @@ cnn_accelerator_ddr_mux_21_32_1_1 #(
     .din1_WIDTH( 32 ),
     .din2_WIDTH( 1 ),
     .dout_WIDTH( 32 ))
-mux_21_32_1_1_U553(
+mux_21_32_1_1_U555(
     .din0(pooled_half_V_4_2_reload),
     .din1(pooled_half_V_6_2_reload),
-    .din2(empty_113_fu_221_p2),
+    .din2(empty_141_fu_221_p2),
     .dout(tmp_1_fu_237_p4)
 );
 
@@ -149,10 +149,10 @@ cnn_accelerator_ddr_mux_21_32_1_1 #(
     .din1_WIDTH( 32 ),
     .din2_WIDTH( 1 ),
     .dout_WIDTH( 32 ))
-mux_21_32_1_1_U554(
+mux_21_32_1_1_U556(
     .din0(tmp_s_fu_227_p4),
     .din1(tmp_1_fu_237_p4),
-    .din2(empty_112_fu_195_p1),
+    .din2(empty_140_fu_195_p1),
     .dout(source_V_fu_247_p4)
 );
 
@@ -163,10 +163,10 @@ cnn_accelerator_ddr_mux_21_32_1_1 #(
     .din1_WIDTH( 32 ),
     .din2_WIDTH( 1 ),
     .dout_WIDTH( 32 ))
-mux_21_32_1_1_U555(
+mux_21_32_1_1_U557(
     .din0(pooled_half_V_1_2_reload),
     .din1(pooled_half_V_3_2_reload),
-    .din2(empty_113_fu_221_p2),
+    .din2(empty_141_fu_221_p2),
     .dout(tmp_2_fu_257_p4)
 );
 
@@ -177,10 +177,10 @@ cnn_accelerator_ddr_mux_21_32_1_1 #(
     .din1_WIDTH( 32 ),
     .din2_WIDTH( 1 ),
     .dout_WIDTH( 32 ))
-mux_21_32_1_1_U556(
+mux_21_32_1_1_U558(
     .din0(pooled_half_V_5_2_reload),
     .din1(pooled_half_V_7_2_reload),
-    .din2(empty_113_fu_221_p2),
+    .din2(empty_141_fu_221_p2),
     .dout(tmp_3_fu_267_p4)
 );
 
@@ -191,10 +191,10 @@ cnn_accelerator_ddr_mux_21_32_1_1 #(
     .din1_WIDTH( 32 ),
     .din2_WIDTH( 1 ),
     .dout_WIDTH( 32 ))
-mux_21_32_1_1_U557(
+mux_21_32_1_1_U559(
     .din0(tmp_2_fu_257_p4),
     .din1(tmp_3_fu_267_p4),
-    .din2(empty_112_fu_195_p1),
+    .din2(empty_140_fu_195_p1),
     .dout(source_V_1_fu_277_p4)
 );
 
@@ -373,9 +373,9 @@ assign ap_enable_reg_pp0_iter0 = ap_start_int;
 
 assign ap_loop_exit_ready = ap_condition_exit_pp0_iter0_stage0;
 
-assign empty_112_fu_195_p1 = select_ln217_fu_187_p3[0:0];
+assign empty_140_fu_195_p1 = select_ln217_fu_187_p3[0:0];
 
-assign empty_113_fu_221_p2 = (trunc_ln218_fu_199_p1 & layer_mode_load);
+assign empty_141_fu_221_p2 = (trunc_ln218_fu_199_p1 & layer_mode_load);
 
 assign icmp_ln210_fu_159_p2 = ((ap_sig_allocacmp_output_slot_1 == output_slots) ? 1'b1 : 1'b0);
 

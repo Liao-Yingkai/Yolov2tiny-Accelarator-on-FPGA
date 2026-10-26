@@ -86,8 +86,8 @@ reg   [31:0] trunc_ln76_1_reg_907;
 reg   [31:0] trunc_ln76_10_reg_912;
 reg   [31:0] trunc_ln76_11_reg_917;
 reg   [31:0] tmp_31_reg_922;
-wire   [0:0] empty_124_fu_624_p1;
-reg   [0:0] empty_124_reg_927;
+wire   [0:0] empty_152_fu_624_p1;
+reg   [0:0] empty_152_reg_927;
 wire   [2:0] or_ln_fu_688_p4;
 reg   [2:0] or_ln_reg_933;
 wire    ap_CS_fsm_state5;
@@ -347,7 +347,7 @@ end
 
 always @ (posedge ap_clk) begin
     if (((icmp_ln74_fu_416_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
-        empty_124_reg_927 <= empty_124_fu_624_p1;
+        empty_152_reg_927 <= empty_152_fu_624_p1;
         tmp_29_reg_877 <= {{fc_acc_stream_dout[95:64]}};
         tmp_31_reg_922 <= {{pf_dout[95:64]}};
         trunc_ln75_3_reg_867 <= {{fc_acc_stream_dout[127:96]}};
@@ -912,13 +912,13 @@ end
 
 assign computed_din = {{{{{{{{{{logits_value_V_18_fu_154}, {logits_value_V_17_fu_150}}, {logits_value_V_16_fu_146}}, {logits_value_V_15_fu_142}}, {logits_value_V_14_fu_138}}, {logits_value_V_13_fu_134}}, {logits_value_V_12_fu_130}}, {logits_value_V_11_fu_126}}, {logits_value_V_10_fu_122}}, {logits_value_V_fu_118}};
 
-assign empty_124_fu_624_p1 = out_tile_fu_114[0:0];
+assign empty_152_fu_624_p1 = out_tile_fu_114[0:0];
 
 assign grp_fc_postprocess_Pipeline_VITIS_LOOP_81_2_fu_389_ap_start = grp_fc_postprocess_Pipeline_VITIS_LOOP_81_2_fu_389_ap_start_reg;
 
 assign icmp_ln74_fu_416_p2 = ((out_tile_fu_114 == 2'd2) ? 1'b1 : 1'b0);
 
-assign or_ln_fu_688_p4 = {{{empty_124_reg_927}, {1'd0}}, {empty_124_reg_927}};
+assign or_ln_fu_688_p4 = {{{empty_152_reg_927}, {1'd0}}, {empty_152_reg_927}};
 
 assign trunc_ln75_fu_428_p1 = fc_acc_stream_dout[31:0];
 

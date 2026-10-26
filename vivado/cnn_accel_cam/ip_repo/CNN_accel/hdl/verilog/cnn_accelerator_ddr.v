@@ -7,7 +7,7 @@
 
 `timescale 1 ns / 1 ps 
 
-(* CORE_GENERATION_INFO="cnn_accelerator_ddr_cnn_accelerator_ddr,hls_ip_2022_2,{HLS_INPUT_TYPE=cxx,HLS_INPUT_FLOAT=0,HLS_INPUT_FIXED=0,HLS_INPUT_PART=xc7z020-clg400-2,HLS_INPUT_CLOCK=10.000000,HLS_INPUT_ARCH=dataflow,HLS_SYN_CLOCK=7.300000,HLS_SYN_LAT=-1,HLS_SYN_TPT=-1,HLS_SYN_MEM=42,HLS_SYN_DSP=0,HLS_SYN_FF=28205,HLS_SYN_LUT=35673,HLS_VERSION=2022_2}" *)
+(* CORE_GENERATION_INFO="cnn_accelerator_ddr_cnn_accelerator_ddr,hls_ip_2022_2,{HLS_INPUT_TYPE=cxx,HLS_INPUT_FLOAT=0,HLS_INPUT_FIXED=0,HLS_INPUT_PART=xc7z020-clg400-2,HLS_INPUT_CLOCK=10.000000,HLS_INPUT_ARCH=dataflow,HLS_SYN_CLOCK=7.300000,HLS_SYN_LAT=-1,HLS_SYN_TPT=-1,HLS_SYN_MEM=47,HLS_SYN_DSP=0,HLS_SYN_FF=34348,HLS_SYN_LUT=39655,HLS_VERSION=2022_2}" *)
 
 module cnn_accelerator_ddr (
         s_axi_control_AWVALID,
@@ -168,7 +168,7 @@ module cnn_accelerator_ddr (
 );
 
 parameter    C_S_AXI_CONTROL_DATA_WIDTH = 32;
-parameter    C_S_AXI_CONTROL_ADDR_WIDTH = 6;
+parameter    C_S_AXI_CONTROL_ADDR_WIDTH = 7;
 parameter    C_S_AXI_DATA_WIDTH = 32;
 parameter    C_M_AXI_GMEM_IO_ID_WIDTH = 1;
 parameter    C_M_AXI_GMEM_IO_ADDR_WIDTH = 64;
@@ -373,6 +373,7 @@ wire   [63:0] image_r;
 wire   [63:0] weights;
 wire   [63:0] params;
 wire   [63:0] result;
+wire   [31:0] softmax_scale_q20;
 wire    ap_start;
 wire    ap_ready;
 wire    ap_done;
@@ -414,6 +415,7 @@ wire   [0:0] gmem_weights_RUSER;
 wire   [1:0] gmem_weights_RRESP;
 wire    gmem_weights_BVALID;
 wire    entry_proc_U0_ap_start;
+wire    entry_proc_U0_start_full_n;
 wire    entry_proc_U0_ap_done;
 wire    entry_proc_U0_ap_continue;
 wire    entry_proc_U0_ap_idle;
@@ -422,6 +424,8 @@ wire    entry_proc_U0_start_out;
 wire    entry_proc_U0_start_write;
 wire   [63:0] entry_proc_U0_result_c_din;
 wire    entry_proc_U0_result_c_write;
+wire   [31:0] entry_proc_U0_softmax_scale_q20_c_din;
+wire    entry_proc_U0_softmax_scale_q20_c_write;
 wire    image_loader_U0_ap_start;
 wire    image_loader_U0_ap_done;
 wire    image_loader_U0_ap_continue;
@@ -554,8 +558,6 @@ wire    p_anonymous_namespace_compute_runner_U0_ap_done;
 wire    p_anonymous_namespace_compute_runner_U0_ap_continue;
 wire    p_anonymous_namespace_compute_runner_U0_ap_idle;
 wire    p_anonymous_namespace_compute_runner_U0_ap_ready;
-wire    p_anonymous_namespace_compute_runner_U0_start_out;
-wire    p_anonymous_namespace_compute_runner_U0_start_write;
 wire    p_anonymous_namespace_compute_runner_U0_pixels_read;
 wire    p_anonymous_namespace_compute_runner_U0_w1_read;
 wire    p_anonymous_namespace_compute_runner_U0_p1_read;
@@ -565,33 +567,21 @@ wire    p_anonymous_namespace_compute_runner_U0_wf_read;
 wire    p_anonymous_namespace_compute_runner_U0_pf_read;
 wire   [79:0] p_anonymous_namespace_compute_runner_U0_computed_din;
 wire    p_anonymous_namespace_compute_runner_U0_computed_write;
-wire    logits_split_U0_ap_start;
-wire    logits_split_U0_ap_done;
-wire    logits_split_U0_ap_continue;
-wire    logits_split_U0_ap_idle;
-wire    logits_split_U0_ap_ready;
-wire    logits_split_U0_start_out;
-wire    logits_split_U0_start_write;
-wire    logits_split_U0_computed_read;
-wire   [79:0] logits_split_U0_write_logits_din;
-wire    logits_split_U0_write_logits_write;
-wire   [79:0] logits_split_U0_argmax_logits_din;
-wire    logits_split_U0_argmax_logits_write;
-wire    p_anonymous_namespace_argmax_runner_U0_ap_start;
-wire    p_anonymous_namespace_argmax_runner_U0_ap_done;
-wire    p_anonymous_namespace_argmax_runner_U0_ap_continue;
-wire    p_anonymous_namespace_argmax_runner_U0_ap_idle;
-wire    p_anonymous_namespace_argmax_runner_U0_ap_ready;
-wire    p_anonymous_namespace_argmax_runner_U0_argmax_logits_read;
-wire   [3:0] p_anonymous_namespace_argmax_runner_U0_classes1_din;
-wire    p_anonymous_namespace_argmax_runner_U0_classes1_write;
+wire    softmax_U0_ap_start;
+wire    softmax_U0_ap_done;
+wire    softmax_U0_ap_continue;
+wire    softmax_U0_ap_idle;
+wire    softmax_U0_ap_ready;
+wire    softmax_U0_computed_read;
+wire   [163:0] softmax_U0_inference_din;
+wire    softmax_U0_inference_write;
+wire    softmax_U0_scale_q20_read;
 wire    result_writer_U0_ap_start;
 wire    result_writer_U0_ap_done;
 wire    result_writer_U0_ap_continue;
 wire    result_writer_U0_ap_idle;
 wire    result_writer_U0_ap_ready;
-wire    result_writer_U0_write_logits_read;
-wire    result_writer_U0_classes1_read;
+wire    result_writer_U0_inference_read;
 wire    result_writer_U0_m_axi_gmem_io_AWVALID;
 wire   [63:0] result_writer_U0_m_axi_gmem_io_AWADDR;
 wire   [0:0] result_writer_U0_m_axi_gmem_io_AWID;
@@ -630,6 +620,11 @@ wire   [63:0] result_c_dout;
 wire   [3:0] result_c_num_data_valid;
 wire   [3:0] result_c_fifo_cap;
 wire    result_c_empty_n;
+wire    softmax_scale_q20_c_full_n;
+wire   [31:0] softmax_scale_q20_c_dout;
+wire   [2:0] softmax_scale_q20_c_num_data_valid;
+wire   [2:0] softmax_scale_q20_c_fifo_cap;
+wire    softmax_scale_q20_c_empty_n;
 wire    pixels_full_n;
 wire   [63:0] pixels_dout;
 wire   [1:0] pixels_num_data_valid;
@@ -670,21 +665,11 @@ wire   [79:0] computed_dout;
 wire   [1:0] computed_num_data_valid;
 wire   [1:0] computed_fifo_cap;
 wire    computed_empty_n;
-wire    write_logits_full_n;
-wire   [79:0] write_logits_dout;
-wire   [1:0] write_logits_num_data_valid;
-wire   [1:0] write_logits_fifo_cap;
-wire    write_logits_empty_n;
-wire    argmax_logits_full_n;
-wire   [79:0] argmax_logits_dout;
-wire   [1:0] argmax_logits_num_data_valid;
-wire   [1:0] argmax_logits_fifo_cap;
-wire    argmax_logits_empty_n;
-wire    classes_full_n;
-wire   [3:0] classes_dout;
-wire   [1:0] classes_num_data_valid;
-wire   [1:0] classes_fifo_cap;
-wire    classes_empty_n;
+wire    inference_full_n;
+wire   [163:0] inference_dout;
+wire   [1:0] inference_num_data_valid;
+wire   [1:0] inference_fifo_cap;
+wire    inference_empty_n;
 wire    ap_sync_ready;
 reg    ap_sync_reg_entry_proc_U0_ap_ready;
 wire    ap_sync_entry_proc_U0_ap_ready;
@@ -694,6 +679,10 @@ reg    ap_sync_reg_weight_loader_U0_ap_ready;
 wire    ap_sync_weight_loader_U0_ap_ready;
 reg    ap_sync_reg_param_loader_U0_ap_ready;
 wire    ap_sync_param_loader_U0_ap_ready;
+wire   [0:0] start_for_softmax_U0_din;
+wire    start_for_softmax_U0_full_n;
+wire   [0:0] start_for_softmax_U0_dout;
+wire    start_for_softmax_U0_empty_n;
 wire   [0:0] start_for_result_writer_U0_din;
 wire    start_for_result_writer_U0_full_n;
 wire   [0:0] start_for_result_writer_U0_dout;
@@ -702,14 +691,6 @@ wire   [0:0] start_for_p_anonymous_namespace_compute_runner_U0_din;
 wire    start_for_p_anonymous_namespace_compute_runner_U0_full_n;
 wire   [0:0] start_for_p_anonymous_namespace_compute_runner_U0_dout;
 wire    start_for_p_anonymous_namespace_compute_runner_U0_empty_n;
-wire   [0:0] start_for_logits_split_U0_din;
-wire    start_for_logits_split_U0_full_n;
-wire   [0:0] start_for_logits_split_U0_dout;
-wire    start_for_logits_split_U0_empty_n;
-wire   [0:0] start_for_p_anonymous_namespace_argmax_runner_U0_din;
-wire    start_for_p_anonymous_namespace_argmax_runner_U0_full_n;
-wire   [0:0] start_for_p_anonymous_namespace_argmax_runner_U0_dout;
-wire    start_for_p_anonymous_namespace_argmax_runner_U0_empty_n;
 wire    ap_ce_reg;
 
 // power-on initialization
@@ -748,6 +729,7 @@ control_s_axi_U(
     .weights(weights),
     .params(params),
     .result(result),
+    .softmax_scale_q20(softmax_scale_q20),
     .ap_start(ap_start),
     .interrupt(interrupt),
     .ap_ready(ap_ready),
@@ -1029,7 +1011,7 @@ cnn_accelerator_ddr_entry_proc entry_proc_U0(
     .ap_clk(ap_clk),
     .ap_rst(ap_rst_n_inv),
     .ap_start(entry_proc_U0_ap_start),
-    .start_full_n(start_for_result_writer_U0_full_n),
+    .start_full_n(entry_proc_U0_start_full_n),
     .ap_done(entry_proc_U0_ap_done),
     .ap_continue(entry_proc_U0_ap_continue),
     .ap_idle(entry_proc_U0_ap_idle),
@@ -1041,7 +1023,13 @@ cnn_accelerator_ddr_entry_proc entry_proc_U0(
     .result_c_num_data_valid(result_c_num_data_valid),
     .result_c_fifo_cap(result_c_fifo_cap),
     .result_c_full_n(result_c_full_n),
-    .result_c_write(entry_proc_U0_result_c_write)
+    .result_c_write(entry_proc_U0_result_c_write),
+    .softmax_scale_q20(softmax_scale_q20),
+    .softmax_scale_q20_c_din(entry_proc_U0_softmax_scale_q20_c_din),
+    .softmax_scale_q20_c_num_data_valid(softmax_scale_q20_c_num_data_valid),
+    .softmax_scale_q20_c_fifo_cap(softmax_scale_q20_c_fifo_cap),
+    .softmax_scale_q20_c_full_n(softmax_scale_q20_c_full_n),
+    .softmax_scale_q20_c_write(entry_proc_U0_softmax_scale_q20_c_write)
 );
 
 cnn_accelerator_ddr_image_loader image_loader_U0(
@@ -1257,13 +1245,10 @@ cnn_accelerator_ddr_p_anonymous_namespace_compute_runner p_anonymous_namespace_c
     .ap_clk(ap_clk),
     .ap_rst(ap_rst_n_inv),
     .ap_start(p_anonymous_namespace_compute_runner_U0_ap_start),
-    .start_full_n(start_for_logits_split_U0_full_n),
     .ap_done(p_anonymous_namespace_compute_runner_U0_ap_done),
     .ap_continue(p_anonymous_namespace_compute_runner_U0_ap_continue),
     .ap_idle(p_anonymous_namespace_compute_runner_U0_ap_idle),
     .ap_ready(p_anonymous_namespace_compute_runner_U0_ap_ready),
-    .start_out(p_anonymous_namespace_compute_runner_U0_start_out),
-    .start_write(p_anonymous_namespace_compute_runner_U0_start_write),
     .pixels_dout(pixels_dout),
     .pixels_num_data_valid(pixels_num_data_valid),
     .pixels_fifo_cap(pixels_fifo_cap),
@@ -1306,52 +1291,29 @@ cnn_accelerator_ddr_p_anonymous_namespace_compute_runner p_anonymous_namespace_c
     .computed_write(p_anonymous_namespace_compute_runner_U0_computed_write)
 );
 
-cnn_accelerator_ddr_logits_split logits_split_U0(
+cnn_accelerator_ddr_softmax softmax_U0(
     .ap_clk(ap_clk),
     .ap_rst(ap_rst_n_inv),
-    .ap_start(logits_split_U0_ap_start),
-    .start_full_n(start_for_p_anonymous_namespace_argmax_runner_U0_full_n),
-    .ap_done(logits_split_U0_ap_done),
-    .ap_continue(logits_split_U0_ap_continue),
-    .ap_idle(logits_split_U0_ap_idle),
-    .ap_ready(logits_split_U0_ap_ready),
-    .start_out(logits_split_U0_start_out),
-    .start_write(logits_split_U0_start_write),
+    .ap_start(softmax_U0_ap_start),
+    .ap_done(softmax_U0_ap_done),
+    .ap_continue(softmax_U0_ap_continue),
+    .ap_idle(softmax_U0_ap_idle),
+    .ap_ready(softmax_U0_ap_ready),
     .computed_dout(computed_dout),
     .computed_num_data_valid(computed_num_data_valid),
     .computed_fifo_cap(computed_fifo_cap),
     .computed_empty_n(computed_empty_n),
-    .computed_read(logits_split_U0_computed_read),
-    .write_logits_din(logits_split_U0_write_logits_din),
-    .write_logits_num_data_valid(write_logits_num_data_valid),
-    .write_logits_fifo_cap(write_logits_fifo_cap),
-    .write_logits_full_n(write_logits_full_n),
-    .write_logits_write(logits_split_U0_write_logits_write),
-    .argmax_logits_din(logits_split_U0_argmax_logits_din),
-    .argmax_logits_num_data_valid(argmax_logits_num_data_valid),
-    .argmax_logits_fifo_cap(argmax_logits_fifo_cap),
-    .argmax_logits_full_n(argmax_logits_full_n),
-    .argmax_logits_write(logits_split_U0_argmax_logits_write)
-);
-
-cnn_accelerator_ddr_p_anonymous_namespace_argmax_runner p_anonymous_namespace_argmax_runner_U0(
-    .ap_clk(ap_clk),
-    .ap_rst(ap_rst_n_inv),
-    .ap_start(p_anonymous_namespace_argmax_runner_U0_ap_start),
-    .ap_done(p_anonymous_namespace_argmax_runner_U0_ap_done),
-    .ap_continue(p_anonymous_namespace_argmax_runner_U0_ap_continue),
-    .ap_idle(p_anonymous_namespace_argmax_runner_U0_ap_idle),
-    .ap_ready(p_anonymous_namespace_argmax_runner_U0_ap_ready),
-    .argmax_logits_dout(argmax_logits_dout),
-    .argmax_logits_num_data_valid(argmax_logits_num_data_valid),
-    .argmax_logits_fifo_cap(argmax_logits_fifo_cap),
-    .argmax_logits_empty_n(argmax_logits_empty_n),
-    .argmax_logits_read(p_anonymous_namespace_argmax_runner_U0_argmax_logits_read),
-    .classes1_din(p_anonymous_namespace_argmax_runner_U0_classes1_din),
-    .classes1_num_data_valid(classes_num_data_valid),
-    .classes1_fifo_cap(classes_fifo_cap),
-    .classes1_full_n(classes_full_n),
-    .classes1_write(p_anonymous_namespace_argmax_runner_U0_classes1_write)
+    .computed_read(softmax_U0_computed_read),
+    .inference_din(softmax_U0_inference_din),
+    .inference_num_data_valid(inference_num_data_valid),
+    .inference_fifo_cap(inference_fifo_cap),
+    .inference_full_n(inference_full_n),
+    .inference_write(softmax_U0_inference_write),
+    .scale_q20_dout(softmax_scale_q20_c_dout),
+    .scale_q20_num_data_valid(softmax_scale_q20_c_num_data_valid),
+    .scale_q20_fifo_cap(softmax_scale_q20_c_fifo_cap),
+    .scale_q20_empty_n(softmax_scale_q20_c_empty_n),
+    .scale_q20_read(softmax_U0_scale_q20_read)
 );
 
 cnn_accelerator_ddr_result_writer result_writer_U0(
@@ -1362,16 +1324,11 @@ cnn_accelerator_ddr_result_writer result_writer_U0(
     .ap_continue(result_writer_U0_ap_continue),
     .ap_idle(result_writer_U0_ap_idle),
     .ap_ready(result_writer_U0_ap_ready),
-    .write_logits_dout(write_logits_dout),
-    .write_logits_num_data_valid(write_logits_num_data_valid),
-    .write_logits_fifo_cap(write_logits_fifo_cap),
-    .write_logits_empty_n(write_logits_empty_n),
-    .write_logits_read(result_writer_U0_write_logits_read),
-    .classes1_dout(classes_dout),
-    .classes1_num_data_valid(classes_num_data_valid),
-    .classes1_fifo_cap(classes_fifo_cap),
-    .classes1_empty_n(classes_empty_n),
-    .classes1_read(result_writer_U0_classes1_read),
+    .inference_dout(inference_dout),
+    .inference_num_data_valid(inference_num_data_valid),
+    .inference_fifo_cap(inference_fifo_cap),
+    .inference_empty_n(inference_empty_n),
+    .inference_read(result_writer_U0_inference_read),
     .m_axi_gmem_io_AWVALID(result_writer_U0_m_axi_gmem_io_AWVALID),
     .m_axi_gmem_io_AWREADY(gmem_io_AWREADY),
     .m_axi_gmem_io_AWADDR(result_writer_U0_m_axi_gmem_io_AWADDR),
@@ -1425,7 +1382,7 @@ cnn_accelerator_ddr_result_writer result_writer_U0(
     .result_read(result_writer_U0_result_read)
 );
 
-cnn_accelerator_ddr_fifo_w64_d6_S result_c_U(
+cnn_accelerator_ddr_fifo_w64_d5_S result_c_U(
     .clk(ap_clk),
     .reset(ap_rst_n_inv),
     .if_read_ce(1'b1),
@@ -1438,6 +1395,21 @@ cnn_accelerator_ddr_fifo_w64_d6_S result_c_U(
     .if_fifo_cap(result_c_fifo_cap),
     .if_empty_n(result_c_empty_n),
     .if_read(result_writer_U0_result_read)
+);
+
+cnn_accelerator_ddr_fifo_w32_d4_S softmax_scale_q20_c_U(
+    .clk(ap_clk),
+    .reset(ap_rst_n_inv),
+    .if_read_ce(1'b1),
+    .if_write_ce(1'b1),
+    .if_din(entry_proc_U0_softmax_scale_q20_c_din),
+    .if_full_n(softmax_scale_q20_c_full_n),
+    .if_write(entry_proc_U0_softmax_scale_q20_c_write),
+    .if_dout(softmax_scale_q20_c_dout),
+    .if_num_data_valid(softmax_scale_q20_c_num_data_valid),
+    .if_fifo_cap(softmax_scale_q20_c_fifo_cap),
+    .if_empty_n(softmax_scale_q20_c_empty_n),
+    .if_read(softmax_U0_scale_q20_read)
 );
 
 cnn_accelerator_ddr_fifo_w64_d2_S_x pixels_U(
@@ -1557,52 +1529,35 @@ cnn_accelerator_ddr_fifo_w80_d2_S computed_U(
     .if_num_data_valid(computed_num_data_valid),
     .if_fifo_cap(computed_fifo_cap),
     .if_empty_n(computed_empty_n),
-    .if_read(logits_split_U0_computed_read)
+    .if_read(softmax_U0_computed_read)
 );
 
-cnn_accelerator_ddr_fifo_w80_d2_S write_logits_U(
+cnn_accelerator_ddr_fifo_w164_d2_S inference_U(
     .clk(ap_clk),
     .reset(ap_rst_n_inv),
     .if_read_ce(1'b1),
     .if_write_ce(1'b1),
-    .if_din(logits_split_U0_write_logits_din),
-    .if_full_n(write_logits_full_n),
-    .if_write(logits_split_U0_write_logits_write),
-    .if_dout(write_logits_dout),
-    .if_num_data_valid(write_logits_num_data_valid),
-    .if_fifo_cap(write_logits_fifo_cap),
-    .if_empty_n(write_logits_empty_n),
-    .if_read(result_writer_U0_write_logits_read)
+    .if_din(softmax_U0_inference_din),
+    .if_full_n(inference_full_n),
+    .if_write(softmax_U0_inference_write),
+    .if_dout(inference_dout),
+    .if_num_data_valid(inference_num_data_valid),
+    .if_fifo_cap(inference_fifo_cap),
+    .if_empty_n(inference_empty_n),
+    .if_read(result_writer_U0_inference_read)
 );
 
-cnn_accelerator_ddr_fifo_w80_d2_S argmax_logits_U(
+cnn_accelerator_ddr_start_for_softmax_U0 start_for_softmax_U0_U(
     .clk(ap_clk),
     .reset(ap_rst_n_inv),
     .if_read_ce(1'b1),
     .if_write_ce(1'b1),
-    .if_din(logits_split_U0_argmax_logits_din),
-    .if_full_n(argmax_logits_full_n),
-    .if_write(logits_split_U0_argmax_logits_write),
-    .if_dout(argmax_logits_dout),
-    .if_num_data_valid(argmax_logits_num_data_valid),
-    .if_fifo_cap(argmax_logits_fifo_cap),
-    .if_empty_n(argmax_logits_empty_n),
-    .if_read(p_anonymous_namespace_argmax_runner_U0_argmax_logits_read)
-);
-
-cnn_accelerator_ddr_fifo_w4_d2_S classes_U(
-    .clk(ap_clk),
-    .reset(ap_rst_n_inv),
-    .if_read_ce(1'b1),
-    .if_write_ce(1'b1),
-    .if_din(p_anonymous_namespace_argmax_runner_U0_classes1_din),
-    .if_full_n(classes_full_n),
-    .if_write(p_anonymous_namespace_argmax_runner_U0_classes1_write),
-    .if_dout(classes_dout),
-    .if_num_data_valid(classes_num_data_valid),
-    .if_fifo_cap(classes_fifo_cap),
-    .if_empty_n(classes_empty_n),
-    .if_read(result_writer_U0_classes1_read)
+    .if_din(start_for_softmax_U0_din),
+    .if_full_n(start_for_softmax_U0_full_n),
+    .if_write(entry_proc_U0_start_write),
+    .if_dout(start_for_softmax_U0_dout),
+    .if_empty_n(start_for_softmax_U0_empty_n),
+    .if_read(softmax_U0_ap_ready)
 );
 
 cnn_accelerator_ddr_start_for_result_writer_U0 start_for_result_writer_U0_U(
@@ -1629,32 +1584,6 @@ cnn_accelerator_ddr_start_for_p_anonymous_namespace_compute_runner_U0 start_for_
     .if_dout(start_for_p_anonymous_namespace_compute_runner_U0_dout),
     .if_empty_n(start_for_p_anonymous_namespace_compute_runner_U0_empty_n),
     .if_read(p_anonymous_namespace_compute_runner_U0_ap_ready)
-);
-
-cnn_accelerator_ddr_start_for_logits_split_U0 start_for_logits_split_U0_U(
-    .clk(ap_clk),
-    .reset(ap_rst_n_inv),
-    .if_read_ce(1'b1),
-    .if_write_ce(1'b1),
-    .if_din(start_for_logits_split_U0_din),
-    .if_full_n(start_for_logits_split_U0_full_n),
-    .if_write(p_anonymous_namespace_compute_runner_U0_start_write),
-    .if_dout(start_for_logits_split_U0_dout),
-    .if_empty_n(start_for_logits_split_U0_empty_n),
-    .if_read(logits_split_U0_ap_ready)
-);
-
-cnn_accelerator_ddr_start_for_p_anonymous_namespace_argmax_runner_U0 start_for_p_anonymous_namespace_argmax_runner_U0_U(
-    .clk(ap_clk),
-    .reset(ap_rst_n_inv),
-    .if_read_ce(1'b1),
-    .if_write_ce(1'b1),
-    .if_din(start_for_p_anonymous_namespace_argmax_runner_U0_din),
-    .if_full_n(start_for_p_anonymous_namespace_argmax_runner_U0_full_n),
-    .if_write(logits_split_U0_start_write),
-    .if_dout(start_for_p_anonymous_namespace_argmax_runner_U0_dout),
-    .if_empty_n(start_for_p_anonymous_namespace_argmax_runner_U0_empty_n),
-    .if_read(p_anonymous_namespace_argmax_runner_U0_ap_ready)
 );
 
 always @ (posedge ap_clk) begin
@@ -1707,7 +1636,7 @@ end
 
 assign ap_done = result_writer_U0_ap_done;
 
-assign ap_idle = (weight_loader_U0_ap_idle & result_writer_U0_ap_idle & param_loader_U0_ap_idle & p_anonymous_namespace_compute_runner_U0_ap_idle & p_anonymous_namespace_argmax_runner_U0_ap_idle & logits_split_U0_ap_idle & image_loader_U0_ap_idle & entry_proc_U0_ap_idle);
+assign ap_idle = (weight_loader_U0_ap_idle & softmax_U0_ap_idle & result_writer_U0_ap_idle & param_loader_U0_ap_idle & p_anonymous_namespace_compute_runner_U0_ap_idle & image_loader_U0_ap_idle & entry_proc_U0_ap_idle);
 
 assign ap_ready = ap_sync_ready;
 
@@ -1728,6 +1657,8 @@ assign ap_sync_weight_loader_U0_ap_ready = (weight_loader_U0_ap_ready | ap_sync_
 assign entry_proc_U0_ap_continue = 1'b1;
 
 assign entry_proc_U0_ap_start = ((ap_sync_reg_entry_proc_U0_ap_ready ^ 1'b1) & ap_start);
+
+assign entry_proc_U0_start_full_n = (start_for_softmax_U0_full_n & start_for_result_writer_U0_full_n);
 
 assign gmem_io_BID = 1'd0;
 
@@ -1763,14 +1694,6 @@ assign image_loader_U0_ap_continue = 1'b1;
 
 assign image_loader_U0_ap_start = ((ap_sync_reg_image_loader_U0_ap_ready ^ 1'b1) & ap_start);
 
-assign logits_split_U0_ap_continue = 1'b1;
-
-assign logits_split_U0_ap_start = start_for_logits_split_U0_empty_n;
-
-assign p_anonymous_namespace_argmax_runner_U0_ap_continue = 1'b1;
-
-assign p_anonymous_namespace_argmax_runner_U0_ap_start = start_for_p_anonymous_namespace_argmax_runner_U0_empty_n;
-
 assign p_anonymous_namespace_compute_runner_U0_ap_continue = 1'b1;
 
 assign p_anonymous_namespace_compute_runner_U0_ap_start = start_for_p_anonymous_namespace_compute_runner_U0_empty_n;
@@ -1783,13 +1706,15 @@ assign result_writer_U0_ap_continue = 1'b1;
 
 assign result_writer_U0_ap_start = start_for_result_writer_U0_empty_n;
 
-assign start_for_logits_split_U0_din = 1'b1;
+assign softmax_U0_ap_continue = 1'b1;
 
-assign start_for_p_anonymous_namespace_argmax_runner_U0_din = 1'b1;
+assign softmax_U0_ap_start = start_for_softmax_U0_empty_n;
 
 assign start_for_p_anonymous_namespace_compute_runner_U0_din = 1'b1;
 
 assign start_for_result_writer_U0_din = 1'b1;
+
+assign start_for_softmax_U0_din = 1'b1;
 
 assign weight_loader_U0_ap_continue = 1'b1;
 

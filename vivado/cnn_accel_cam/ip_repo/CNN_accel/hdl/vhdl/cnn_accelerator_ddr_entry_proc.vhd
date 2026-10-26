@@ -26,7 +26,13 @@ port (
     result_c_num_data_valid : IN STD_LOGIC_VECTOR (3 downto 0);
     result_c_fifo_cap : IN STD_LOGIC_VECTOR (3 downto 0);
     result_c_full_n : IN STD_LOGIC;
-    result_c_write : OUT STD_LOGIC );
+    result_c_write : OUT STD_LOGIC;
+    softmax_scale_q20 : IN STD_LOGIC_VECTOR (31 downto 0);
+    softmax_scale_q20_c_din : OUT STD_LOGIC_VECTOR (31 downto 0);
+    softmax_scale_q20_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    softmax_scale_q20_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    softmax_scale_q20_c_full_n : IN STD_LOGIC;
+    softmax_scale_q20_c_write : OUT STD_LOGIC );
 end;
 
 
@@ -48,6 +54,7 @@ attribute shreg_extract : string;
     attribute fsm_encoding of ap_CS_fsm_state1 : signal is "none";
     signal internal_ap_ready : STD_LOGIC;
     signal result_c_blk_n : STD_LOGIC;
+    signal softmax_scale_q20_c_blk_n : STD_LOGIC;
     signal ap_block_state1 : BOOLEAN;
     signal ap_NS_fsm : STD_LOGIC_VECTOR (0 downto 0);
     signal ap_ST_fsm_state1_blk : STD_LOGIC;
@@ -79,7 +86,7 @@ begin
             else
                 if ((ap_continue = ap_const_logic_1)) then 
                     ap_done_reg <= ap_const_logic_0;
-                elsif ((not(((real_start = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+                elsif ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
                     ap_done_reg <= ap_const_logic_1;
                 end if; 
             end if;
@@ -103,7 +110,7 @@ begin
     end process;
 
 
-    ap_NS_fsm_assign_proc : process (real_start, ap_done_reg, ap_CS_fsm, ap_CS_fsm_state1, result_c_full_n)
+    ap_NS_fsm_assign_proc : process (real_start, ap_done_reg, ap_CS_fsm, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
     begin
         case ap_CS_fsm is
             when ap_ST_fsm_state1 => 
@@ -114,9 +121,9 @@ begin
     end process;
     ap_CS_fsm_state1 <= ap_CS_fsm(0);
 
-    ap_ST_fsm_state1_blk_assign_proc : process(real_start, ap_done_reg, result_c_full_n)
+    ap_ST_fsm_state1_blk_assign_proc : process(real_start, ap_done_reg, result_c_full_n, softmax_scale_q20_c_full_n)
     begin
-        if (((real_start = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) then 
+        if (((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) then 
             ap_ST_fsm_state1_blk <= ap_const_logic_1;
         else 
             ap_ST_fsm_state1_blk <= ap_const_logic_0;
@@ -124,15 +131,15 @@ begin
     end process;
 
 
-    ap_block_state1_assign_proc : process(real_start, ap_done_reg, result_c_full_n)
+    ap_block_state1_assign_proc : process(real_start, ap_done_reg, result_c_full_n, softmax_scale_q20_c_full_n)
     begin
-                ap_block_state1 <= ((real_start = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1));
+                ap_block_state1 <= ((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1));
     end process;
 
 
-    ap_done_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n)
+    ap_done_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
     begin
-        if ((not(((real_start = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+        if ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
             ap_done <= ap_const_logic_1;
         else 
             ap_done <= ap_done_reg;
@@ -151,9 +158,9 @@ begin
 
     ap_ready <= internal_ap_ready;
 
-    internal_ap_ready_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n)
+    internal_ap_ready_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
     begin
-        if ((not(((real_start = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+        if ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
             internal_ap_ready <= ap_const_logic_1;
         else 
             internal_ap_ready <= ap_const_logic_0;
@@ -182,12 +189,33 @@ begin
 
     result_c_din <= result;
 
-    result_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n)
+    result_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
     begin
-        if ((not(((real_start = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+        if ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
             result_c_write <= ap_const_logic_1;
         else 
             result_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    softmax_scale_q20_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, softmax_scale_q20_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            softmax_scale_q20_c_blk_n <= softmax_scale_q20_c_full_n;
+        else 
+            softmax_scale_q20_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    softmax_scale_q20_c_din <= softmax_scale_q20;
+
+    softmax_scale_q20_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            softmax_scale_q20_c_write <= ap_const_logic_1;
+        else 
+            softmax_scale_q20_c_write <= ap_const_logic_0;
         end if; 
     end process;
 

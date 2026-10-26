@@ -150,6 +150,23 @@ u64 XCnn_accelerator_ddr_Get_result(XCnn_accelerator_ddr *InstancePtr) {
     return Data;
 }
 
+void XCnn_accelerator_ddr_Set_softmax_scale_q20(XCnn_accelerator_ddr *InstancePtr, u32 Data) {
+    Xil_AssertVoid(InstancePtr != NULL);
+    Xil_AssertVoid(InstancePtr->IsReady == XIL_COMPONENT_IS_READY);
+
+    XCnn_accelerator_ddr_WriteReg(InstancePtr->Control_BaseAddress, XCNN_ACCELERATOR_DDR_CONTROL_ADDR_SOFTMAX_SCALE_Q20_DATA, Data);
+}
+
+u32 XCnn_accelerator_ddr_Get_softmax_scale_q20(XCnn_accelerator_ddr *InstancePtr) {
+    u32 Data;
+
+    Xil_AssertNonvoid(InstancePtr != NULL);
+    Xil_AssertNonvoid(InstancePtr->IsReady == XIL_COMPONENT_IS_READY);
+
+    Data = XCnn_accelerator_ddr_ReadReg(InstancePtr->Control_BaseAddress, XCNN_ACCELERATOR_DDR_CONTROL_ADDR_SOFTMAX_SCALE_Q20_DATA);
+    return Data;
+}
+
 void XCnn_accelerator_ddr_InterruptGlobalEnable(XCnn_accelerator_ddr *InstancePtr) {
     Xil_AssertVoid(InstancePtr != NULL);
     Xil_AssertVoid(InstancePtr->IsReady == XIL_COMPONENT_IS_READY);

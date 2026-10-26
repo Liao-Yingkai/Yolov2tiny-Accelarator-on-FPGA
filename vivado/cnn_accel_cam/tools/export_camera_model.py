@@ -60,6 +60,9 @@ def main():
                     "--metadata", str(args.generated_dir / "metadata.json"),
                     "--output", str(target / "camera_model_input.h")], check=True)
     output = target / "camera_model_data.h"
+    subprocess.run([sys.executable, str(tools / "generate_softmax_params.py"),
+                    "--metadata", str(args.generated_dir / "metadata.json"),
+                    "--output", str(target / "softmax_params.h")], check=True)
     output.write_text("\n".join(parts), encoding="utf-8")
     print(output)
 

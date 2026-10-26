@@ -96,6 +96,8 @@ void XCnn_accelerator_ddr_Set_params(XCnn_accelerator_ddr *InstancePtr, u64 Data
 u64 XCnn_accelerator_ddr_Get_params(XCnn_accelerator_ddr *InstancePtr);
 void XCnn_accelerator_ddr_Set_result(XCnn_accelerator_ddr *InstancePtr, u64 Data);
 u64 XCnn_accelerator_ddr_Get_result(XCnn_accelerator_ddr *InstancePtr);
+void XCnn_accelerator_ddr_Set_softmax_scale_q20(XCnn_accelerator_ddr *InstancePtr, u32 Data);
+u32 XCnn_accelerator_ddr_Get_softmax_scale_q20(XCnn_accelerator_ddr *InstancePtr);
 
 void XCnn_accelerator_ddr_InterruptGlobalEnable(XCnn_accelerator_ddr *InstancePtr);
 void XCnn_accelerator_ddr_InterruptGlobalDisable(XCnn_accelerator_ddr *InstancePtr);

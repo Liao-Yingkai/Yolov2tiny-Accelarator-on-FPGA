@@ -3,6 +3,7 @@
 #include <string.h>
 #include "camera_cnn.h"
 #include "camera_model_data.h"
+#include "softmax_params.h"
 #include "xparameters.h"
 #include "xcnn_accelerator_ddr.h"
 #include "xil_cache.h"
@@ -19,8 +20,9 @@ enum { CACHE_ALIGN = 64, WORD_BYTES = 8, KERNEL_PIXELS = 3 * 3,
     FC_PARAM_BASE = CONV2_PARAM_BASE + PARAM_FIELDS * CONV2_COUT,
     PARAM_COUNT = PARAM_FIELDS * (CONV1_COUT + CONV2_COUT + CAMERA_CNN_CLASSES) };
 #define ROUND_CACHE(n) (((n) + CACHE_ALIGN - 1) / CACHE_ALIGN * CACHE_ALIGN)
-_Static_assert(sizeof(camera_cnn_result_t) == 16, "result size ABI");
-_Static_assert(offsetof(camera_cnn_result_t, class_index) == 12, "class offset ABI");
+_Static_assert(sizeof(camera_cnn_result_t) == CAMERA_CNN_RESULT_BYTES, "result size ABI");
+_Static_assert(offsetof(camera_cnn_result_t, class_index) == CAMERA_CNN_CLASS_BYTE_OFFSET, "class offset ABI");
+_Static_assert(MODEL_SOFTMAX_SCALE_FRAC_BITS == CAMERA_CNN_SOFTMAX_SCALE_FRAC_BITS, "scale ABI");
 _Static_assert(CAMERA_CNN_INPUT_BYTES == 98 * WORD_BYTES, "image size ABI");
 _Static_assert(WEIGHT_WORDS == 1133 && PARAM_COUNT == 102, "frozen DDR ABI");
 _Static_assert(CAMERA_WEIGHT_LAYOUT_VERSION == 2, "blocked weights v2 required");
@@ -83,6 +85,7 @@ camera_cnn_status_t camera_cnn_init(void)
     XCnn_accelerator_ddr_Set_weights(&accelerator, (u64)(uintptr_t)weights_ddr);
     XCnn_accelerator_ddr_Set_params(&accelerator, (u64)(uintptr_t)params_ddr);
     XCnn_accelerator_ddr_Set_result(&accelerator, (u64)(uintptr_t)result_ddr);
+    XCnn_accelerator_ddr_Set_softmax_scale_q20(&accelerator, MODEL_SOFTMAX_SCALE_Q20);
     initialized = 1; /* 初始化不启动CNN，无中断连接，逐次轮询。 */
     return CAMERA_CNN_OK;
 }
@@ -91,7 +94,7 @@ camera_cnn_status_t camera_cnn_predict(const int8_t input[CAMERA_CNN_INPUT_BYTES
                                      camera_cnn_result_t *result)
 {
     XTime start, now;
-    unsigned i, best = 0;
+    unsigned i, sum = 0;
     if (!input || !result) return CAMERA_CNN_ARGUMENT;
     if (!initialized) return CAMERA_CNN_NOT_INITIALIZED;
     if (!XCnn_accelerator_ddr_IsIdle(&accelerator)) return CAMERA_CNN_BUSY;
@@ -116,15 +119,20 @@ camera_cnn_status_t camera_cnn_predict(const int8_t input[CAMERA_CNN_INPUT_BYTES
             return CAMERA_CNN_TIMEOUT;
         }
     }
-    /* PL写、PS读：完成之后invalidate丢弃CPU旧值，再取16字节结果。 */
+    /* PL写、PS读：完成之后invalidate丢弃CPU旧值，再取ABI结果。 */
     dsb();
     Xil_DCacheInvalidateRange((INTPTR)result_ddr, sizeof(result_ddr));
     dsb();
     memcpy(result, result_ddr, sizeof(*result));
-    for (i = 1; i < CAMERA_CNN_CLASSES; ++i)
-        if (result->logits[i] > result->logits[best]) best = i;
-    if (result->class_index >= CAMERA_CNN_CLASSES || result->class_index != best ||
-        result->reserved[0] || result->reserved[1]) return CAMERA_CNN_RESULT;
+    if (result->class_index >= CAMERA_CNN_CLASSES) return CAMERA_CNN_RESULT;
+    for (i = 0; i < CAMERA_CNN_CLASSES; ++i) {
+        if (result->probability[i] > CAMERA_CNN_PROBABILITY_SCALE ||
+            result->probability[i] > result->probability[result->class_index])
+            return CAMERA_CNN_RESULT;
+        sum += result->probability[i];
+    }
+    if (sum < CAMERA_CNN_PROBABILITY_SCALE - 5 || sum > CAMERA_CNN_PROBABILITY_SCALE + 5)
+        return CAMERA_CNN_RESULT;
     return CAMERA_CNN_OK;
 }
 

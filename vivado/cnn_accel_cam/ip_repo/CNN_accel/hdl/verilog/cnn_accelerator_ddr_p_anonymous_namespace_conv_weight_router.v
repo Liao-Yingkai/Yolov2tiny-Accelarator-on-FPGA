@@ -79,7 +79,7 @@ wire    ap_enable_reg_pp0_iter0;
 reg    ap_enable_reg_pp0_iter1;
 reg    ap_idle_pp0;
 wire    internal_ap_ready;
-wire   [0:0] icmp_ln62_fu_103_p2;
+wire   [0:0] icmp_ln61_fu_103_p2;
 reg    ap_predicate_op21_read_state1;
 reg    ap_predicate_op23_read_state1;
 reg    ap_done_reg;
@@ -101,7 +101,7 @@ wire   [5:0] index_5_fu_109_p2;
 wire    ap_loop_init;
 reg   [5:0] ap_sig_allocacmp_index;
 reg    ap_block_pp0_stage0_01001;
-wire   [5:0] select_ln60_fu_87_p3;
+wire   [5:0] select_ln59_fu_87_p3;
 wire    ap_continue_int;
 reg    ap_done_int;
 reg   [0:0] ap_NS_fsm;
@@ -180,9 +180,9 @@ end
 
 always @ (posedge ap_clk) begin
     if ((1'b1 == ap_condition_137)) begin
-        if (((layer_mode == 1'd1) & (icmp_ln62_fu_103_p2 == 1'd0))) begin
+        if (((layer_mode == 1'd1) & (icmp_ln61_fu_103_p2 == 1'd0))) begin
             ap_phi_reg_pp0_iter1_weight_2_reg_77 <= w2_dout;
-        end else if (((layer_mode == 1'd0) & (icmp_ln62_fu_103_p2 == 1'd0))) begin
+        end else if (((layer_mode == 1'd0) & (icmp_ln61_fu_103_p2 == 1'd0))) begin
             ap_phi_reg_pp0_iter1_weight_2_reg_77 <= w1_dout;
         end else if ((1'b1 == 1'b1)) begin
             ap_phi_reg_pp0_iter1_weight_2_reg_77 <= ap_phi_reg_pp0_iter0_weight_2_reg_77;
@@ -192,7 +192,7 @@ end
 
 always @ (posedge ap_clk) begin
     if ((1'b1 == ap_condition_137)) begin
-        if ((icmp_ln62_fu_103_p2 == 1'd0)) begin
+        if ((icmp_ln61_fu_103_p2 == 1'd0)) begin
             index_02_fu_48 <= index_5_fu_109_p2;
         end else if ((ap_loop_init == 1'b1)) begin
             index_02_fu_48 <= 6'd0;
@@ -201,7 +201,7 @@ always @ (posedge ap_clk) begin
 end
 
 always @ (*) begin
-    if (((1'b0 == ap_block_pp0_stage0_subdone) & (icmp_ln62_fu_103_p2 == 1'd1) & (ap_start_int == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
+    if (((1'b0 == ap_block_pp0_stage0_subdone) & (icmp_ln61_fu_103_p2 == 1'd1) & (ap_start_int == 1'b1) & (1'b1 == ap_CS_fsm_pp0_stage0))) begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b1;
     end else begin
         ap_condition_exit_pp0_iter0_stage0 = 1'b0;
@@ -360,22 +360,22 @@ assign ap_loop_exit_ready = ap_condition_exit_pp0_iter0_stage0;
 assign ap_phi_reg_pp0_iter0_weight_2_reg_77 = 'bx;
 
 always @ (*) begin
-    ap_predicate_op21_read_state1 = ((layer_mode == 1'd0) & (icmp_ln62_fu_103_p2 == 1'd0));
+    ap_predicate_op21_read_state1 = ((layer_mode == 1'd0) & (icmp_ln61_fu_103_p2 == 1'd0));
 end
 
 always @ (*) begin
-    ap_predicate_op23_read_state1 = ((layer_mode == 1'd1) & (icmp_ln62_fu_103_p2 == 1'd0));
+    ap_predicate_op23_read_state1 = ((layer_mode == 1'd1) & (icmp_ln61_fu_103_p2 == 1'd0));
 end
 
 assign ap_ready = internal_ap_ready;
 
 assign conv_weight_stream_din = ap_phi_reg_pp0_iter1_weight_2_reg_77;
 
-assign icmp_ln62_fu_103_p2 = ((ap_sig_allocacmp_index == select_ln60_fu_87_p3) ? 1'b1 : 1'b0);
+assign icmp_ln61_fu_103_p2 = ((ap_sig_allocacmp_index == select_ln59_fu_87_p3) ? 1'b1 : 1'b0);
 
 assign index_5_fu_109_p2 = (ap_sig_allocacmp_index + 6'd1);
 
-assign select_ln60_fu_87_p3 = ((layer_mode[0:0] == 1'b1) ? 6'd36 : 6'd18);
+assign select_ln59_fu_87_p3 = ((layer_mode[0:0] == 1'b1) ? 6'd36 : 6'd18);
 
 assign start_out = real_start;
 

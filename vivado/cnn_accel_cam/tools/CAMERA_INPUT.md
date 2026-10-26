@@ -1,5 +1,13 @@
 # 摄像头取帧、预处理与CNN推理
 
+## Softmax ABI v2（本轮仅静态检查，未运行）
+
+本轮输出改为24字节：10个uint16概率（每单位1/10000），随后offset20的uint32类别。PS/PL独立维护接口常量，一致性要求见[根README](../../../README.md)。寄存器偏移由HLS自动生成，PS通过新版生成驱动的XCnn_accelerator_ddr_Set_softmax_scale_q20配置标量，不手写偏移；初始化不启动CNN。上板须更新RTL/IP、XSA、bitstream及平台/BSP；当前相机BSP缺少该setter，需重新生成驱动后才能完成构建，未添加兼容占位。
+
+同一export_camera_model.py命令还生成softmax_params.h：从metadata唯一fc层的activation_output_scale读取有限正scale，并要求零点0；MODEL_SOFTMAX_SCALE_Q20=round(scale*2^20)，须在1..UINT32_MAX。当前scale=0.251935750246048，整数为264174U。MODEL_FC_OUTPUT_SCALE只供离线参考，PS运行时不用浮点；不生成exp表或LUT。camera_model_data.h的12数组不变，camera_model_input.h仍为原输入整数参数。单独生成标量可用generate_softmax_params.py --metadata /path/to/metadata.json --output /path/to/softmax_params.h。
+
+64B独占缓冲、flush/invalidate和busy/timeout所有权规则不变，不加置信度阈值、OSD或输入交互。下文历史测试和运行证据均不是本轮Softmax验收；本轮未运行DUT、host推理、testbench、C-sim、co-sim、综合或板测，不能据静态检查认定概率误差或硬件已通过。
+
 PS取得稳定快照后，用独立camera_preprocess.c/.h算术生成单通道28×28模型输入，不用LUT，再由camera_cnn模块提交新CNN IP并读回类别。失败轮不预处理：camera_gray和camera_model_input保留上一成功轮结果（尚无成功轮时为静态初值），不能将其误认成失败轮新数据；camera_snapshot可能已被部分覆盖，内容无效、不得使用。图像和识别精度仍需板测。
 
 ## 模块与内存
@@ -44,19 +52,19 @@ python3 vivado/cnn_accel_cam/tools/export_camera_model.py --generated-dir /path/
 
 camera_model_data.h只有12个static const模型数组，不带测试图片或trace。导出脚本检查每个数组的类型、数量和整数范围，拒绝非v2权重布局。模型初始化只加载一次：Conv1 72B、Conv2 1152B、FC 7840B紧密拼接共9064B（1133个u64），不转置、不补通道。参数每层按[完整bias][完整multiplier][完整shift]拼接，三层8/16/10输出共102个int32。输入是784个连续signed INT8单通道像素，Zynq小端下memcpy到u64缓冲即可使每8像素低byte优先。
 
-camera_cnn有一个静态驱动实例，使用当前BSP DeviceID和控制地址宏，初始化检查驱动实际基地址、完整DDR范围及64B对齐，关闭AutoRestart与中断，确认Idle后设置四个u64地址，不在初始化启动CNN。所有实际DMA缓冲起点与容量均按64B对齐，避免维护缓存时影响邻居。模型和每轮输入由CPU写、PL读，因此flush后dsb；每轮结果整缓存行先写哨兵并flush，避免旧脏缓存覆盖PL结果。完成后dsb、invalidate结果、dsb，再memcpy前16字节：10个signed INT8 logits、2个零保留字节、offset12的uint32类别。检查类别<10、等于首次最大logit索引且保留字节为零；不与测试图片golden比较。
+camera_cnn有一个静态驱动实例，使用当前BSP DeviceID和控制地址宏，初始化检查驱动实际基地址、完整DDR范围及64B对齐，关闭AutoRestart与中断，确认Idle后设置四个u64地址及Q20标量，不在初始化启动CNN。所有实际DMA缓冲起点与容量均按64B对齐，避免维护缓存时影响邻居。模型和每轮输入由CPU写、PL读，因此flush后dsb；每轮结果整缓存行先写哨兵并flush，避免旧脏缓存覆盖PL结果。完成后dsb、invalidate结果、dsb，再memcpy前24字节：10个uint16概率、offset20的uint32类别。检查类别<10、每项0..10000、总和10000±5，且类别对应概率不小于其他项；允许量化并列，不要求舍入后概率的first-argmax等于类别，不与测试图片golden比较。
 
 每轮先检查Idle，再在Start之前读取一次IsDone清上轮COR（读后清零）完成位；Start之后只轮询IsDone，不额外读取控制寄存器。CNN超时为5秒。busy、timeout或其他CNN错误立即终止应用；超时不表示PL已经停止访问DDR，因此不自动reset、不复用缓冲重试，须板级复位后重启。
 
 ## 调度及串口
 
-main仅用XTime从本轮开始计100ms目标周期，包含复制、预处理、推理和串口；超时直接下一轮，不额外等待100ms。正常每次成功仅输出`digit=<0..9>`，失败输出简短原因，无地址、计数、逐像素、logits或耗时日志。取帧失败不使用快照，跳过预处理和推理，在下一节拍重试。100ms是调度目标，不保证10fps、独立新帧或识别精度。HDMI预览保留，复制期间可能短暂定格。
+main仅用XTime从本轮开始计100ms目标周期，包含复制、预处理、推理和串口；超时直接下一轮，不额外等待100ms。正常每次成功仅输出`digit=<0..9> probability=<百分比整数>.<两位小数>%`，使用类别对应概率以整数拆分百分比，范围0.00%..100.00%。失败输出简短原因，无地址、计数、逐像素、logits或耗时日志。取帧失败不使用快照，跳过预处理和推理，在下一节拍重试。100ms是调度目标，不保证10fps、独立新帧或识别精度。HDMI预览保留，复制期间可能短暂定格。
 
 ## 上板步骤
 
-1. 在训练端完成一次一致的模型导出，再用上面的export_camera_model命令同步两个模型头；无需trace，不修改训练工程。
-2. 使用用户已更新的Vivado硬件/XSA和对应新平台BSP，确认包含cnn_accelerator_ddr驱动（DeviceID 0、控制基址0x40000000，Set_image_r/weights/params/result为u64），重建平台及相机应用。将camera_cnn.c纳入应用源码；不要手工改IDE生成Makefile。在Vitis选择Release（现有配置为-O2）；Debug保留-O0供调试，未强改默认配置，不启用fast-math。
-3. 下载与此BSP一致的bitstream，初始化PS/DDR后加载新ELF；保留摄像头与HDMI连接，用白纸黑字放入中央280×280 ROI，观察串口digit与预览。
+1. 在训练端完成一次一致的模型导出，再用上面的export_camera_model命令同步camera_model_data.h、camera_model_input.h和softmax_params.h三个头；无需trace，不修改训练工程。
+2. 使用用户已更新的Vivado硬件/XSA和对应新平台BSP，确认包含cnn_accelerator_ddr驱动（DeviceID 0、控制基址0x40000000，Set_image_r/weights/params/result为u64，并提供Set_softmax_scale_q20），重建平台及相机应用。将camera_cnn.c纳入应用源码；不要手工改IDE生成Makefile。在Vitis选择Release（现有配置为-O2）；Debug保留-O0供调试，未强改默认配置，不启用fast-math。
+3. 下载与此BSP一致的bitstream，初始化PS/DDR后加载新ELF；保留摄像头与HDMI连接，用白纸黑字放入中央280×280 ROI，观察串口digit、probability与预览。
 4. 确认实际BGR颜色、ROI/极性、快照稳定及类别变化；检查取帧错误会重试、CNN错误会停止。CNN busy/timeout后板级复位，不能直接继续运行旧缓冲。
 5. 如需观察工作数组，在成功轮完成后通过符号定位，注意CPU缓存中的新值可能尚未写DDR；正常路径不为调试器flush，也不打印数组地址。不要把失败轮或半更新数组当有效输入。
 

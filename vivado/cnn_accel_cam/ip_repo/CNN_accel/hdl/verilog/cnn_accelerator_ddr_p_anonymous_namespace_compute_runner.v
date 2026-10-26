@@ -11,13 +11,10 @@ module cnn_accelerator_ddr_p_anonymous_namespace_compute_runner (
         ap_clk,
         ap_rst,
         ap_start,
-        start_full_n,
         ap_done,
         ap_continue,
         ap_idle,
         ap_ready,
-        start_out,
-        start_write,
         pixels_dout,
         pixels_num_data_valid,
         pixels_fifo_cap,
@@ -67,13 +64,10 @@ parameter    ap_ST_fsm_state3 = 3'd4;
 input   ap_clk;
 input   ap_rst;
 input   ap_start;
-input   start_full_n;
 output   ap_done;
 input   ap_continue;
 output   ap_idle;
 output   ap_ready;
-output   start_out;
-output   start_write;
 input  [63:0] pixels_dout;
 input  [1:0] pixels_num_data_valid;
 input  [1:0] pixels_fifo_cap;
@@ -117,7 +111,7 @@ output   computed_write;
 
 reg ap_done;
 reg ap_idle;
-reg start_write;
+reg ap_ready;
 reg pixels_read;
 reg w1_read;
 reg p1_read;
@@ -127,16 +121,13 @@ reg wf_read;
 reg pf_read;
 reg computed_write;
 
-reg    real_start;
-reg    start_once_reg;
 reg    ap_done_reg;
 (* fsm_encoding = "none" *) reg   [2:0] ap_CS_fsm;
 wire    ap_CS_fsm_state1;
-reg    internal_ap_ready;
 wire   [0:0] layer_mode_fu_93_p2;
 reg   [0:0] layer_mode_reg_115;
 wire    ap_CS_fsm_state2;
-wire   [0:0] icmp_ln259_fu_81_p2;
+wire   [0:0] icmp_ln258_fu_81_p2;
 wire    grp_p_anonymous_namespace_run_layer_phase_fu_50_pixels_read;
 wire    grp_p_anonymous_namespace_run_layer_phase_fu_50_w1_read;
 wire    grp_p_anonymous_namespace_run_layer_phase_fu_50_p1_read;
@@ -169,7 +160,6 @@ wire    ap_ce_reg;
 
 // power-on initialization
 initial begin
-#0 start_once_reg = 1'b0;
 #0 ap_done_reg = 1'b0;
 #0 ap_CS_fsm = 3'd1;
 #0 grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg = 1'b0;
@@ -227,7 +217,7 @@ always @ (posedge ap_clk) begin
     end else begin
         if ((ap_continue == 1'b1)) begin
             ap_done_reg <= 1'b0;
-        end else if (((icmp_ln259_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
+        end else if (((icmp_ln258_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
             ap_done_reg <= 1'b1;
         end
     end
@@ -261,7 +251,7 @@ always @ (posedge ap_clk) begin
     if (ap_rst == 1'b1) begin
         grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= 1'b0;
     end else begin
-        if ((((icmp_ln259_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2)) | ((1'b1 == ap_CS_fsm_state3) & (ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready == 1'b0)))) begin
+        if ((((icmp_ln258_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2)) | ((1'b1 == ap_CS_fsm_state3) & (ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready == 1'b0)))) begin
             grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= 1'b1;
         end else if ((grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready == 1'b1)) begin
             grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg <= 1'b0;
@@ -270,33 +260,21 @@ always @ (posedge ap_clk) begin
 end
 
 always @ (posedge ap_clk) begin
-    if (ap_rst == 1'b1) begin
-        start_once_reg <= 1'b0;
-    end else begin
-        if (((real_start == 1'b1) & (internal_ap_ready == 1'b0))) begin
-            start_once_reg <= 1'b1;
-        end else if ((internal_ap_ready == 1'b1)) begin
-            start_once_reg <= 1'b0;
-        end
-    end
-end
-
-always @ (posedge ap_clk) begin
-    if ((~((real_start == 1'b0) | (ap_done_reg == 1'b1)) & (1'b1 == ap_CS_fsm_state1))) begin
+    if ((~((ap_start == 1'b0) | (ap_done_reg == 1'b1)) & (1'b1 == ap_CS_fsm_state1))) begin
         phase_fu_46 <= 2'd0;
-    end else if (((icmp_ln259_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
+    end else if (((icmp_ln258_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
         phase_fu_46 <= phase_2_fu_87_p2;
     end
 end
 
 always @ (posedge ap_clk) begin
-    if (((icmp_ln259_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
+    if (((icmp_ln258_fu_81_p2 == 1'd0) & (1'b1 == ap_CS_fsm_state2))) begin
         layer_mode_reg_115 <= layer_mode_fu_93_p2;
     end
 end
 
 always @ (*) begin
-    if (((real_start == 1'b0) | (ap_done_reg == 1'b1))) begin
+    if (((ap_start == 1'b0) | (ap_done_reg == 1'b1))) begin
         ap_ST_fsm_state1_blk = 1'b1;
     end else begin
         ap_ST_fsm_state1_blk = 1'b0;
@@ -314,7 +292,7 @@ always @ (*) begin
 end
 
 always @ (*) begin
-    if (((icmp_ln259_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
+    if (((icmp_ln258_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
         ap_done = 1'b1;
     end else begin
         ap_done = ap_done_reg;
@@ -322,10 +300,18 @@ always @ (*) begin
 end
 
 always @ (*) begin
-    if (((real_start == 1'b0) & (1'b1 == ap_CS_fsm_state1))) begin
+    if (((ap_start == 1'b0) & (1'b1 == ap_CS_fsm_state1))) begin
         ap_idle = 1'b1;
     end else begin
         ap_idle = 1'b0;
+    end
+end
+
+always @ (*) begin
+    if (((icmp_ln258_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
+        ap_ready = 1'b1;
+    end else begin
+        ap_ready = 1'b0;
     end
 end
 
@@ -342,14 +328,6 @@ always @ (*) begin
         grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_continue = 1'b1;
     end else begin
         grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_continue = 1'b0;
-    end
-end
-
-always @ (*) begin
-    if (((icmp_ln259_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
-        internal_ap_ready = 1'b1;
-    end else begin
-        internal_ap_ready = 1'b0;
     end
 end
 
@@ -386,22 +364,6 @@ always @ (*) begin
 end
 
 always @ (*) begin
-    if (((start_once_reg == 1'b0) & (start_full_n == 1'b0))) begin
-        real_start = 1'b0;
-    end else begin
-        real_start = ap_start;
-    end
-end
-
-always @ (*) begin
-    if (((real_start == 1'b1) & (start_once_reg == 1'b0))) begin
-        start_write = 1'b1;
-    end else begin
-        start_write = 1'b0;
-    end
-end
-
-always @ (*) begin
     if ((1'b1 == ap_CS_fsm_state3)) begin
         w1_read = grp_p_anonymous_namespace_run_layer_phase_fu_50_w1_read;
     end else begin
@@ -428,14 +390,14 @@ end
 always @ (*) begin
     case (ap_CS_fsm)
         ap_ST_fsm_state1 : begin
-            if ((~((real_start == 1'b0) | (ap_done_reg == 1'b1)) & (1'b1 == ap_CS_fsm_state1))) begin
+            if ((~((ap_start == 1'b0) | (ap_done_reg == 1'b1)) & (1'b1 == ap_CS_fsm_state1))) begin
                 ap_NS_fsm = ap_ST_fsm_state2;
             end else begin
                 ap_NS_fsm = ap_ST_fsm_state1;
             end
         end
         ap_ST_fsm_state2 : begin
-            if (((icmp_ln259_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
+            if (((icmp_ln258_fu_81_p2 == 1'd1) & (1'b1 == ap_CS_fsm_state2))) begin
                 ap_NS_fsm = ap_ST_fsm_state1;
             end else begin
                 ap_NS_fsm = ap_ST_fsm_state3;
@@ -461,14 +423,12 @@ assign ap_CS_fsm_state2 = ap_CS_fsm[32'd1];
 assign ap_CS_fsm_state3 = ap_CS_fsm[32'd2];
 
 always @ (*) begin
-    ap_block_state1 = ((real_start == 1'b0) | (ap_done_reg == 1'b1));
+    ap_block_state1 = ((ap_start == 1'b0) | (ap_done_reg == 1'b1));
 end
 
 always @ (*) begin
     ap_block_state3_on_subcall_done = ((ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_ready & ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_done) == 1'b0);
 end
-
-assign ap_ready = internal_ap_ready;
 
 assign ap_sync_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_done = (grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_done | ap_sync_reg_grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_done);
 
@@ -478,12 +438,10 @@ assign computed_din = grp_p_anonymous_namespace_run_layer_phase_fu_50_computed_d
 
 assign grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start = grp_p_anonymous_namespace_run_layer_phase_fu_50_ap_start_reg;
 
-assign icmp_ln259_fu_81_p2 = ((phase_fu_46 == 2'd2) ? 1'b1 : 1'b0);
+assign icmp_ln258_fu_81_p2 = ((phase_fu_46 == 2'd2) ? 1'b1 : 1'b0);
 
 assign layer_mode_fu_93_p2 = ((phase_fu_46 != 2'd0) ? 1'b1 : 1'b0);
 
 assign phase_2_fu_87_p2 = (phase_fu_46 + 2'd1);
-
-assign start_out = real_start;
 
 endmodule //cnn_accelerator_ddr_p_anonymous_namespace_compute_runner

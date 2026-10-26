@@ -98,8 +98,11 @@ Layer1的FC路径均为零事务；Router在非综合构建中对此执行事务
 - 连续三次Top调用的Pool1 FIFO清空、覆盖与结果独立性。
 
 原 stream Top 本身不含 DDR、DMA 或 AXI master。新增外层
-`cnn_accelerator_ddr` 保留本 Top 接口/循环，负责独立 DDR loaders、logits
-分流/argmax 与16字节结果 writer（10个 logits、2个保留字节、uint32类别）；
+`cnn_accelerator_ddr` 保留本 Top 接口/循环，负责独立 DDR loaders、定点Softmax
+与24字节结果writer（10个uint16概率及uint32原logits first-max类别）。
+新增Q20 scale控制参数，寄存器由HLS自动分配，PS使用重新生成的驱动；
+旧IP/16字节协议不兼容，需重新导出XSA/BSP/bitstream。
+本轮只静态检查，未功能验证、精度测量、综合、RTL或时序验证；历史core报告不覆盖新DDR后处理。
 详见 [DDR Wrapper 设计](ddr_wrapper.md)。
 Wrapper 的外层 DATAFLOW 与本层 phase barrier/共享 FIFO 是否保持预期层次和
 有限深度反压行为，仍待综合与 RTL Co-simulation 确认。

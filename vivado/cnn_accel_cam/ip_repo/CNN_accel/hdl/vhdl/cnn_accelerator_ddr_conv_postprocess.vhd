@@ -151,8 +151,8 @@ attribute shreg_extract : string;
     signal trunc_ln92_12_reg_2071 : STD_LOGIC_VECTOR (31 downto 0);
     signal trunc_ln92_13_reg_2076 : STD_LOGIC_VECTOR (31 downto 0);
     signal output_spatial_valid_V_reg_2081 : STD_LOGIC_VECTOR (3 downto 0);
-    signal empty_128_fu_1338_p1 : STD_LOGIC_VECTOR (1 downto 0);
-    signal empty_128_reg_2092 : STD_LOGIC_VECTOR (1 downto 0);
+    signal empty_156_fu_1338_p1 : STD_LOGIC_VECTOR (1 downto 0);
+    signal empty_156_reg_2092 : STD_LOGIC_VECTOR (1 downto 0);
     signal input_value_V_address0 : STD_LOGIC_VECTOR (1 downto 0);
     signal input_value_V_ce0 : STD_LOGIC;
     signal input_value_V_we0 : STD_LOGIC;
@@ -569,7 +569,7 @@ begin
         bias_cache_V_4_3 => bias_cache_V_7_fu_252,
         bias_cache_V_8_3 => bias_cache_V_11_fu_268,
         bias_cache_V_12_3 => bias_cache_V_15_fu_284,
-        cout_tile_cast => empty_128_reg_2092,
+        cout_tile_cast => empty_156_reg_2092,
         multiplier_cache_V_327 => multiplier_cache_V_4_fu_300,
         multiplier_cache_V_4_3 => multiplier_cache_V_8_fu_316,
         multiplier_cache_V_8_3 => multiplier_cache_V_12_fu_332,
@@ -865,7 +865,7 @@ begin
     begin
         if (ap_clk'event and ap_clk = '1') then
             if ((ap_const_logic_1 = ap_CS_fsm_state3)) then
-                empty_128_reg_2092 <= empty_128_fu_1338_p1;
+                empty_156_reg_2092 <= empty_156_fu_1338_p1;
             end if;
         end if;
     end process;
@@ -1185,7 +1185,7 @@ begin
         end if; 
     end process;
 
-    empty_128_fu_1338_p1 <= select_ln89_1_fu_938_p3(2 - 1 downto 0);
+    empty_156_fu_1338_p1 <= select_ln89_1_fu_938_p3(2 - 1 downto 0);
     grp_conv_postprocess_Pipeline_VITIS_LOOP_128_4_fu_634_ap_start <= grp_conv_postprocess_Pipeline_VITIS_LOOP_128_4_fu_634_ap_start_reg;
     icmp_ln89_fu_744_p2 <= "1" when (indvar_flatten_fu_232 = bound_reg_2028) else "0";
     icmp_ln90_1_fu_958_p2 <= "1" when (spatial_tile_fu_228 = ap_const_lv8_0) else "0";

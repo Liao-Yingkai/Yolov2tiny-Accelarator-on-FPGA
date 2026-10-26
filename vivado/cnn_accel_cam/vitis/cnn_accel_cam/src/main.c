@@ -108,7 +108,9 @@ int main(void)
                      * 不能仅自动reset CNN后继续，以免未完成AXI访问破坏数据。 */
                     return EXIT_FAILURE;
                 }
-                xil_printf("digit=%u\r\n", (unsigned)result.class_index);
+                xil_printf("digit=%u probability=%u.%02u%%\r\n", (unsigned)result.class_index,
+                    (unsigned)result.probability[result.class_index] / 100U,
+                    (unsigned)result.probability[result.class_index] % 100U);
             } else {
                 /* 失败快照无效，跳过预处理和CNN，下一节拍再取帧。 */
                 xil_printf("capture: %s\r\n", camera_input_reason(capture_status));
