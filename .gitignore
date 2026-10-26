@@ -47,14 +47,8 @@
 /vivado/**/*.log
 /vivado/**/*.jou
 
-# 保留 XPR 原地引用的顶层 wrapper，其余 .gen 内容由 Vivado 重生成。
-# 逐级开放父目录；通配忽略规则仍作用于各层的其他文件和子目录。
+# .gen 内容由 Vivado 重生成；当前摄像头工程的 wrapper 保存在 .srcs 内。
 /vivado/**/*.gen/**
-!/vivado/cnn_accel_ddr/cnn_accel_ddr.gen/sources_1/
-!/vivado/cnn_accel_ddr/cnn_accel_ddr.gen/sources_1/bd/
-!/vivado/cnn_accel_ddr/cnn_accel_ddr.gen/sources_1/bd/system/
-!/vivado/cnn_accel_ddr/cnn_accel_ddr.gen/sources_1/bd/system/hdl/
-!/vivado/cnn_accel_ddr/cnn_accel_ddr.gen/sources_1/bd/system/hdl/system_wrapper.v
 
 # Vitis 工作区：适用于所有 Vivado 工程及平台名称（含 system_wrappe）。
 /vivado/*/vitis/.workspace
