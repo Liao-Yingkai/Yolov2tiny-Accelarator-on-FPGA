@@ -3,7 +3,7 @@
 
 #include "../config.h"
 
-// PS 与 HLS 共用的 word 布局；仅使用内建整数，不依赖 ap_int/hls_stream。
+// PL侧word布局；PS另行维护常量。仅使用内建整数，不依赖ap_int/hls_stream。
 namespace ddr_layout {
 constexpr int WORD_BITS = 64;
 constexpr int WORD_BYTES = WORD_BITS / 8;
@@ -35,24 +35,24 @@ constexpr int CONV2_PARAM_WORDS = CNN_CONV2_PARAM_TRANSACTIONS * CONV_PARAM_WORD
 constexpr int FC_PARAM_OFFSET = CONV2_PARAM_OFFSET + CONV2_PARAM_WORDS;
 constexpr int FC_PARAM_WORDS = FC_OUT_TILES * FC_PARAM_WORDS_PER_PACK;
 constexpr int PARAM_WORDS = FC_PARAM_OFFSET + FC_PARAM_WORDS;
-constexpr int LOGIT_WORDS = (FC_OUTPUTS + WORD_BYTES - 1) / WORD_BYTES;
-constexpr int RESULT_CLASS_BYTE_OFFSET = 12;
+constexpr int RESULT_PROBABILITY_BYTES = 2;
+constexpr int RESULT_CLASS_BYTE_OFFSET = FC_OUTPUTS * RESULT_PROBABILITY_BYTES;
 constexpr int CLASS_WORD_OFFSET = RESULT_CLASS_BYTE_OFFSET / WORD_BYTES;
 constexpr int CLASS_BIT_OFFSET = (RESULT_CLASS_BYTE_OFFSET % WORD_BYTES) * 8;
-constexpr int RESULT_WORDS = LOGIT_WORDS;
+constexpr int RESULT_BYTES = RESULT_CLASS_BYTE_OFFSET + 4;
+constexpr int RESULT_WORDS = (RESULT_BYTES + WORD_BYTES - 1) / WORD_BYTES;
 constexpr int IMAGE_BYTES = IMAGE_WORDS * WORD_BYTES;
 constexpr int WEIGHT_BYTES = WEIGHT_WORDS * WORD_BYTES;
 constexpr int PARAM_BYTES = PARAM_WORDS * PARAM_WORD_BYTES;
-constexpr int RESULT_BYTES = RESULT_WORDS * WORD_BYTES;
 static_assert(ACTIVATION_BITS == 8 && WEIGHT_BITS == 8 && ACCUMULATOR_BITS == 32,
               "DDR format requires signed INT8 and INT32");
 static_assert(CNN_CONV1_INPUT_TRANSACTIONS % WORD_BYTES == 0 && CNN_CONV1_CIN == 1,
               "Image must fill raster words with one logical channel");
 static_assert(SYSTOLIC_CIN_PAR == WORD_BYTES && FC_CIN_PAR == WORD_BYTES,
               "One weight word must hold one complete Cin lane");
-static_assert(FC_OUTPUTS == 10 && LOGIT_WORDS == 2 && RESULT_WORDS == 2 &&
-              RESULT_BYTES == 16 && CLASS_WORD_OFFSET == 1 && CLASS_BIT_OFFSET == 32,
-              "Result format is fixed to ten logits, two reserved bytes and uint32 class");
+static_assert(FC_OUTPUTS == 10 && RESULT_WORDS == 3 &&
+              RESULT_BYTES == 24 && CLASS_WORD_OFFSET == 2 && CLASS_BIT_OFFSET == 32,
+              "Result: ten uint16 probabilities and uint32 class");
 static_assert(IMAGE_WORDS == 98 && CONV1_WEIGHT_WORDS == 9 &&
               CONV2_WEIGHT_OFFSET == 9 && FC_WEIGHT_OFFSET == 153 &&
               WEIGHT_WORDS == 1133 && PARAM_WORDS == 102,

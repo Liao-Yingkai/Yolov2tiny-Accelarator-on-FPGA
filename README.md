@@ -2,9 +2,21 @@
 
 面向 Zynq-7000 的 INT8 MNIST CNN 推理加速器练手项目，目标器件为 `xc7z020-clg400-2`。仓库包含 Vitis HLS 计算与 DDR 接口源码、Vivado 硬件集成工程，以及 Zynq PS 端的 Vitis 裸机测试工程，使用工具版本为 **2022.2**。
 
-计算模块包括 Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、MaxPool、独立 FC 及后处理、Argmax。模块间使用流式接口，DDR 系统入口通过 `m_axi` 搬运数据、`s_axilite` 设置地址和控制运行，最终输出10个 INT8 logits 与预测类别。
+计算模块包括 Im2Row、Broadcast / Output-Stationary Systolic、ConvPostProcess、MaxPool、独立 FC 及后处理、Softmax；类别选择合并在Softmax中。模块间使用流式接口，DDR 系统入口通过 `m_axi` 搬运数据、`s_axilite` 设置地址、Softmax scale和控制运行。计算核心内部保留INT8 logits，当前DDR接口输出10个uint16概率与预测类别。
 
-已有统一卷积 Loader 版本的 HLS 综合及连续三图 Verilog/XSim co-sim 验证记录，见下方“最新：统一卷积 Loader 验证”。HLS 结果不等于 Vivado 实现时序或上板结果；仓库中保留的 IP/XSA 也不会随 HLS 源码修改自动更新，使用时须保证各版本匹配。
+已有统一卷积 Loader 版本的 HLS 综合及连续三图 Verilog/XSim co-sim 验证记录，见下方“历史：统一卷积 Loader 验证”。该记录属于Softmax加入前的版本。HLS结果不等于Vivado实现时序或上板结果；仓库中保留的IP/XSA也不会随HLS源码修改自动更新，使用时须保证各版本匹配。
+
+## 当前版本：Softmax概率输出与受控HDMI数字显示
+
+DDR尾部数据流为`CNN Core → Softmax → Result Writer`。Softmax使用`hls::exp(ap_fixed<28,8>)`，运行时scale采用Q20编码，通过AXI-Lite及HLS生成的驱动接口配置；寄存器偏移由HLS自动分配，不在应用中手写。模型更新只需重新导出该参数，不生成模型专用指数表。概率编码为`0～10000`，其中`10000=100%`。10个概率与原logits first-max类别合为一次内部stream事务，再由writer显式写出3个64-bit word：前20字节为10个uint16概率，偏移20为uint32类别，总24字节。内部合包不表示DDR多word写是原子的；PS必须等待顶层完成并invalidate缓存后读取。
+
+Softmax版本已由用户进行综合、实现及上板使用，当前本地BSP已包含scale设置接口；此前排查发现旧Debug ELF仍使用16字节logits布局，启动时必须选择与24字节概率接口匹配的新ELF。下文旧16字节接口的历史运行记录不适用于本版。详细接口见[Softmax设计](hls/docs/softmax.md)与[DDR Wrapper](hls/docs/ddr_wrapper.md)。
+
+本轮新增HDMI数字显示：PS在概率严格大于95%时显示本次类别，否则明确请求隐藏，不保留上一轮数字；取帧失败和CNN错误也清除。阈值位于`camera_display.h`，当前为9500，概率单位为`1/10000`。`roi_border`继续在VDMA读出后叠加绿色外框，在ROI右侧增加白字黑底数字，不修改摄像头DDR或CNN输入。数字与使能通过一个AXI-Lite控制字更新，在SOF锁存，隐藏或换字在下一视频帧生效。本轮仅修改源码及静态检查，不运行测试、综合或实现；还需重新导出roi_border IP、接入其AXI-Lite接口并更新XSA/BSP/bitstream。当前BSP没有该显示控制驱动，不添加兼容占位。接口与连线见[ROI数字显示](hls/docs/roi_display.md)。
+
+**PS与PL各自维护数据格式常量，不使用共享协议头，修改时必须同步。** 双方必须一致的内容包括输入/权重/参数布局、10个概率的顺序与uint16位宽、概率单位`1/10000`、类别uint32位宽及字节偏移20、结果总长24字节，以及scale的Q20小数位数。PL配置见`config.h`、`ddr_layout.h`，PS配置见`camera_cnn.h`；两侧本地断言不能自动发现跨侧不一致。AXI-Lite寄存器地址则使用当前IP生成的驱动，不各自定义offset。
+
+显示控制字也分别维护：`roi_border.h`与PS的`camera_display.h`须保持`bit8=使能、bits[3:0]=数字`一致；其余位PS写0，PL忽略。
 
 ## 仓库目录
 
@@ -19,11 +31,10 @@
 │   └── docs/                         各模块与顶层设计文档
 ├── vivado/
 │   ├── README.md                     硬件工程打开、重生成与版本管理说明
-│   └── cnn_accel_ddr/
-│       ├── cnn_accel_ddr.xpr          Vivado 工程入口
-│       ├── cnn_accel_ddr.srcs/        Block Design 与 IP 配置
-│       ├── ip_repo/export/           导出的 HLS 自定义 IP
-│       └── vitis/                    PS 裸机应用、平台与硬件交接文件
+│   └── cnn_accel_cam/                OV5640 640×480 HDMI 预览与 PS 取图工程
+│       ├── cnn_accel_cam.xpr         当前 Vivado 工程入口
+│       ├── ip_repo/                 摄像头及 CNN 等自定义 IP
+│       └── vitis/cnn_accel_cam/      停车取帧、PS预处理与CNN推理应用
 └── build/hls/                        本地 HLS 工程、日志和报告（Git 忽略）
 ```
 
@@ -39,9 +50,9 @@ Batch 固定为1，FPGA 内部特征图采用 NHWC，网络如下：
 | Conv2 | `3×3, stride=1, padding=1`，ReLU | `14×14×16` |
 | Pool2 | `2×2, stride=2` MaxPool | `7×7×16` |
 | FC | `784 → 10`，无 ReLU | 10个 logits |
-| Argmax | 并列最大值取最小索引 | 类别 `0～9` |
+| Softmax（DDR尾部） | 定点指数与整数归一化；类别按原logits first-max | 10个概率及类别 `0～9` |
 
-Activation/weight 为 signed INT8，accumulator/bias 为 INT32，零点为0；requant 使用整数 multiplier 与 shift，直接算术右移，不增加运行时舍入偏置。卷积先加 bias、ReLU 再 requant；FC 保留负数并饱和到 `[-128,127]`。
+Activation/weight 为 signed INT8，accumulator/bias 为 INT32，零点为0；Conv/FC requant 使用整数 multiplier 与 shift，直接算术右移，不增加运行时舍入偏置。卷积先加 bias、ReLU 再 requant；FC 保留负数并饱和到 `[-128,127]`。新增Softmax不改变这些规则，其概率归一化单独采用最近偶数舍入。
 
 Conv1/Conv2 顺序复用唯一一套 `Im2Row → Systolic → ConvPostProcess → Pool`。层内 DATAFLOW，层间完整 barrier；Pool1 中间结果通过片上 BRAM FIFO 保存。FC 为独立硬件模块，直接接收 Pool2 输出。
 
@@ -52,7 +63,7 @@ Conv1/Conv2 顺序复用唯一一套 `Im2Row → Systolic → ConvPostProcess �
 - Stream 计算核心：[cnn_core.cpp](hls/cnn_accelerator/src/core/cnn_core.cpp)，Top 函数为 `cnn_accelerator`。
 - DDR 系统顶层：[cnn_accel_ddr.cpp](hls/cnn_accelerator/src/top/cnn_accel_ddr.cpp)，Top 函数为 `cnn_accelerator_ddr`，用于导出 Vivado IP。
 - 网络配置：[config.h](hls/cnn_accelerator/src/config.h)；事务类型：[types.h](hls/cnn_accelerator/src/types.h)；DDR 数据协议：[ddr_layout.h](hls/cnn_accelerator/src/axi/ddr_layout.h)。
-- 详细设计：[顶层](hls/docs/top.md)、[DDR Wrapper](hls/docs/ddr_wrapper.md)、[Im2Row](hls/docs/im2row.md)、[Systolic](hls/docs/systolic.md)、[卷积后处理](hls/docs/conv_postprocess.md)、[Pool](hls/docs/pool.md)、[FC](hls/docs/fc.md)、[Argmax](hls/docs/argmax.md)。
+- 详细设计：[顶层](hls/docs/top.md)、[DDR Wrapper](hls/docs/ddr_wrapper.md)、[Softmax](hls/docs/softmax.md)、[Im2Row](hls/docs/im2row.md)、[Systolic](hls/docs/systolic.md)、[卷积后处理](hls/docs/conv_postprocess.md)、[Pool](hls/docs/pool.md)、[FC](hls/docs/fc.md)。
 
 在已配置 Vitis HLS 2022.2 环境的终端中，从仓库根目录执行，例如：
 
@@ -65,31 +76,45 @@ vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
 
 两个脚本分别执行各自 Top 的 C Simulation，不自动运行综合、RTL co-sim 或 IP 导出。工程与启动日志放在 `build/hls/`，不要在源码目录启动工具。
 
-PyTorch 训练和导出工程不包含在本仓库。HLS PyTorch testbench 当前通过绝对路径引用 `/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/` 下的模型与 trace 头文件；在其他机器上运行前，需准备相同导出数据并调整 include 路径。现有完整推理 testbench 连续测试三张图，每张比较全部 logits；DDR 测试同时检查预测类别与结果区边界。
+新增`hls/cnn_accelerator/script/setup_softmax.tcl`只配置独立Softmax工程、源码和约束，不含仿真、综合或导出阶段命令；本轮也未执行该脚本。DDR脚本已注册Softmax源码并显式使用C++14。
+
+PyTorch 训练和导出工程不包含在本仓库。HLS PyTorch testbench 当前通过绝对路径引用 `/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/` 下的模型与 trace 头文件；在其他机器上运行前，需准备相同导出数据并调整 include 路径。Stream Core三图testbench继续逐元素比较INT8 logits；DDR三图testbench用相同trace logits独立计算浮点Softmax参考，比较30个概率、类别、事务及结果区边界。新概率测试源码本轮尚未运行。
 
 ### Vivado：PL 硬件集成
 
-使用 Vivado 2022.2 打开 [cnn_accel_ddr.xpr](vivado/cnn_accel_ddr/cnn_accel_ddr.xpr)，工程集成 Zynq PS 与 DDR 加速器 IP。克隆后先为 Block Design 重新生成 Output Products，再运行综合、实现及 bitstream 生成。已有自定义 IP 保存在 `ip_repo/export/`，不需要先运行 HLS 才能打开现有工程；修改 HLS 后则需重新导出并更新 IP。
+使用 Vivado 2022.2 打开 [cnn_accel_cam.xpr](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，工程集成 Zynq PS、摄像头/HDMI链路与 DDR 加速器 IP。克隆后先为 Block Design 重新生成 Output Products，再运行综合、实现及 bitstream 生成。已有自定义 IP 保存在该工程的 `ip_repo/`，修改 HLS 后需重新导出并更新 CNN IP。
+
+旧的`vivado/cnn_accel_ddr`独立测试工程已移除，可从Git历史恢复；HLS的`cnn_accelerator_ddr`顶层、Loader/Writer和DDR testbench仍保留。
 
 工程保留必要源文件和直接引用的 wrapper，缓存与运行产物按需重生成。具体保留项、迁移注意事项及历史工程打开验证见 [Vivado 工程说明](vivado/README.md)。
 
 ### Vitis：PS 裸机测试
 
-Vitis 工作区位于 `vivado/cnn_accel_ddr/vitis/`，主要包含：
+Vitis 工作区位于 `vivado/cnn_accel_cam/vitis/`，主要包含：
 
 - `system_wrapper`：基于 XSA 的平台、BSP 配置和 FSBL 源码。
-- `cnn_accel_ddr`：裸机应用，[main.c](vivado/cnn_accel_ddr/vitis/cnn_accel_ddr/src/main.c) 负责 DDR 缓冲区准备、缓存维护、设置 IP 地址、启动及轮询完成，最后核对 logits 与类别。
-- `cnn_accel_ddr_system`：应用系统工程。
+- `cnn_accel_cam`：裸机应用，[main.c](vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/main.c) 负责取帧和预处理；`camera_cnn.c`负责DDR缓冲、缓存维护、配置IP、启动及轮询完成。
+- `cnn_accel_cam_system`：应用系统工程。
 
-先构建平台/BSP，再构建应用；使用与当前 HLS/DDR 布局一致的 bitstream 和 XSA，完成 PS 初始化及 PL 配置后运行 ELF。应用使用本地 `mnist_test_data.h`，默认依次测试三张图，不依赖训练目录的绝对 include；更新模型时，用应用中的 `tools/export_test_data.py` 重新提取模型和测试数据。详细步骤、结果格式和缓存说明见 [裸机应用说明](vivado/cnn_accel_ddr/vitis/cnn_accel_ddr/src/README.txt)。
+先构建平台/BSP，再构建应用；使用与当前 HLS/DDR 布局一致的 bitstream 和 XSA，完成 PS 初始化及 PL 配置后运行 ELF。应用使用本地模型头及摄像头采集的图像；更新模型时，用`vivado/cnn_accel_cam/tools/export_camera_model.py`同步模型与输入/输出scale参数。详细步骤、结果格式和缓存说明见[摄像头推理说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。HLS中仍保留连续三图的独立DDR功能testbench。
 
 Vitis 工程元数据仍含原机器绝对路径，迁移工作区后可能需要重新绑定平台/XSA，再重建 BSP；不保证直接在任意路径打开即可编译。HLS、导出的 IP、bitstream、XSA、驱动及应用数据必须保持匹配，不能混用旧版 DDR 权重布局。
+
+### 摄像头：480p 预览、PS 取帧与CNN推理
+
+摄像头工程入口为 [cnn_accel_cam.xpr](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，应用入口为 [main.c](vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/main.c)。640×480 HDMI预览与CNN已由用户进行上板使用，识别仍对位置、距离和光照敏感；本次新增的受控数字显示尚未重新生成硬件或上板。
+
+PS 通过短暂固定 VDMA MM2S 读取帧，借助已有 Dynamic Genlock 保持目标帧稳定，将完整 640×480 原始 BGR888 数据复制到 CPU 自有快照缓冲，并在解除停车前逐字节核对复制结果。采样目标周期为 100ms，不改变摄像头采集或 HDMI 刷新率，也不等于已证明每秒取得十张不同的新帧。
+
+成功取帧后，PS对中央280×280 ROI做整数灰度、10×10均值缩小至28×28、反色，再用纯32位整数加乘和nearest-even移位量化为单通道signed int8，不使用LUT。归一化与除scale在离线合并，当前M=603115、OFFSET=-20100923、SHIFT=20；该输入整数化路径此前已对全部256种灰度核对，与旧浮点参考严格等价，Softmax不改变其规则。
+
+camera_cnn把784字节输入交给DDR CNN IP，模型只加载一次，并在初始化时配置Softmax Q20 scale。PS等待完成后读取24字节概率/类别结果，检查概率范围、总和及类别对应概率是否最大（允许概率量化后并列）。正常UART输出`digit=<类别> probability=<百分比>`，不恢复地址、统计或耗时打印；HDMI仅在本次类别概率严格大于95%时显示数字，否则恢复面板区域的原视频。取帧失败会隐藏数字并跳过推理；CNN错误隐藏数字后停止应用，不能复用可能仍被PL访问的缓冲。使用`python3 vivado/cnn_accel_cam/tools/export_camera_model.py --generated-dir /path/to/generated`同步12个模型数组、整数输入参数及`softmax_params.h`；输入和FC输出使用不同scale，不可混用。Release保持-O2，Debug保持-O0。详细流程见[摄像头推理说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。100ms调度、识别精度、概率误差及本轮显示行为仍需相应验证。
 
 ## 版本管理与验证范围
 
 保留 HLS 源码/测试/设计文档、Vivado 工程及自定义 IP、Vitis 应用源码/工程描述/XSA/BSP 配置。`build/hls/`、工具缓存、日志、可再生成产物和各级 `.vscode/` 不纳入 Git，规则见 [.gitignore](.gitignore)。下文指向 `build/hls/` 的报告仅在相应本地验证产物存在时可打开，不随仓库分发。
 
-下文保留各模块设计摘要和按开发阶段记录的验证结论；其中“本轮”指对应记录形成时的阶段，最新 HLS 集成结论以“最新：统一卷积 Loader 验证”为准。本次 README 迁移没有重新运行仿真、综合、Vivado 或板测。
+下文保留各模块设计摘要和按开发阶段记录的验证结论；其中“本轮”指对应记录形成时的阶段。当前接口以开头Softmax概率版本说明为准，最近一次已运行的HLS集成记录为旧版统一卷积Loader。此前README迁移和本次Softmax实现都没有重新运行仿真、综合、Vivado或板测。
 
 ## 工程原则
 
@@ -225,9 +250,9 @@ shift；首个 spatial tile 读取并缓存所有 Cout tile 的参数，之后�
 
 FC MAC 后使用 `hls/cnn_accelerator/src/postprocess/fc_postprocess.*` 的独立后处理：每组5 lane 串行复用一套32x32 signed requant数据通路，执行 bias、INT64乘法、直接算术右移和 `[-128,127]` 双向饱和，不做 ReLU 或额外 rounding。输出一次完整10路 logit Pack。FC 与卷积 Systolic 的滑窗/空间并行计算不同，既不复用其阵列也不复用其权重缓存。详细接口、缓冲和未验证项见 [独立 FC 设计](hls/docs/fc.md)；本轮四个 FC/FCPostProcess testbench 功能检查通过，未重新综合或协同仿真。
 
-## 独立 logits Argmax
+## Softmax内建类别选择
 
-独立 `hls/cnn_accelerator/src/postprocess/logits_argmax.*` 每调用消费一个10路 signed INT8 logits Pack，输出一个 `ap_uint<4>` 类别索引；并列最大值选择最小索引。比较采用完整展开和分区的 `10 -> 5 -> 3 -> 2 -> 1` 平衡树，共9个 signed 比较器、4层比较深度，避免串行逐项扫描。独立 C Simulation 通过；历史独立综合在 `xc7z020-clg400-2`、10 ns 约束下 latency 为2 cycles、interval为3 cycles，估算时钟6.826 ns，资源为59 FF、183 LUT、0 BRAM、0 DSP。DDR wrapper 已通过 logits_split 将 FCPostProcess 输出分别交给 argmax 和 writer，本轮保留该连接。详细历史结果和综合报告见 [独立 logits Argmax 设计](hls/docs/argmax.md)。
+Softmax通过10→5→3→2→1平衡比较树求原signed INT8 logits最大值与类别，相等选择较小索引。指数与求和解耦，使用分级加法树；指数及归一化循环不展开，尝试II=1共享流水运算。实际II、实例数量与资源尚未综合验证。概率与类别同包输出，不另设独立Argmax模块或类别流，也不对舍入后的概率重新求最大值。
 
 ## 相对 dev 通用实现的固定网络化
 
@@ -239,9 +264,9 @@ FC MAC 后使用 `hls/cnn_accelerator/src/postprocess/fc_postprocess.*` 的独�
 
 ## DDR Wrapper
 
-新增 `cnn_accelerator_ddr` 将 DDR image/weights/params 加载为现有 core 的
-stream，并通过独立 logits 分流/argmax 写出两个64-bit结果 word（16字节：
-10个 logits、2个保留字节、uint32类别）。参数每层按完整 bias/multiplier/shift
+当前`cnn_accelerator_ddr`将DDR image/weights/params加载为现有core的stream，
+经独立Softmax写出三个64-bit结果word（24字节：10个uint16概率、uint32类别），
+运行时Q20 scale由新增控制寄存器配置。参数每层按完整bias/multiplier/shift
 数组连续保存，独立 params AXI 的 widening 上限为32 bit。原 stream
 Top 的 phase 调度及 stream 接口保持不变；Systolic 现已自行选择有效 Cin。
 新版权重 header v2 直接采用消费顺序且仅含有效字节，PS 三次 `memcpy` 拼接，
@@ -264,7 +289,7 @@ hls/cnn_accelerator/
 │   ├── core/cnn_core.{h,cpp}        流式计算核心
 │   ├── top/cnn_accel_ddr.{h,cpp}    DDR 系统顶层
 │   ├── axi/ddr_io.{h,cpp}          DDR 加载、分流与写回
-│   ├── axi/ddr_layout.h            共享 DDR 布局
+│   ├── axi/ddr_layout.h            PL 侧 DDR 布局
 │   ├── im2row/ systolic/ pool/ fc/ postprocess/
 │   └── config.h types.h
 ├── testbench/test_cnn_core.cpp
@@ -273,9 +298,9 @@ hls/cnn_accelerator/
 ```
 
 `core/cnn_core.cpp` 的 `cnn_accelerator` 是普通 stream 计算入口，独立验证时不依赖
-DDR 搬运或 argmax；`top/cnn_accel_ddr.cpp` 的 `cnn_accelerator_ddr` 是四指针 DDR
-系统入口，通过 `ddr_io` actor 调用同一个计算核心并输出 logits 与类别。目录与文件
-更名不改变函数名、计算、接口、DDR 布局、FIFO 深度或调度顺序。
+DDR搬运或Softmax；`top/cnn_accel_ddr.cpp`的`cnn_accelerator_ddr`是四个DDR指针加一个Q20 scale参数的
+系统入口，通过`ddr_io` actor调用同一个计算核心，新增Softmax后输出概率与类别。此前目录与文件
+更名不改变核心计算或调度；本次Softmax尾部另行升级了结果ABI，不适用旧16字节布局。
 
 ## C Simulation 入口与历史验证
 
@@ -307,7 +332,7 @@ GCC 11 与系统 Clang 14 对全部25个源码及 testbench `.cpp` 的静态检�
 
 今后的 csynth/csim/cosim 工程与日志统一写入仓库根目录 `build/hls/<run-name>/`，不要写入 `hls` 源码树；该目录由 Git 忽略。
 
-## 最新：统一卷积 Loader 验证
+## 历史：统一卷积 Loader 验证
 
 Conv1/Conv2 在唯一调用点顺序使用同一 `load_conv_weights()`，按 Pack/Cout lane 消费紧凑权重字节，不改1133-word DDR布局或上下游接口。通用 lane loop 达到 II=1；每个完整 Pack 的综合估计为18周期（含流水填充/排空和控制），不是每周期输出一个 Pack。
 

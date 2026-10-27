@@ -4,15 +4,17 @@
 #include <sys/stat.h>
 #include <fstream>
 #include <iostream>
+#include <cmath>
+#include "model_softmax_params.h"
 
 /*
  * DDR wrapper 独立功能对照：image/weights/result 为64-bit word，params为
  * signed32-bit word。低 byte 对应较早 INT8；模型布局为 Conv1 -> Conv2 -> FC，
  * 每层参数为完整 bias -> multiplier -> shift 数组，按输出通道递增。
- * 四区有效 word 数为98/1133/102/2；结果16字节含10 logits、2保留字节、uint32类别。
+ * 四区有效 word 数为98/1133/102/3；结果24字节含10 uint16概率及uint32类别。
  * 三图固定地址连续调用，模型仅打包一次。
- * reference 来自三个 trace 的10个 signed logits；类别由软件 scalar first-max
- * 独立计算。输出 CSV 保存 sample/output/expected/actual/match，输入 CSV 保存
+ * reference 来自三个 trace 的10个 signed logits，仅在TB内部用于稳定double
+ * Softmax及scalar first-max，实际DDR不再输出logits。输出 CSV 保存 sample/output/expected/actual/match，输入 CSV 保存
  * sample/pixel/value，可逐字节核对 PS 的紧密 raster 打包。守卫与快照检查越界
  * 写和只读区变化，但普通 C Simulation 不验证有限 FIFO、AXI 或缓存一致性。
  */
@@ -39,6 +41,10 @@ namespace trace_data_0002 {
 #include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_weight.h"
 
 namespace {
+// 浮点参考允差，仅供TB使用，不是已测得精度。
+constexpr int PROBABILITY_ERROR_TOLERANCE = 10;
+static_assert(MODEL_SOFTMAX_SCALE_FRAC_BITS == SOFTMAX_SCALE_FRAC_BITS,
+              "model and hardware scale format must agree");
 static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION == 2 &&
               FC_WEIGHT_LAYOUT_VERSION == 2, "requires blocked weight headers v2");
 // 守卫紧邻有效区；输入和模型快照逐 word 比较，错误不依赖 assert/NDEBUG。
@@ -171,36 +177,39 @@ int main() {
             image.data()[word] = value;
             image_copy[word] = value;
         }
-        // 非零旧值检测 writer 是否覆盖整个结果，包括所有保留高位。
+        // 非零旧值检测writer是否覆盖完整24字节结果。
         for (int i = 0; i < ddr_layout::RESULT_WORDS; ++i) {
             result.data()[i] = guard64;
         }
-        cnn_accelerator_ddr(image.data(), weights.data(), params.data(), result.data());
+        cnn_accelerator_ddr(image.data(), weights.data(), params.data(), result.data(), MODEL_SOFTMAX_SCALE_Q20);
         int first_max = 0;
+        for (int i = 1; i < FC_OUTPUTS; ++i)
+            if (expected[sample][i] > expected[sample][first_max]) first_max = i;
+        double denominator = 0;
+        for (int i = 0; i < FC_OUTPUTS; ++i)
+            denominator += std::exp((int(expected[sample][i]) - int(expected[sample][first_max])) * MODEL_FC_OUTPUT_SCALE);
+        int probability_sum = 0;
         for (int i = 0; i < FC_OUTPUTS; ++i) {
-            const int wanted = static_cast<int>(expected[sample][i]);
-            const int actual = ((ap_int<8>)result.data()[i / ddr_layout::WORD_BYTES].range((i % ddr_layout::WORD_BYTES) * 8 + 7, (i % ddr_layout::WORD_BYTES) * 8)).to_int();
-            const bool match = wanted == actual;
+            const double wanted = SOFTMAX_PROBABILITY_SCALE * std::exp((int(expected[sample][i]) - int(expected[sample][first_max])) * MODEL_FC_OUTPUT_SCALE) / denominator;
+            const unsigned actual = result.data()[i / 4].range((i % 4) * 16 + 15, (i % 4) * 16).to_uint();
+            probability_sum += actual;
+            const bool match = actual <= SOFTMAX_PROBABILITY_SCALE && std::fabs(wanted - actual) <= PROBABILITY_ERROR_TOLERANCE;
             csv << sample << ',' << i << ',' << wanted << ',' << actual << ',' << match << '\n';
             if (!match) {
                 if (errors - errors_before < 4) {
-                    std::cerr << "sample " << sample << " logit " << i << "：期望 " << wanted << "，实际 " << actual << '\n';
+                    std::cerr << "sample " << sample << " probability " << i << "：期望 " << wanted << "，实际 " << actual << '\n';
                 }
                 ++errors;
-            }
-            // 软件 scalar first-maximum，只在严格更大时更新。
-            if (expected[sample][i] > expected[sample][first_max]) {
-                first_max = i;
             }
         }
         const unsigned actual_class = result.data()[ddr_layout::CLASS_WORD_OFFSET].range(ddr_layout::CLASS_BIT_OFFSET + 31, ddr_layout::CLASS_BIT_OFFSET).to_uint();
         csv << sample << ",pred_class," << first_max << ',' << actual_class << ',' << (actual_class == (unsigned)first_max) << '\n';
         if (actual_class != (unsigned)first_max) {
-            std::cerr << "sample " << sample << " word1 高32位类别：期望 " << first_max << "，实际 " << actual_class << '\n';
+            std::cerr << "sample " << sample << " word2 高32位类别：期望 " << first_max << "，实际 " << actual_class << '\n';
             ++errors;
         }
-        if (result.data()[1].range(31, 16) != 0) {
-            std::cerr << "sample " << sample << " result word1 保留位非零\n";
+        if (std::abs(probability_sum - SOFTMAX_PROBABILITY_SCALE) > 5) {
+            std::cerr << "sample " << sample << " 概率和偏差超出5单位\n";
             ++errors;
         }
         if (!image.guards_ok(guard64) || !weights.guards_ok(guard64) || !params.guards_ok(guard32) || !result.guards_ok(guard64)) {
@@ -218,7 +227,7 @@ int main() {
     if (!csv.good() || !input_csv.good()) {
         ++errors;
     }
-    std::cout << "DDR wrapper：三图、30 logits 与类别检查，错误数 " << errors << '\n';
+    std::cout << "DDR wrapper：三图、30概率与类别检查，错误数 " << errors << '\n';
     return errors == 0 ? 0 : 1;
 }
 
