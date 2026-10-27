@@ -2,17 +2,23 @@
 
 ## Softmax ABI v2（本轮仅静态检查，未运行）
 
-本轮输出改为24字节：10个uint16概率（每单位1/10000），随后offset20的uint32类别。PS/PL独立维护接口常量，一致性要求见[根README](../../../README.md)。寄存器偏移由HLS自动生成，PS通过新版生成驱动的XCnn_accelerator_ddr_Set_softmax_scale_q20配置标量，不手写偏移；初始化不启动CNN。上板须更新RTL/IP、XSA、bitstream及平台/BSP；当前相机BSP缺少该setter，需重新生成驱动后才能完成构建，未添加兼容占位。
+本轮输出改为24字节：10个uint16概率（每单位1/10000），随后offset20的uint32类别。PS/PL独立维护接口常量，一致性要求见[根README](../../../README.md)。寄存器偏移由HLS自动生成，PS通过新版生成驱动的XCnn_accelerator_ddr_Set_softmax_scale_q20配置标量，不手写偏移；初始化不启动CNN。Softmax驱动已由用户生成；当前仅缺新版roi_border驱动，仍需更新对应IP、XSA、bitstream及平台/BSP，未添加兼容占位。
 
 同一export_camera_model.py命令还生成softmax_params.h：从metadata唯一fc层的activation_output_scale读取有限正scale，并要求零点0；MODEL_SOFTMAX_SCALE_Q20=round(scale*2^20)，须在1..UINT32_MAX。当前scale=0.251935750246048，整数为264174U。MODEL_FC_OUTPUT_SCALE只供离线参考，PS运行时不用浮点；不生成exp表或LUT。camera_model_data.h的12数组不变，camera_model_input.h仍为原输入整数参数。单独生成标量可用generate_softmax_params.py --metadata /path/to/metadata.json --output /path/to/softmax_params.h。
 
-64B独占缓冲、flush/invalidate和busy/timeout所有权规则不变，不加置信度阈值、OSD或输入交互。下文历史测试和运行证据均不是本轮Softmax验收；本轮未运行DUT、host推理、testbench、C-sim、co-sim、综合或板测，不能据静态检查认定概率误差或硬件已通过。
+64B独占缓冲、flush/invalidate和busy/timeout所有权规则不变。下文历史测试和运行证据均不是本轮Softmax及数字显示验收；本轮未运行DUT、host推理、testbench、C-sim、co-sim、综合或板测，不能据静态检查认定概率误差或硬件已通过。
+
+## PS控制数字显示
+
+camera_display.c/.h通过新生成的roi_border驱动写display_control：bit8为使能、bits3:0为数字，其余位为0。仅当类别0..9且对应概率严格大于9500（95.00%）、不超过10000时显示；等于95.00%、低概率或非法值写0隐藏旧数字。初始化清屏，取帧失败及CNN错误退出前也清屏；正常采集/推理开始不清屏。控制字在SOF整字采样，下一帧生效，不调用Start或AutoRestart。UART仍输出类别与概率，不受显示阈值门控。
+
+上板需将新版roi_border的AXI-Lite控制口接入PS可访问的互连，并连接正确时钟和复位，保留原视频流连接；本轮不修改BD。重新导出IP、生成匹配XSA/bitstream及平台/BSP，使其提供xroi_border.h、XPAR_ROI_BORDER_0_DEVICE_ID及XRoi_border_Set_display_control。新camera_display源文件由现有工程自动扫描，无需手改生成Makefile；旧平台缺少该驱动时不能构建，不添加兼容占位。
 
 PS取得稳定快照后，用独立camera_preprocess.c/.h算术生成单通道28×28模型输入，不用LUT，再由camera_cnn模块提交新CNN IP并读回类别。失败轮不预处理：camera_gray和camera_model_input保留上一成功轮结果（尚无成功轮时为静态初值），不能将其误认成失败轮新数据；camera_snapshot可能已被部分覆盖，内容无效、不得使用。图像和识别精度仍需板测。
 
 ## 模块与内存
 
-main.c保留摄像头、VDMA及显示初始化，调度取帧、成功后的PS预处理及CNN推理；camera_input.c/.h只负责检查运行前提、请求READ停车、等待帧事件、整帧复制及比较，不负责CNN。camera_cnn.c/.h只封装CNN初始化与单次轮询推理。vdma_api.c保持原实现，不新增配置代码。BD、XDC、HLS不变；硬件像素时钟配置25.2MHz，未用于配置该时钟的.freq=25.12字段保持原样。
+main.c保留摄像头、VDMA及显示初始化，调度取帧、成功后的PS预处理、CNN推理及数字显示更新；camera_input.c/.h只负责检查运行前提、请求READ停车、等待帧事件、整帧复制及比较，不负责CNN。camera_cnn.c/.h只封装CNN初始化与单次轮询推理，camera_display.c/.h封装数字控制。vdma_api.c保持原实现，不新增配置代码。BD、XDC未修改，HLS接口需使用本轮新版；硬件像素时钟配置25.2MHz，未用于配置该时钟的.freq=25.12字段保持原样。
 
 header中CAMERA_WIDTH/HEIGHT单位是像素/行；CAMERA_BYTES_PER_PIXEL=3表示BGR888；CAMERA_FRAMES=3表示VDMA物理帧槽数；CAMERA_STRIDE=640×3=1920字节/行；CAMERA_FRAME_BYTES=1920×480=921600字节。无行尾填充，像素及行均从左到右、从上到下连续存放。capture RTL的[23:0]={R,G,B}经视频输入AXIS原位传递到VDMA，因此DDR低地址三字节依次B、G、R；仍需后续板测确认实际颜色。
 

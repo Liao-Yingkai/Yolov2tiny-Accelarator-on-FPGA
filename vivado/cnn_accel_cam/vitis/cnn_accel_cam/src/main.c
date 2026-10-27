@@ -13,6 +13,7 @@
 #include "camera_input.h"
 #include "camera_preprocess.h"
 #include "camera_cnn.h"
+#include "camera_display.h"
 #include "xtime_l.h"
 
 #define VDMA_ID            XPAR_AXIVDMA_0_DEVICE_ID    //VDMA器件ID
@@ -88,10 +89,17 @@ int main(void)
 	}
 
     {
-        camera_cnn_status_t cnn_status = camera_cnn_init();
+        camera_cnn_status_t cnn_status;
         camera_cnn_result_t result;
         XTime cycle_start, now;
+        status = camera_display_init();
+        if (status != XST_SUCCESS) {
+            xil_printf("ERROR: digit display initialization failed!\r\n");
+            return EXIT_FAILURE;
+        }
+        cnn_status = camera_cnn_init();
         if (cnn_status != CAMERA_CNN_OK) {
+            camera_display_clear();
             xil_printf("CNN: %s\r\n", camera_cnn_reason(cnn_status));
             return EXIT_FAILURE;
         }
@@ -103,15 +111,18 @@ int main(void)
                 camera_preprocess(camera_snapshot, camera_gray, camera_model_input);
                 cnn_status = camera_cnn_predict(camera_model_input, &result);
                 if (cnn_status != CAMERA_CNN_OK) {
+                    camera_display_clear();
                     xil_printf("CNN: %s\r\n", camera_cnn_reason(cnn_status));
                     /* PL可能仍访问DDR，立即结束且不复用buffer；需板级复位重启，
                      * 不能仅自动reset CNN后继续，以免未完成AXI访问破坏数据。 */
                     return EXIT_FAILURE;
                 }
+                camera_display_update(result.class_index, result.probability[result.class_index]);
                 xil_printf("digit=%u probability=%u.%02u%%\r\n", (unsigned)result.class_index,
                     (unsigned)result.probability[result.class_index] / 100U,
                     (unsigned)result.probability[result.class_index] % 100U);
             } else {
+                camera_display_clear();
                 /* 失败快照无效，跳过预处理和CNN，下一节拍再取帧。 */
                 xil_printf("capture: %s\r\n", camera_input_reason(capture_status));
             }

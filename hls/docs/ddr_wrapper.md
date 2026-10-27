@@ -51,4 +51,4 @@ expected logits仅供double Softmax参考与first-max，不当作实际DDR结果
 失败返回非零。scale头为本地model_softmax_params.h，不依赖PS应用路径。
 CSV仍保存sample/output/expected/actual/match及输入raster。
 本轮仅注册hls_ddr.tcl新源码，未执行脚本；脚本含csim命令，注册不表示测试通过。
-本轮不启用HDMI数字或threshold。
+显示阈值和HDMI数字叠加由PS及独立roi_border模块处理，不改变此DDR Wrapper。

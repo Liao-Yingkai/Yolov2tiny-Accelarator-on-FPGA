@@ -6,13 +6,17 @@
 
 已有统一卷积 Loader 版本的 HLS 综合及连续三图 Verilog/XSim co-sim 验证记录，见下方“历史：统一卷积 Loader 验证”。该记录属于Softmax加入前的版本。HLS结果不等于Vivado实现时序或上板结果；仓库中保留的IP/XSA也不会随HLS源码修改自动更新，使用时须保证各版本匹配。
 
-## 当前版本：Softmax概率输出（仅静态检查）
+## 当前版本：Softmax概率输出与受控HDMI数字显示
 
 DDR尾部数据流为`CNN Core → Softmax → Result Writer`。Softmax使用`hls::exp(ap_fixed<28,8>)`，运行时scale采用Q20编码，通过AXI-Lite及HLS生成的驱动接口配置；寄存器偏移由HLS自动分配，不在应用中手写。模型更新只需重新导出该参数，不生成模型专用指数表。概率编码为`0～10000`，其中`10000=100%`。10个概率与原logits first-max类别合为一次内部stream事务，再由writer显式写出3个64-bit word：前20字节为10个uint16概率，偏移20为uint32类别，总24字节。内部合包不表示DDR多word写是原子的；PS必须等待顶层完成并invalidate缓存后读取。
 
-本轮新增独立Softmax testbench并更新DDR三图testbench、摄像头Vitis应用及参数导出脚本，只进行静态检查，未运行任何testbench、C-sim、RTL co-sim或综合。概率误差、资源、共享实例数量、实际II和反压均待验证；下文旧16字节logits接口的运行记录不适用于本版。必须重新导出CNN IP并更新Vivado/XSA/BSP及bitstream，不能直接配合仓库现有旧IP运行。当前相机BSP尚无新增scale的setter，因此PS应用还需更新生成驱动才能通过完整编译；不添加占位函数或手改BSP。HDMI数字显示和border模块本轮未改。详细接口见[Softmax设计](hls/docs/softmax.md)与[DDR Wrapper](hls/docs/ddr_wrapper.md)。
+Softmax版本已由用户进行综合、实现及上板使用，当前本地BSP已包含scale设置接口；此前排查发现旧Debug ELF仍使用16字节logits布局，启动时必须选择与24字节概率接口匹配的新ELF。下文旧16字节接口的历史运行记录不适用于本版。详细接口见[Softmax设计](hls/docs/softmax.md)与[DDR Wrapper](hls/docs/ddr_wrapper.md)。
+
+本轮新增HDMI数字显示：PS在概率严格大于95%时显示本次类别，否则明确请求隐藏，不保留上一轮数字；取帧失败和CNN错误也清除。阈值位于`camera_display.h`，当前为9500，概率单位为`1/10000`。`roi_border`继续在VDMA读出后叠加绿色外框，在ROI右侧增加白字黑底数字，不修改摄像头DDR或CNN输入。数字与使能通过一个AXI-Lite控制字更新，在SOF锁存，隐藏或换字在下一视频帧生效。本轮仅修改源码及静态检查，不运行测试、综合或实现；还需重新导出roi_border IP、接入其AXI-Lite接口并更新XSA/BSP/bitstream。当前BSP没有该显示控制驱动，不添加兼容占位。接口与连线见[ROI数字显示](hls/docs/roi_display.md)。
 
 **PS与PL各自维护数据格式常量，不使用共享协议头，修改时必须同步。** 双方必须一致的内容包括输入/权重/参数布局、10个概率的顺序与uint16位宽、概率单位`1/10000`、类别uint32位宽及字节偏移20、结果总长24字节，以及scale的Q20小数位数。PL配置见`config.h`、`ddr_layout.h`，PS配置见`camera_cnn.h`；两侧本地断言不能自动发现跨侧不一致。AXI-Lite寄存器地址则使用当前IP生成的驱动，不各自定义offset。
+
+显示控制字也分别维护：`roi_border.h`与PS的`camera_display.h`须保持`bit8=使能、bits[3:0]=数字`一致；其余位PS写0，PL忽略。
 
 ## 仓库目录
 
@@ -98,13 +102,13 @@ Vitis 工程元数据仍含原机器绝对路径，迁移工作区后可能需�
 
 ### 摄像头：480p 预览、PS 取帧与CNN推理
 
-摄像头工程入口为 [cnn_accel_cam.xpr](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，应用入口为 [main.c](vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/main.c)。640×480 HDMI预览及原logits版摄像头CNN推理已由用户进行上板测试，识别仍对位置、距离和光照敏感；本次Softmax概率接口仅静态检查，未执行新硬件或应用。
+摄像头工程入口为 [cnn_accel_cam.xpr](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，应用入口为 [main.c](vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/main.c)。640×480 HDMI预览与CNN已由用户进行上板使用，识别仍对位置、距离和光照敏感；本次新增的受控数字显示尚未重新生成硬件或上板。
 
 PS 通过短暂固定 VDMA MM2S 读取帧，借助已有 Dynamic Genlock 保持目标帧稳定，将完整 640×480 原始 BGR888 数据复制到 CPU 自有快照缓冲，并在解除停车前逐字节核对复制结果。采样目标周期为 100ms，不改变摄像头采集或 HDMI 刷新率，也不等于已证明每秒取得十张不同的新帧。
 
 成功取帧后，PS对中央280×280 ROI做整数灰度、10×10均值缩小至28×28、反色，再用纯32位整数加乘和nearest-even移位量化为单通道signed int8，不使用LUT。归一化与除scale在离线合并，当前M=603115、OFFSET=-20100923、SHIFT=20；该输入整数化路径此前已对全部256种灰度核对，与旧浮点参考严格等价，Softmax不改变其规则。
 
-camera_cnn把784字节输入交给DDR CNN IP，模型只加载一次，并在初始化时配置Softmax Q20 scale。PS等待完成后读取24字节概率/类别结果，检查概率范围、总和及类别对应概率是否最大（允许概率量化后并列）。正常UART输出`digit=<类别> probability=<百分比>`，不恢复地址、统计或耗时打印。取帧失败跳过推理，CNN busy/5秒超时等错误停止应用，不能复用可能仍被PL访问的缓冲。使用`python3 vivado/cnn_accel_cam/tools/export_camera_model.py --generated-dir /path/to/generated`同步12个模型数组、整数输入参数及`softmax_params.h`；输入和FC输出使用不同scale，不可混用。Release保持-O2，Debug保持-O0；本轮不增加阈值过滤或HDMI数字显示，border模块不变。详细流程见[摄像头推理说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。100ms调度、识别精度和新版概率误差均仍需后续验证。
+camera_cnn把784字节输入交给DDR CNN IP，模型只加载一次，并在初始化时配置Softmax Q20 scale。PS等待完成后读取24字节概率/类别结果，检查概率范围、总和及类别对应概率是否最大（允许概率量化后并列）。正常UART输出`digit=<类别> probability=<百分比>`，不恢复地址、统计或耗时打印；HDMI仅在本次类别概率严格大于95%时显示数字，否则恢复面板区域的原视频。取帧失败会隐藏数字并跳过推理；CNN错误隐藏数字后停止应用，不能复用可能仍被PL访问的缓冲。使用`python3 vivado/cnn_accel_cam/tools/export_camera_model.py --generated-dir /path/to/generated`同步12个模型数组、整数输入参数及`softmax_params.h`；输入和FC输出使用不同scale，不可混用。Release保持-O2，Debug保持-O0。详细流程见[摄像头推理说明](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md)。100ms调度、识别精度、概率误差及本轮显示行为仍需相应验证。
 
 ## 版本管理与验证范围
 
