@@ -64,11 +64,9 @@ void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
                  hls::stream<postprocess_param_pack_t>& param_stream,
                  hls::stream<activation_tile_t>& output_stream,
                  layer_mode_t layer_mode) {
-    const bool is_conv2 = (layer_mode == LAYER2_MODE);
-    const int spatial_tiles = is_conv2 ? CNN_CONV2_SPATIAL_TILES :
-                                         CNN_CONV1_SPATIAL_TILES;
-    const int cout_tiles = is_conv2 ? CNN_CONV2_COUT_TILES :
-                                      CNN_CONV1_COUT_TILES;
+    const ConvGeometry geometry = conv_geometry(layer_mode);
+    const int spatial_tiles = geometry.spatial_tiles;
+    const int cout_tiles = geometry.cout_tiles;
 
     // 参数仅在本层第一个 spatial tile 从 stream 装载。两个维度 complete
     // partition 后为寄存器阵列，后续 Tile 每拍可同时取得4条 Cout Lane。

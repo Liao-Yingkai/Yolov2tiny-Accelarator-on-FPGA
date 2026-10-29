@@ -1,4 +1,5 @@
 #include "fc.h"
+#include "../channel_pack.h"
 
 #ifndef __SYNTHESIS__
 #include <cassert>
@@ -8,29 +9,9 @@ namespace {
 
 using fc_activation_word_t = ap_uint<FC_ACTIVATION_WORD_BITS>;
 
-// 保留 activation 的二进制补码位型；Pool2 channel_pack_t 的 channel[0..7]
-// 就是当前 NHWC token 的连续8个通道。
-fc_activation_word_t pack_activation(const channel_pack_t& input) {
-#pragma HLS INLINE
-    fc_activation_word_t packed = 0;
-    for (int cin_lane = 0; cin_lane < FC_CIN_PAR; ++cin_lane) {
-#pragma HLS UNROLL
-        const int low_bit = cin_lane * ACTIVATION_BITS;
-        packed.range(low_bit + ACTIVATION_BITS - 1, low_bit) =
-            input.channel[cin_lane].range(ACTIVATION_BITS - 1, 0);
-    }
-    return packed;
-}
-
-activation_t unpack_activation(const fc_activation_word_t& packed,
-                               int cin_lane) {
-#pragma HLS INLINE
-    activation_t result;
-    const int low_bit = cin_lane * ACTIVATION_BITS;
-    result.range(ACTIVATION_BITS - 1, 0) =
-        packed.range(low_bit + ACTIVATION_BITS - 1, low_bit);
-    return result;
-}
+static_assert(FC_CIN_PAR == FEATURE_PACK_CHANNELS &&
+              FC_ACTIVATION_WORD_BITS == FEATURE_PACK_CHANNELS * ACTIVATION_BITS,
+              "FC activation buffer uses one feature channel pack");
 
 // 固定8项INT8 dot的4层平衡加法树。中间位宽均从PRODUCT_BITS派生，避免
 // 工具将链式加法改写为不必要的长进位路径。
@@ -42,7 +23,7 @@ ap_int<FC_DOT_BITS> dot8(const fc_activation_word_t& activation_word,
 #pragma HLS ARRAY_PARTITION variable=product complete dim=1
     for (int cin_lane = 0; cin_lane < FC_CIN_PAR; ++cin_lane) {
 #pragma HLS UNROLL
-        product[cin_lane] = unpack_activation(activation_word, cin_lane) *
+        product[cin_lane] = unpack_activation_channel(activation_word, cin_lane) *
                             weights.value[cout_lane][cin_lane];
     }
 
@@ -89,7 +70,7 @@ void fully_connected(hls::stream<channel_pack_t>& input_stream,
                 // 第一Tile直接使用当前stream token计算，并显式写入一个完整
                 // FC activation word；不能要求上游为第二Tile重放输入事务。
                 const channel_pack_t input = input_stream.read();
-                activation_word = pack_activation(input);
+                activation_word = pack_activation_lane(input);
                 activation_buffer[token] = activation_word;
 #ifndef __SYNTHESIS__
                 ++input_read_count;

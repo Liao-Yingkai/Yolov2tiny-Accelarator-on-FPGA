@@ -8,6 +8,11 @@
 
 ## 当前版本：Softmax概率输出与受控HDMI数字显示
 
+HLS 第一轮结构整理将固定物理并行度与两层逻辑几何解耦，并统一内部 pack 位序。
+一个 channel pack 是连续8通道组，不一定是完整逻辑像素；当前仍仅支持单 Cin group
+的固定 MNIST 调度，未实现通用 YOLO。接口与原调度不变，本轮未运行仿真或综合；
+术语、支持边界与容量说明见[HLS结构整理](hls/docs/structure.md)。
+
 DDR尾部数据流为`CNN Core → Softmax → Result Writer`。Softmax使用`hls::exp(ap_fixed<28,8>)`，运行时scale采用Q20编码，通过AXI-Lite及HLS生成的驱动接口配置；寄存器偏移由HLS自动分配，不在应用中手写。模型更新只需重新导出该参数，不生成模型专用指数表。概率编码为`0～10000`，其中`10000=100%`。10个概率与原logits first-max类别合为一次内部stream事务，再由writer显式写出3个64-bit word：前20字节为10个uint16概率，偏移20为uint32类别，总24字节。内部合包不表示DDR多word写是原子的；PS必须等待顶层完成并invalidate缓存后读取。
 
 Softmax版本已由用户进行综合、实现及上板使用，当前本地BSP已包含scale设置接口；此前排查发现旧Debug ELF仍使用16字节logits布局，启动时必须选择与24字节概率接口匹配的新ELF。下文旧16字节接口的历史运行记录不适用于本版。详细接口见[Softmax设计](hls/docs/softmax.md)与[DDR Wrapper](hls/docs/ddr_wrapper.md)。
@@ -121,7 +126,7 @@ camera_cnn把784字节输入交给DDR CNN IP，模型只加载一次，并在初
 - 模块间使用阻塞式 `hls::stream`；
 - 激活采用对称八位有符号量化，零点为0；
 - 特征图逻辑布局采用 NHWC；
-- `pixel_t` 打包一个空间位置的全部物理通道；
+- `channel_pack_t` 表示一个空间位置的连续8通道组；`pixel_t` 为兼容别名；
 - 物理并行度固定为 `4 spatial × 4 Cout × 8 Cin`；卷积相关模块通过一个调用级 `layer_mode_t` 复用同一物理硬件；
 - 注释、文档、断言和工程说明统一使用中文；
 - 性能和资源结论必须以综合与协同仿真报告为准。

@@ -120,12 +120,11 @@ void maxpool(hls::stream<activation_tile_t>& input_stream,
              hls::stream<channel_pack_t>& output_stream,
              layer_mode_t layer_mode) {
     const bool is_pool2 = (layer_mode == LAYER2_MODE);
+    const ConvGeometry geometry = conv_geometry(layer_mode);
     // 一位调用级模式选择固定Pool1/Pool2调度。
-    const int feature_height = is_pool2 ? CNN_CONV2_H : CNN_CONV1_H;
-    const int tiles_per_row = is_pool2 ? CNN_CONV2_TILES_PER_ROW :
-                                         CNN_CONV1_TILES_PER_ROW;
-    const int cout_tiles = is_pool2 ? CNN_CONV2_COUT_TILES :
-                                      CNN_CONV1_COUT_TILES;
+    const int feature_height = geometry.h;
+    const int tiles_per_row = geometry.tiles_per_row;
+    const int cout_tiles = geometry.cout_tiles;
 
     // 地址按每行输入事务顺序递增。Pool1使用地址0..13，Pool2使用
     // 地址0..15；偶数行只写、随后的奇数行只读，因此

@@ -56,8 +56,8 @@ void conv_weight_router(
     int output_write_count = 0;
 #endif
 
-    const int transaction_count = (layer_mode == LAYER1_MODE)
-        ? CNN_CONV1_WEIGHT_TRANSACTIONS : CNN_CONV2_WEIGHT_TRANSACTIONS;
+    const ConvGeometry geometry = conv_geometry(layer_mode);
+    const int transaction_count = geometry.weight_transactions;
     for (int index = 0; index < transaction_count; ++index) {
 #pragma HLS PIPELINE II=1
         const weight_pack_t weight = (layer_mode == LAYER1_MODE)
@@ -87,8 +87,8 @@ void conv_param_router(
     int output_write_count = 0;
 #endif
 
-    const int transaction_count = (layer_mode == LAYER1_MODE)
-        ? CNN_CONV1_PARAM_TRANSACTIONS : CNN_CONV2_PARAM_TRANSACTIONS;
+    const ConvGeometry geometry = conv_geometry(layer_mode);
+    const int transaction_count = geometry.cout_tiles;
     for (int index = 0; index < transaction_count; ++index) {
 #pragma HLS PIPELINE II=1
         const postprocess_param_pack_t param = (layer_mode == LAYER1_MODE)

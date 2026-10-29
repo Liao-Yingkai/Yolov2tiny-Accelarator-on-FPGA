@@ -49,16 +49,12 @@ struct inference_result_t {
     class_index_t class_index;
 };
 
-// 一个 pixel_t 表示一个空间位置的全部8个物理输入通道。
-// Im2Row 在输入读取时完成规范化：Conv1 仅 channel0 有效，Conv2 使用全部通道。
-struct pixel_t {
-    activation_t channel[IM2ROW_MAX_CHANNELS];
+// 一个空间位置上的连续8通道组；不承诺包含完整逻辑 pixel 的全部通道。
+// Conv1 仅 channel0 有效，Pool2 的16通道由两个 channel pack 表达。
+struct channel_pack_t {
+    activation_t channel[FEATURE_PACK_CHANNELS];
 };
-
-// Pool 与后续层之间也以一个空间位置的连续8个物理通道为基本事务。该别名
-// 明确表达其通道 pack 语义，同时保证 Pool1 的输出可直接作为 Conv2 Im2Row
-// 所需的 pixel_t 输入。
-using channel_pack_t = pixel_t;
+using pixel_t = channel_pack_t;  // 兼容既有 Im2Row/stream/testbench 接口。
 
 // activation_pack_t 是 Im2Row 到 Systolic 的基本流事务：P 个像素属于同一输出行、
 // 同一 Tile 和同一个 (kh,kw)。Systolic 的接口目标是在每个成功接收周期消费一个 Pack。

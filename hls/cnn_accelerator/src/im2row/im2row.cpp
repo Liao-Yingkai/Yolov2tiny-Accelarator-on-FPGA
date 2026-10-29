@@ -1,4 +1,5 @@
 #include "im2row.h"
+#include "../channel_pack.h"
 
 #ifndef __SYNTHESIS__
 #include <cassert>
@@ -23,47 +24,16 @@ void clear_pixel(pixel_t& pixel) {
 
 // 输入一被消费就规范为固定物理8通道：Conv1 仅保留 channel0，Conv2 保留全部8通道。
 // 此后 Strip、Line Buffer 和输出热路径都只处理已规范化的 pixel_t。
-pixel_t normalize_input_pixel(const pixel_t& source, bool is_conv2) {
+pixel_t normalize_input_pixel(const pixel_t& source, int logical_cin) {
 #pragma HLS INLINE
     pixel_t destination;
     for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
 #pragma HLS UNROLL
         destination.channel[channel] =
-            (is_conv2 || channel == 0) ? source.channel[channel] :
+            (channel < logical_cin) ? source.channel[channel] :
                                          activation_t(0);
     }
     return destination;
-}
-
-// 将一个 pixel_t 按通道完整打包为 Line Buffer 存储字。
-// channel[c] 固定映射到 [((c+1)*ACTIVATION_BITS-1):(c*ACTIVATION_BITS)]；
-// 通过位段直接复制有符号激活的原始补码位型，不进行数值符号扩展。
-line_word_t pack_line_pixel(const pixel_t& pixel) {
-#pragma HLS INLINE
-    line_word_t packed_pixel = 0;
-    for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
-#pragma HLS UNROLL
-        const int low_bit = channel * ACTIVATION_BITS;
-        const int high_bit = low_bit + ACTIVATION_BITS - 1;
-        packed_pixel.range(high_bit, low_bit) =
-            pixel.channel[channel].range(ACTIVATION_BITS - 1, 0);
-    }
-    return packed_pixel;
-}
-
-// 将 Line Buffer 存储字完整解包为 pixel_t。
-// 每个通道都按与打包函数相同的固定位置恢复全部位，负数的二进制补码保持不变。
-pixel_t unpack_line_pixel(const line_word_t& packed_pixel) {
-#pragma HLS INLINE
-    pixel_t pixel;
-    for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
-#pragma HLS UNROLL
-        const int low_bit = channel * ACTIVATION_BITS;
-        const int high_bit = low_bit + ACTIVATION_BITS - 1;
-        pixel.channel[channel].range(ACTIVATION_BITS - 1, 0) =
-            packed_pixel.range(high_bit, low_bit);
-    }
-    return pixel;
 }
 
 // 读取指定物理行 Bank 中的一个完整通道打包字。
@@ -192,34 +162,29 @@ int bottom_first_strip_column(int tile_x) {
 
 // 两种固定网络模式下各 Tile 的 Bottom 输入数量。首Tile需P+1个真实列；
 // 最后Tile从固定几何派生剩余列数，其他Tile需P个。Bottom输入只在不是最后输出行时读取。
-int bottom_load_count(bool is_conv2, int tile_x) {
+int bottom_load_count(const ConvGeometry& geometry, int tile_x) {
 #pragma HLS INLINE
     if (tile_x == 0) {
         return IM2ROW_P + 1;
     }
-    return (is_conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
-        ? CNN_CONV2_LAST_BOTTOM_LOADS
-        : ((!is_conv2 && tile_x == CNN_CONV1_LAST_TILE_X)
-            ? CNN_CONV1_LAST_BOTTOM_LOADS : IM2ROW_P);
+    return tile_x == geometry.last_tile_x ? geometry.last_bottom_loads : IM2ROW_P;
 }
 
 // Conv1 的7个 Tile 均为4个真实空间位置；Conv2 的末 Tile 只有 lane0、1有效。
-ap_uint<IM2ROW_P> make_spatial_valid(bool is_conv2, int tile_x) {
+ap_uint<IM2ROW_P> make_spatial_valid(const ConvGeometry& geometry, int tile_x) {
 #pragma HLS INLINE
-    return (is_conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
-        ? ap_uint<IM2ROW_P>(CNN_CONV2_TAIL_SPATIAL_VALID_MASK)
+    return tile_x == geometry.last_tile_x
+        ? ap_uint<IM2ROW_P>(geometry.tail_spatial_valid_mask)
         : ap_uint<IM2ROW_P>(CNN_FULL_SPATIAL_VALID_MASK);
 }
 
 // 同行预取下一 Tile 的4个新列。仅为即将到来的最后 Tile 需要屏蔽越界列：
 // Conv1、Conv2均仅在当前Tile是倒数第二个时屏蔽越界的新列。
-ap_uint<IM2ROW_P> next_new_column_valid(bool is_conv2, int tile_x) {
+ap_uint<IM2ROW_P> next_new_column_valid(const ConvGeometry& geometry, int tile_x) {
 #pragma HLS INLINE
-    return (is_conv2 && tile_x == CNN_CONV2_PRELAST_TILE_X)
-        ? ap_uint<IM2ROW_P>(CNN_CONV2_PRELAST_NEW_COLUMN_VALID_MASK)
-        : ((!is_conv2 && tile_x == CNN_CONV1_PRELAST_TILE_X)
-            ? ap_uint<IM2ROW_P>(CNN_CONV1_PRELAST_NEW_COLUMN_VALID_MASK)
-            : ap_uint<IM2ROW_P>(CNN_FULL_SPATIAL_VALID_MASK));
+    return tile_x == geometry.prelast_tile_x
+        ? ap_uint<IM2ROW_P>(geometry.prelast_new_column_valid_mask)
+        : ap_uint<IM2ROW_P>(CNN_FULL_SPATIAL_VALID_MASK);
 }
 
 }  // 匿名命名空间
@@ -233,14 +198,12 @@ void im2row(
     hls::stream<activation_pack_t>& output_stream,
     layer_mode_t layer_mode
 ) {
-    const bool is_conv2 = (layer_mode == LAYER2_MODE);
+    const ConvGeometry geometry = conv_geometry(layer_mode);
     // mode在调用期间保持稳定；所有尺寸均由固定网络配置派生。
-    const int feature_height = is_conv2 ? CNN_CONV2_H : CNN_CONV1_H;
-    const int feature_width = is_conv2 ? CNN_CONV2_W : CNN_CONV1_W;
-    const int last_tile_x = is_conv2 ? CNN_CONV2_LAST_TILE_X :
-                                        CNN_CONV1_LAST_TILE_X;
-    const int total_tokens = is_conv2 ? CNN_CONV2_IM2ROW_TOKENS :
-                                        CNN_CONV1_IM2ROW_TOKENS;
+    const int feature_height = geometry.h;
+    const int feature_width = geometry.w;
+    const int last_tile_x = geometry.last_tile_x;
+    const int total_tokens = geometry.im2row_tokens;
 
     // Line Buffer 的三个维度依次表示：2个循环行 Bank、P个按列取模的独立列 Bank、
     // 每个列 Bank 内的块地址。每个元素是包含全部 C_PAR 通道的无符号打包字，读写始终覆盖整字；
@@ -291,8 +254,8 @@ void im2row(
     for (int input_x = 0; input_x < feature_width; ++input_x) {
 #pragma HLS PIPELINE II=1
         const pixel_t input_pixel =
-            normalize_input_pixel(input_stream.read(), is_conv2);
-        const line_word_t input_word = pack_line_pixel(input_pixel);
+            normalize_input_pixel(input_stream.read(), geometry.cin);
+        const line_word_t input_word = pack_activation_lane(input_pixel);
         write_line_word(line_buffer, 0, input_x, input_word);
         if (input_x <= IM2ROW_P) {
             write_initial_middle(strip, input_x + 1, input_word);
@@ -325,13 +288,13 @@ void im2row(
         activation_pack_t output_pack;
 #pragma HLS ARRAY_PARTITION variable=output_pack.pixel complete dim=1
         // spatial_valid 描述输出位置是否存在，而不是窗口元素是否属于 Padding。
-        output_pack.spatial_valid = make_spatial_valid(is_conv2, tile_x);
+        output_pack.spatial_valid = make_spatial_valid(geometry, tile_x);
         for (int lane = 0; lane < IM2ROW_P; ++lane) {
 #pragma HLS UNROLL
             if (output_pack.spatial_valid[lane]) {
                 const line_word_t selected_word =
                     select_output_word(strip, current_strip, token, lane);
-                output_pack.pixel[lane] = unpack_line_pixel(selected_word);
+                output_pack.pixel[lane] = unpack_activation_lane(selected_word);
             } else {
                 // 行尾无效 Lane 不属于输出特征图，全部9拍强制为零且 valid=0。
                 clear_pixel(output_pack.pixel[lane]);
@@ -348,13 +311,13 @@ void im2row(
         // Token 0...5 正在输出 Top/Middle，同时按需填充当前 Tile 尚未使用的 Bottom。
         // load_count 是本 Tile 的真实读取总数；token 同时作为输入偏移，结合起始真实列和 Strip 起始列定位写入。
         // 每拍最多读取一个像素，并在旧 Top 已锁存于 current Strip 后覆盖 top_bank 的同列槽位。
-        const int load_count = bottom_load_count(is_conv2, tile_x);
+        const int load_count = bottom_load_count(geometry, tile_x);
         if ((!final_output_row) && (token < load_count)) {
             const int input_x = bottom_first_x(tile_x, tile_base_x) + token;
             const int strip_column = bottom_first_strip_column(tile_x) + token;
             const pixel_t input_pixel =
-                normalize_input_pixel(input_stream.read(), is_conv2);
-            const line_word_t input_word = pack_line_pixel(input_pixel);
+                normalize_input_pixel(input_stream.read(), geometry.cin);
+            const line_word_t input_word = pack_activation_lane(input_pixel);
             write_current_bottom(
                 strip, current_strip, strip_column, input_word);
             write_line_word(line_buffer, top_bank, input_x, input_word);
@@ -378,7 +341,7 @@ void im2row(
                 // 同行下一 Tile 还需要 P 个不重叠的新列，它们分布在 P 个不同列 Bank。
                 // token7 发出 Top/Middle 的并行读取，按一拍 RAM 延迟在 token8 写入 next。
                 const ap_uint<IM2ROW_P> new_column_mask =
-                    next_new_column_valid(is_conv2, tile_x);
+                    next_new_column_valid(geometry, tile_x);
                 for (int lane = 0; lane < IM2ROW_P; ++lane) {
 #pragma HLS UNROLL
                     const int input_x = tile_base_x + IM2ROW_P + 1 + lane;

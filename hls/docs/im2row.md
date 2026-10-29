@@ -7,6 +7,10 @@
 - 固定卷积：`3×3`、`stride=1`、`same padding`。
 - 当前空间并行度：固定 `P=4`。
 
+配置与 pack 术语见[结构整理](structure.md)。`pixel_t` 为
+`channel_pack_t` 的兼容别名，表示连续8通道组；输入规范化使用
+`channel < geometry.cin`，并不表示已实现多 Cin group 调度。
+
 本分支不再生成可变 P 的硬件。P=4 的行首 Tile 在 Top/Middle 的6拍内读取5个 Bottom 像素，满足当前双 Strip 无气泡调度。
 
 本版本的首要接口目标是：启动完成且下游可接收时，Im2Row 每一个连续时钟周期向 Systolic 写出一个 `activation_pack_t`。一个 Pack 固定包含同一 `(kh,kw)` 下、同一输出行和同一 Tile 的 P 个空间 Lane。每一个 Tile 连续输出9拍，严格为：
@@ -31,7 +35,7 @@ void im2row(
 );
 ```
 
-`pixel_t` 打包一个空间位置的全部物理输入通道。输入是严格行优先的标量空间流；`layer_mode`在完整层调用中保持稳定，`LAYER1_MODE`选择Conv1 `(28,28,1)`，`LAYER2_MODE`选择Conv2 `(14,14,8)`。卷积Padding和行尾无效数据都不在输入流中。固定尺寸、Tile数和tail mask都由`src/config.h`的编译期常量派生。
+`pixel_t` 是一个空间位置的连续8通道组，在当前两层中足以容纳逻辑 Cin。输入是严格行优先的标量空间流；`layer_mode`在完整层调用中保持稳定，`LAYER1_MODE`选择Conv1 `(28,28,1)`，`LAYER2_MODE`选择Conv2 `(14,14,8)`。卷积Padding和行尾无效数据都不在输入流中。固定尺寸、Tile数和tail mask都由`src/config.h`的编译期常量派生。
 
 ```cpp
 struct activation_pack_t {

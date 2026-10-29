@@ -19,6 +19,19 @@ constexpr int WEIGHT_BITS = 8;
 constexpr int ACCUMULATOR_BITS = 32;
 constexpr int PRODUCT_BITS = ACTIVATION_BITS + WEIGHT_BITS;
 
+// 固定物理宽度独立于网络逻辑 Cin/Cout。
+constexpr int CONV_SPATIAL_PAR = 4;
+constexpr int CONV_CIN_PAR = 8;
+constexpr int CONV_COUT_PAR = 4;
+constexpr int FEATURE_PACK_CHANNELS = 8;
+constexpr int FC_CIN_PAR = 8;
+constexpr int ceil_div(int n, int d) { return (n + d - 1) / d; }
+constexpr int config_max(int a, int b) { return a > b ? a : b; }
+// bits 必须包含 one-past 终点，而不仅是最后有效地址。
+constexpr int bits_for_max(int value) {
+    return value < 2 ? 1 : 1 + bits_for_max(value >> 1);
+}
+
 // 固定卷积几何参数。
 constexpr int CNN_CONV1_H = 28;
 constexpr int CNN_CONV1_W = 28;
@@ -32,18 +45,19 @@ constexpr int CNN_CONV2_COUT = 16;
 constexpr int IM2ROW_KERNEL = 3;
 constexpr int IM2ROW_PADDING = 1;
 constexpr int IM2ROW_STRIDE = 1;
-constexpr int IM2ROW_P = 4;
-constexpr int IM2ROW_MAX_H = CNN_CONV1_H;
-constexpr int IM2ROW_MAX_W = CNN_CONV1_W;
-constexpr int IM2ROW_MAX_CHANNELS = CNN_CONV2_CIN;
+constexpr int IM2ROW_P = CONV_SPATIAL_PAR;
+constexpr int IM2ROW_MAX_H = config_max(CNN_CONV1_H, CNN_CONV2_H);
+constexpr int IM2ROW_MAX_W = config_max(CNN_CONV1_W, CNN_CONV2_W);
+// 兼容旧源码与 testbench：这是物理 channel pack 宽度，不是逻辑最大 Cin。
+constexpr int IM2ROW_MAX_CHANNELS = FEATURE_PACK_CHANNELS;
 constexpr int IM2ROW_MAX_BLOCKS_PER_ROW =
     (IM2ROW_MAX_W + IM2ROW_P - 1) / IM2ROW_P;
 constexpr int IM2ROW_STRIP_WIDTH = IM2ROW_P + IM2ROW_KERNEL - 1;
 
 // Broadcast 与 Output-stationary Systolic 共用的阵列规模。
-constexpr int SYSTOLIC_SPATIAL_PAR = IM2ROW_P;
-constexpr int SYSTOLIC_CIN_PAR = IM2ROW_MAX_CHANNELS;
-constexpr int SYSTOLIC_COUT_PAR = IM2ROW_P;
+constexpr int SYSTOLIC_SPATIAL_PAR = CONV_SPATIAL_PAR;
+constexpr int SYSTOLIC_CIN_PAR = CONV_CIN_PAR;
+constexpr int SYSTOLIC_COUT_PAR = CONV_COUT_PAR;
 constexpr int SYSTOLIC_KERNEL_TOKENS = IM2ROW_KERNEL * IM2ROW_KERNEL;
 constexpr int SYSTOLIC_ACTIVATION_LANE_BITS =
     SYSTOLIC_CIN_PAR * ACTIVATION_BITS;
@@ -104,9 +118,17 @@ constexpr unsigned int CNN_CONV1_PRELAST_NEW_COLUMN_VALID_MASK =
     (1u << CNN_CONV1_LAST_BOTTOM_LOADS) - 1u;
 constexpr unsigned int CNN_CONV2_PRELAST_NEW_COLUMN_VALID_MASK =
     (1u << CNN_CONV2_LAST_BOTTOM_LOADS) - 1u;
-constexpr int SYSTOLIC_MAX_COUT_TILES = CNN_CONV2_COUT_TILES;
+constexpr int CNN_CONV1_CIN_GROUPS = ceil_div(CNN_CONV1_CIN, CONV_CIN_PAR);
+constexpr int CNN_CONV2_CIN_GROUPS = ceil_div(CNN_CONV2_CIN, CONV_CIN_PAR);
+constexpr int CNN_CONV1_REDUCTION_STEPS = SYSTOLIC_KERNEL_TOKENS * CNN_CONV1_CIN_GROUPS;
+constexpr int CNN_CONV2_REDUCTION_STEPS = SYSTOLIC_KERNEL_TOKENS * CNN_CONV2_CIN_GROUPS;
+constexpr int SYSTOLIC_ACTIVATION_REPLAY_CAPACITY =
+    config_max(CNN_CONV1_REDUCTION_STEPS, CNN_CONV2_REDUCTION_STEPS);
+constexpr int SYSTOLIC_MAX_COUT_TILES =
+    config_max(CNN_CONV1_COUT_TILES, CNN_CONV2_COUT_TILES);
 constexpr int SYSTOLIC_WEIGHT_BUFFER_DEPTH =
-    SYSTOLIC_MAX_COUT_TILES * SYSTOLIC_KERNEL_TOKENS;
+    config_max(CNN_CONV1_WEIGHT_TRANSACTIONS, CNN_CONV2_WEIGHT_TRANSACTIONS);
+constexpr int SYSTOLIC_WEIGHT_ADDRESS_BITS = bits_for_max(SYSTOLIC_WEIGHT_BUFFER_DEPTH);
 
 // 固定2x2、stride-2 MaxPool几何参数。输入使用卷积输出Tile，输出为紧密
 // NHWC channel pack。
@@ -140,7 +162,6 @@ constexpr int POOL_MAX_TILES_PER_ROW =
 constexpr int POOL_MAX_COUT_TILES = SYSTOLIC_MAX_COUT_TILES;
 
 // 固定FC 784 -> 10；输入为紧密的Pool2 NHWC stream。
-constexpr int FC_CIN_PAR = IM2ROW_MAX_CHANNELS;
 constexpr int FC_COUT_PAR = 5;
 constexpr int FC_OUTPUTS = 10;
 constexpr int SOFTMAX_SCALE_FRAC_BITS = 20;
@@ -168,6 +189,43 @@ constexpr int TOP_POOL1_FEATURE_FIFO_DEPTH =
 using layer_mode_t = bool;
 constexpr layer_mode_t LAYER1_MODE = false;
 constexpr layer_mode_t LAYER2_MODE = true;
+
+
+// 调用期间不变的两层选择表。所有除法/取模仅在编译期常量中求值。
+// 这里只描述既有 MNIST 调度，不支持任意卷积或多个 Cin group。
+struct ConvGeometry {
+    int h, w, cin, cout;
+    int tiles_per_row, spatial_tiles, cout_tiles;
+    int reduction_steps, im2row_tokens, weight_transactions;
+    int last_tile_x, prelast_tile_x, last_bottom_loads;
+    unsigned int tail_spatial_valid_mask, prelast_new_column_valid_mask;
+};
+inline ConvGeometry conv_geometry(layer_mode_t mode) {
+#pragma HLS INLINE
+    return mode == LAYER2_MODE
+        ? ConvGeometry{CNN_CONV2_H, CNN_CONV2_W, CNN_CONV2_CIN, CNN_CONV2_COUT,
+            CNN_CONV2_TILES_PER_ROW, CNN_CONV2_SPATIAL_TILES, CNN_CONV2_COUT_TILES,
+            CNN_CONV2_REDUCTION_STEPS, CNN_CONV2_IM2ROW_TOKENS, CNN_CONV2_WEIGHT_TRANSACTIONS,
+            CNN_CONV2_LAST_TILE_X, CNN_CONV2_PRELAST_TILE_X, CNN_CONV2_LAST_BOTTOM_LOADS,
+            CNN_CONV2_TAIL_SPATIAL_VALID_MASK, CNN_CONV2_PRELAST_NEW_COLUMN_VALID_MASK}
+        : ConvGeometry{CNN_CONV1_H, CNN_CONV1_W, CNN_CONV1_CIN, CNN_CONV1_COUT,
+            CNN_CONV1_TILES_PER_ROW, CNN_CONV1_SPATIAL_TILES, CNN_CONV1_COUT_TILES,
+            CNN_CONV1_REDUCTION_STEPS, CNN_CONV1_IM2ROW_TOKENS, CNN_CONV1_WEIGHT_TRANSACTIONS,
+            CNN_CONV1_LAST_TILE_X, CNN_CONV1_PRELAST_TILE_X, CNN_CONV1_LAST_BOTTOM_LOADS,
+            CNN_CONV1_TAIL_SPATIAL_VALID_MASK, CNN_CONV1_PRELAST_NEW_COLUMN_VALID_MASK};
+}
+static_assert(CNN_CONV1_CIN_GROUPS == 1 && CNN_CONV2_CIN_GROUPS == 1,
+              "Only one Cin group is implemented");
+static_assert(IM2ROW_KERNEL == 3 && IM2ROW_PADDING == 1 && IM2ROW_STRIDE == 1,
+              "Fixed nine-case Im2Row scheduler requires 3x3 same convolution");
+static_assert(CONV_SPATIAL_PAR == 4 && CONV_COUT_PAR == 4,
+              "Fixed bank selectors and OS skew require 4x4");
+static_assert(CONV_CIN_PAR == 8 && FC_CIN_PAR == 8 &&
+              FEATURE_PACK_CHANNELS == CONV_CIN_PAR,
+              "Fixed dot8 and feature packs require eight channels");
+static_assert(POOL_KERNEL == 2 && POOL_STRIDE == 2 &&
+              2 * CONV_COUT_PAR == FEATURE_PACK_CHANNELS,
+              "Pool combines two four-channel halves");
 
 static_assert(CNN_CONV1_COUT % SYSTOLIC_COUT_PAR == 0,
               "Conv1 Cout must fill systolic output tiles");
