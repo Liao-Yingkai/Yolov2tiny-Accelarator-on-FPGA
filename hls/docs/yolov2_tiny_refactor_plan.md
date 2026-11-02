@@ -144,6 +144,8 @@ cout_cache_block → local_cout_tile → kh → kw → cin_group
 
 ## 6. Im2Row：多 Group 的 BRAM 窗口方案
 
+详细接口、BRAM组织、候选预取调度和待确认要求见[YOLOv2-tiny Im2Row设计](im2row.md)。2026-11-02已明确Im2Row只支持本YOLO层表，采用扩展后的ConvGeometry结构配置，不保留旧二层bool接口的设计要求；源码尚未实施。
+
 ### 6.1 输出顺序和边界
 
 每个 Spatial Tile 输出 `Kh×Kw×Cin Groups` 个 Activation Pack，顺序为：
@@ -176,7 +178,9 @@ Strip 的逻辑内容为：
 
 Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先进入仍需要它的 Strip，之后才能用下一输入行覆盖对应地址。当前输出使用当前 Strip，下一 Strip 在另一 Ping-Pong 区域准备；重叠列也按 Group 保留或复制。
 
-现有 `token==3/6/7/8` 调度不能直接套到扩展 Token 编号上。实施前须明确 Group 遍历、BRAM 读延迟、每 Bank 每拍读写次数及反压下状态推进，不能只加 Group 循环和 `PIPELINE II=1` 就认为完成。
+3×3的kernel位置q仍为0～8，每个q内遍历G个Group；若使用扁平Token，则范围是0～9G-1。复制/预取必须覆盖全部Group，不能只在扁平token等于3/6/7/8时各做一次。实施前须明确BRAM延迟、端口与反压；操作重叠不一定冲突，一读一写Bank和已读Word转发可能支持原来的连续输出目标。
+
+1×1优先评估缓存前三个位置、在第四个位置的各Group到来时直接组合输出，避免先收齐4G个输入再独立输出G个Token。单路64-bit输入下的收集时间不等于PE必然空闲，须结合Systolic Replay调度分析。
 
 本方案为优先评估方向，尚未证明 BRAM容量、端口和目标 II 均满足；若需改变两行/Strip结构，应先说明取舍，不自行替换架构。
 
@@ -265,7 +269,7 @@ Accumulator + Bias
 | 1×1路径 | 四空间位置收集、Group读取与无Padding路径 |
 | YOLO整数数值 | 两次量化边界、LeakyReLU、舍入及饱和Golden |
 | Pool输出契约 | 当前Cout块结果的顺序、延迟输出、8通道组装位置 |
-| 调用配置 | 替换MNIST二层bool模式的配置结构、范围和一次调用边界 |
+| 调用配置 | 已确定采用ConvGeometry；仍需补齐YOLO字段、派生值校验及调用方迁移 |
 | 性能目标 | 目标分辨率、频率、fps及有效DDR带宽预算 |
 
 没有完成这些结论前，不把缓存8/16个Cout、Blocked8布局、全部FIFO固定depth=2或某个II视为已冻结条件。
