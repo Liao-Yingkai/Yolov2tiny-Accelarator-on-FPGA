@@ -1,7 +1,7 @@
 #ifndef CNN_ACCELERATOR_CONFIG_H_
 #define CNN_ACCELERATOR_CONFIG_H_
 
-// 固定 MNIST 网络与本分支硬件规模的唯一编译期配置来源。这里仅保存会影响
+// 旧 MNIST 模块与新 YOLO Im2Row 的共同配置来源。这里仅保存会影响
 // 数组尺寸、循环边界和模块间事务数量的常量；数据类型与 stream pack 定义位于
 // types.h。两层卷积由同一套物理模块按 layer_mode_t 分时执行。
 
@@ -46,8 +46,66 @@ constexpr int IM2ROW_KERNEL = 3;
 constexpr int IM2ROW_PADDING = 1;
 constexpr int IM2ROW_STRIDE = 1;
 constexpr int IM2ROW_P = CONV_SPATIAL_PAR;
-constexpr int IM2ROW_MAX_H = config_max(CNN_CONV1_H, CNN_CONV2_H);
-constexpr int IM2ROW_MAX_W = config_max(CNN_CONV1_W, CNN_CONV2_W);
+// 共用调用级几何结构；旧conv_geometry(bool)仅供尚未迁移的MNIST模块使用。
+struct ConvGeometry {
+    int h, w, cin, cout;
+    int tiles_per_row, spatial_tiles, cout_tiles;
+    int reduction_steps, im2row_tokens, weight_transactions;
+    int last_tile_x, prelast_tile_x, last_bottom_loads;
+    unsigned int tail_spatial_valid_mask, prelast_new_column_valid_mask;
+    int kernel, padding, stride, cin_groups, input_transactions;
+};
+enum class YoloTinyLayer {
+    Conv1, Conv2, Conv3, Conv4, Conv5, Conv6, Conv7, Conv8, Prediction, Count
+};
+constexpr int YOLO_TINY_LAYER_COUNT = static_cast<int>(YoloTinyLayer::Count);
+// 只负责从固定层表的四个逻辑参数统一派生全部字段，不是任意配置的支持承诺。
+// 使用单return形式保持C++11常量表达式兼容，供下方容量计算直接求值。
+constexpr ConvGeometry make_yolo_geometry(int h, int cin, int cout, int kernel) {
+    return ConvGeometry{
+        h, h, cin, cout,
+        ceil_div(h, IM2ROW_P), h * ceil_div(h, IM2ROW_P), ceil_div(cout, CONV_COUT_PAR),
+        kernel * kernel * ceil_div(cin, CONV_CIN_PAR),
+        h * ceil_div(h, IM2ROW_P) * kernel * kernel * ceil_div(cin, CONV_CIN_PAR),
+        ceil_div(cout, CONV_COUT_PAR) * kernel * kernel * ceil_div(cin, CONV_CIN_PAR),
+        ceil_div(h, IM2ROW_P) - 1, ceil_div(h, IM2ROW_P) - 2,
+        config_max(0, h - ((ceil_div(h, IM2ROW_P) - 1) * IM2ROW_P + 1)),
+        (1u << (((h - 1) % IM2ROW_P) + 1)) - 1u,
+        (1u << config_max(0, h - ((ceil_div(h, IM2ROW_P) - 1) * IM2ROW_P + 1))) - 1u,
+        kernel, kernel == 3 ? 1 : 0, 1, ceil_div(cin, CONV_CIN_PAR),
+        h * h * ceil_div(cin, CONV_CIN_PAR)};
+}
+// 唯一YOLOv2-tiny VOC层表；Im2Row、几何构造器和物理容量均从此表派生。
+constexpr ConvGeometry YOLO_TINY_GEOMETRIES[YOLO_TINY_LAYER_COUNT] = {
+    make_yolo_geometry(416, 3, 16, 3),
+    make_yolo_geometry(208, 16, 32, 3),
+    make_yolo_geometry(104, 32, 64, 3),
+    make_yolo_geometry(52, 64, 128, 3),
+    make_yolo_geometry(26, 128, 256, 3),
+    make_yolo_geometry(13, 256, 512, 3),
+    make_yolo_geometry(13, 512, 1024, 3),
+    make_yolo_geometry(13, 1024, 1024, 3),
+    make_yolo_geometry(13, 1024, 125, 1)};
+constexpr int yolo_max_field(int ConvGeometry::*field, int count = YOLO_TINY_LAYER_COUNT) {
+    return count == 0 ? 0 : config_max(YOLO_TINY_GEOMETRIES[count - 1].*field,
+                                     yolo_max_field(field, count - 1));
+}
+constexpr int yolo_max_line_depth(int count = YOLO_TINY_LAYER_COUNT) {
+    return count == 0 ? 0 : config_max(
+        YOLO_TINY_GEOMETRIES[count - 1].tiles_per_row * YOLO_TINY_GEOMETRIES[count - 1].cin_groups,
+        yolo_max_line_depth(count - 1));
+}
+constexpr int IM2ROW_MAX_H = yolo_max_field(&ConvGeometry::h);
+constexpr int IM2ROW_MAX_W = yolo_max_field(&ConvGeometry::w);
+constexpr int IM2ROW_MAX_CIN = yolo_max_field(&ConvGeometry::cin);
+constexpr int IM2ROW_MAX_GROUPS = yolo_max_field(&ConvGeometry::cin_groups);
+// 逐层取ceil(W/P)*G的最大值，不能将最大W与最大G相乘。
+constexpr int IM2ROW_LINE_BANK_DEPTH = yolo_max_line_depth();
+constexpr int IM2ROW_STRIP_BANK_DEPTH = 2 * IM2ROW_MAX_GROUPS;
+static_assert(IM2ROW_MAX_H == 416 && IM2ROW_MAX_W == 416 &&
+              IM2ROW_MAX_CIN == 1024 && IM2ROW_MAX_GROUPS == 128 &&
+              IM2ROW_LINE_BANK_DEPTH == 512 && IM2ROW_STRIP_BANK_DEPTH == 256,
+              "YOLO Im2Row容量必须与冻结层表一致");
 // 兼容旧源码与 testbench：这是物理 channel pack 宽度，不是逻辑最大 Cin。
 constexpr int IM2ROW_MAX_CHANNELS = FEATURE_PACK_CHANNELS;
 constexpr int IM2ROW_MAX_BLOCKS_PER_ROW =
@@ -191,15 +249,8 @@ constexpr layer_mode_t LAYER1_MODE = false;
 constexpr layer_mode_t LAYER2_MODE = true;
 
 
-// 调用期间不变的两层选择表。所有除法/取模仅在编译期常量中求值。
-// 这里只描述既有 MNIST 调度，不支持任意卷积或多个 Cin group。
-struct ConvGeometry {
-    int h, w, cin, cout;
-    int tiles_per_row, spatial_tiles, cout_tiles;
-    int reduction_steps, im2row_tokens, weight_transactions;
-    int last_tile_x, prelast_tile_x, last_bottom_loads;
-    unsigned int tail_spatial_valid_mask, prelast_new_column_valid_mask;
-};
+// 旧消费者的字段和值不变，新增Im2Row字段显式置零，标记尚未迁移；
+// 该构造器的返回值不满足新Im2Row的YOLO调用契约。
 inline ConvGeometry conv_geometry(layer_mode_t mode) {
 #pragma HLS INLINE
     return mode == LAYER2_MODE
@@ -207,15 +258,41 @@ inline ConvGeometry conv_geometry(layer_mode_t mode) {
             CNN_CONV2_TILES_PER_ROW, CNN_CONV2_SPATIAL_TILES, CNN_CONV2_COUT_TILES,
             CNN_CONV2_REDUCTION_STEPS, CNN_CONV2_IM2ROW_TOKENS, CNN_CONV2_WEIGHT_TRANSACTIONS,
             CNN_CONV2_LAST_TILE_X, CNN_CONV2_PRELAST_TILE_X, CNN_CONV2_LAST_BOTTOM_LOADS,
-            CNN_CONV2_TAIL_SPATIAL_VALID_MASK, CNN_CONV2_PRELAST_NEW_COLUMN_VALID_MASK}
+            CNN_CONV2_TAIL_SPATIAL_VALID_MASK, CNN_CONV2_PRELAST_NEW_COLUMN_VALID_MASK,
+            0, 0, 0, 0, 0}
         : ConvGeometry{CNN_CONV1_H, CNN_CONV1_W, CNN_CONV1_CIN, CNN_CONV1_COUT,
             CNN_CONV1_TILES_PER_ROW, CNN_CONV1_SPATIAL_TILES, CNN_CONV1_COUT_TILES,
             CNN_CONV1_REDUCTION_STEPS, CNN_CONV1_IM2ROW_TOKENS, CNN_CONV1_WEIGHT_TRANSACTIONS,
             CNN_CONV1_LAST_TILE_X, CNN_CONV1_PRELAST_TILE_X, CNN_CONV1_LAST_BOTTOM_LOADS,
-            CNN_CONV1_TAIL_SPATIAL_VALID_MASK, CNN_CONV1_PRELAST_NEW_COLUMN_VALID_MASK};
+            CNN_CONV1_TAIL_SPATIAL_VALID_MASK, CNN_CONV1_PRELAST_NEW_COLUMN_VALID_MASK,
+            0, 0, 0, 0, 0};
 }
+// 表外枚举返回空配置，仅为避免非法索引；实际调用必须使用表内层枚举。
+constexpr ConvGeometry yolov2_tiny_geometry(YoloTinyLayer layer) {
+    return static_cast<int>(layer) >= 0 && static_cast<int>(layer) < YOLO_TINY_LAYER_COUNT
+        ? YOLO_TINY_GEOMETRIES[static_cast<int>(layer)] : ConvGeometry{};
+}
+#ifndef __SYNTHESIS__
+// 仅主机静态/调试构建使用的严格契约校验，不综合比较器、循环或拒绝分支。
+inline bool im2row_geometry_supported(const ConvGeometry& g) {
+    for (int layer = 0; layer < YOLO_TINY_LAYER_COUNT; ++layer) {
+        const ConvGeometry e = yolov2_tiny_geometry(static_cast<YoloTinyLayer>(layer));
+        if (g.h == e.h && g.w == e.w && g.cin == e.cin && g.cout == e.cout &&
+            g.kernel == e.kernel && g.padding == e.padding && g.stride == e.stride &&
+            g.cin_groups == e.cin_groups && g.tiles_per_row == e.tiles_per_row &&
+            g.spatial_tiles == e.spatial_tiles && g.cout_tiles == e.cout_tiles &&
+            g.reduction_steps == e.reduction_steps && g.im2row_tokens == e.im2row_tokens &&
+            g.weight_transactions == e.weight_transactions &&
+            g.input_transactions == e.input_transactions && g.last_tile_x == e.last_tile_x &&
+            g.prelast_tile_x == e.prelast_tile_x && g.last_bottom_loads == e.last_bottom_loads &&
+            g.tail_spatial_valid_mask == e.tail_spatial_valid_mask &&
+            g.prelast_new_column_valid_mask == e.prelast_new_column_valid_mask) return true;
+    }
+    return false;
+}
+#endif
 static_assert(CNN_CONV1_CIN_GROUPS == 1 && CNN_CONV2_CIN_GROUPS == 1,
-              "Only one Cin group is implemented");
+              "Legacy MNIST consumers still implement one Cin group");
 static_assert(IM2ROW_KERNEL == 3 && IM2ROW_PADDING == 1 && IM2ROW_STRIDE == 1,
               "Fixed nine-case Im2Row scheduler requires 3x3 same convolution");
 static_assert(CONV_SPATIAL_PAR == 4 && CONV_COUT_PAR == 4,

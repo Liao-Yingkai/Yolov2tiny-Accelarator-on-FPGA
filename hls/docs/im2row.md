@@ -1,8 +1,8 @@
 # YOLOv2-tiny Im2Row 设计
 
-更新日期：2026-11-02。状态：重构规划，尚未实现或完成综合验证。
+更新日期：2026-11-02。状态：新YOLO接口及调度源码已实现，静态检查及本轮HLS综合通过；未运行C simulation或RTL co-simulation，功能与RTL反压尚未验证。
 
-本文只描述 YOLOv2-tiny VOC 的目标设计，不保留旧网络的设计章节。本轮仅修改文档，不修改源码、配置、接口或 testbench，不运行仿真、综合。总体背景见[YOLOv2-tiny重构方案](yolov2_tiny_refactor_plan.md)。
+本文描述 YOLOv2-tiny VOC 的接口、存储契约和源码实现，不保留旧网络的设计章节。本轮仅优化Im2Row源码及本文，不修改Core、其他模块或testbench；不以静态检查代替仿真、综合或RTL反压验证。总体背景见[YOLOv2-tiny重构方案](yolov2_tiny_refactor_plan.md)。
 
 ## 1. 已确定的范围
 
@@ -32,7 +32,7 @@
 
 ## 2. 接口和ConvGeometry
 
-目标函数形式：
+已实现函数形式：
 
 ```cpp
 void im2row(
@@ -41,7 +41,7 @@ void im2row(
     const ConvGeometry& geometry);
 ```
 
-这是规划接口，尚未修改头文件。`pixel_t`如继续作为`channel_pack_t`的别名，不改变物理数据内容。
+头文件已采用此接口；`pixel_t`保留为`channel_pack_t`的别名，不改变物理数据内容。旧Core/Top尚未迁移，本轮不修改。
 
 `ConvGeometry`提供H、W、逻辑Cin、kernel模式，以及校验一致的G、每行Tile数、K、调用输入/输出事务数和边界参数。派生值来自固定层表或公共构造逻辑，不同时手写互相矛盾的kernel、Padding和输出尺寸。它可以是全卷积流水共用的配置；其中Cout不参与Im2Row的循环和事务计数。
 
@@ -304,7 +304,7 @@ G=128时暂存前三个位置的数据量为3 KiB，可评估复用Strip的3个�
 
 尾Tile有r个真实位置时，只缓存前r-1个位置，最后一个位置直接参与输出；W=13的最后Tile有r=1，可直接将输入放在Lane0，其余Lane为零。
 
-这属于待实现的优化方案，不是已经验证的吞吐结果。若要求输出不受最后位置输入气泡影响，则需完整Gather或额外预取缓冲，另算存储与延迟。
+源码已采用此方案，以一个连续输入事务循环维护position/group/tile，跨Tile和行不重新启动流水；本轮HLS报告该输入事务循环II=1，但不是每拍持续输出：满Tile仍须4G个输入事务才产生G个输出。实际流控吞吐尚未通过RTL验证。若要求输出不受最后位置输入气泡影响，则需完整Gather或额外预取缓冲，另算存储与延迟。
 
 ### 10.2 “收集间隙”不等于PE必然空闲
 
@@ -332,17 +332,17 @@ Systolic在Replay其他Cout计算Tile时不需要新Activation，Im2Row可以利
 
 阻塞stream保证事务握手，具体流水寄存器与RAM在途访问如何暂停仍须RTL验证，不能单凭 `write()` 的源码位置认定所有状态同拍冻结。
 
-## 12. 实施前仍需确定的事项
+## 12. 已确认实现与后续待验证事项
 
 已确定仅支持YOLO层表、采用ConvGeometry、保留8通道接口；这些不再作为待选问题。
 
 仍需确定：
 
-1. Im2Row的BRAM预算、目标时钟和RAM读延迟。68 KiB只是Line Buffer加Strip的数据容量，实际物理消耗需核算。
-2. 18-Bank、Ping-Pong合并地址的一读一写组织是否满足完整端口表；不满足时先讨论排程或Bank调整，不自行增加LUTRAM或复制存储。
-3. 3×3无额外准备气泡目标在G=1、行尾、最后Group及反压时能否保持，不能沿用寄存器实现结论。
-4. 1×1是否采用上述前三位置缓存、最后位置直接输出，是否还要求与输入气泡隔离的整段G连续输出；后者需要额外预取保证。
-5. ConvGeometry新增字段、派生值的统一构造与校验，以及新测试和Top的同步迁移细节；配置结构方向本身已确定。
+1. 本轮HLS确认BRAM组织及latency=1，资源为52个BRAM_18K；68 KiB是数据容量，物理资源预算仍须纳入全系统。目标周期10 ns、uncertainty 2.7 ns，HLS组合路径预算7.3 ns；实际布局布线时序尚未验证。
+2. 18-Bank、Ping-Pong合并地址的一读一写组织在本轮HLS中达到所有流水循环II=1，未增加LUTRAM或复制存储；真实握手下的端口时序仍须RTL co-sim验证。
+3. 3×3主循环HLS II=1已确认；G=1、行尾、最后Group及反压下的实际启动/Tile间隔仍须仿真测量，不能仅由II推断。
+4. 1×1已采用前三位置缓存、最后位置直接输出；不保证与输入气泡隔离的整段G连续输出，后者需要额外预取保证。
+5. ConvGeometry统一构造与校验已实现；新测试和Top的同步迁移仍需独立完成，配置结构方向本身已确定。
 
 DDR布局与Cout缓存容量尚未冻结，但Loader只要遵循本文件输入契约，Im2Row不应直接依赖DDR地址或Cout数量。
 
@@ -359,4 +359,35 @@ DDR布局与Cout缓存容量尚未冻结，但Loader只要遵循本文件输入�
 
 testbench使用简单确定性数据和源坐标reference，保留详细中文注释、CSV与必要终端统计，不让reference复刻Strip调度。
 
-本轮仅更新本文件及总草案中的对应结论，不执行上述流程，不修改DUT或其他工程。
+### 13.1 本轮源码优化及待复核项
+
+前一版综合报告显示主3×3循环II=2，Top overlap copy与预取返回的不同store在ST9/ST8形成WAW；输入使能路径还包含32-bit的`base+5 → min(width) → bottom_x比较`。旧报告共13 DSP，其中顶层三个32×32乘法各占3 DSP，主循环3 DSP、首行预装1 DSP。
+
+本轮源码针对这些来源做以下改变，HLS报告结果见本节末表：
+
+- 主循环全部Strip写（重叠copy、Line预取、Bottom输入、Padding零）先进入固定18 Bank的当前事务`WriteBeat`，每Bank独立enable/address/data；全部数据采集结束后，在本迭代末尾由每Bank唯一store入口提交，再推进状态。每迭代新建零默认值的`next`，无效Bank的数据不保留旧值，地址仍由统一逻辑译码。enable/address在数据分支之前按每Bank独立布尔公式生成，数据分支只填data，不让大分支汇合的phi拖后写使能。写命令不随G增长。实际BRAM返回寄存器及copy/prefetch的数据、标签对齐由HLS按latency=1和真实RAW生成，不人为增加持久`returned`及跨迭代提前消费约束；因此也不需要额外尾部flush。未添加`DEPENDENCE inter false`。
+- 输出选择采用9个独立kernel位置比较、按行三个offset掩码OR、再三行OR，而非9级优先switch；每Bank在当前地址只读一次，overlap copy复用这些Bank返回，不增加第二读口。Top只在q0..3读、Middle只在q3..6读、Bottom只在q6..8读，不让Bottom准备阶段的无用读引入额外存储反馈。q8的Bottom overlap直接转发Bank4/5，不穿过输出选择树。
+- `bottom_end`只在Tile切换时更新。输入握手只比较已寄存的窄`bottom_x`与终点；独立3-bit `bottom_column`维护目标Strip列，不在写使能路径计算`bottom_x-base+1`。坐标9 bit（含416及预取偏移）、Tile7 bit（含104）、Group8 bit（含128）、Line地址10 bit（含512 one-past）、Strip地址8 bit。输入/输出事务循环计数位宽由固定层表最大事务数及one-past推导。
+- 调用准备阶段把G=1/2/.../128译为shift；扫描中的Line地址由移位加Group生成，首行预装使用递增块地址。首行预装改单事务while，1×1改单连续输入事务for，避免多层flatten根据运行时边界生成通用乘法；未将乘法简单绑定到fabric。
+- G=1关键逻辑顺序：最后Bottom输入q4采集并提交，q6首次读取；Top copy在q3采集并提交；换行q6准备列1..4及左Padding，q7准备列5；q8准备下一Tile的Bottom，下一Tile q0只读取Top。提交均位于所属迭代的数据采集之后，真实RAW必须由HLS满足；此为源码依赖排表，不是RTL逐拍验证结论。
+- 仅3×3主循环声明`#pragma HLS DEPENDENCE variable=strip inter RAW distance=2 true`，保留真实RAW而明确其最短迭代距离，绝非`inter false`。证明覆盖所有Bank：G=1时最紧的是Bottom最后新输入q4写→q6首次读，以及换行Top列5 q7写→下一Tile q0全列读取，均相隔2次迭代；Top换行q6写→下一Tile q0为3，同列同行copy/prefetch与Middle/Bottom首次读更远。G>1的相同Group访问间隔不会缩短。此结论依赖固定层表、q事件位置及行读门控；改变它们须重新证明。`distance`用于`inter true`的语义见[AMD UG1399 2022.2](https://www.xilinx.com/support/documents/sw_manuals/xilinx2022_2/ug1399-vitis-hls.pdf)。
+- Line写入对固定物理Bank做UNROLL使能译码：首行4列Bank、Bottom两行×4列Bank。动态值只进入写使能和窄RAM地址，不改变物理结构、写事务总数或每Bank一读一写需求。
+- q4普通预取及换行q6/q7共用每个物理Line Bank的唯一读入口。对固定列Bank b，普通源列为`base+(b==0?8:4+b)`，q6为b，q7仅Bank0读取列4；普通越界及首行未初始化旧Top在读入口屏蔽。目标Top/Middle列c的Line Bank始终是`(c-1)&3`，读返回统一按行角色onehot OR路由，各目标Bank的数据仅赋值一次，再与互斥overlap来源合并。这样避免三个事件各自读RAM、各自路由后再汇合的大选择链；返回与标签时序仍由HLS负责。
+
+存储仍为`line[2][4][512]`及`strip[3][6][256]`，均保持BRAM、latency=1、一读一写；kernel_pos→group顺序、在线Padding、W=13尾Lane及阻塞stream契约不变。
+
+本轮综合对比（Vitis HLS 2022.2，xc7z020-clg400-2）：
+
+| 指标 | 优化前 | 本轮优化后 |
+|---|---:|---:|
+| 3×3主循环II | 2 | 1 |
+| Top HLS估计周期 | 7.508 ns | 7.212 ns |
+| 7.3 ns预算余量 | -0.208 ns | +0.088 ns |
+| BRAM_18K | 52 | 52 |
+| DSP | 13 | 0 |
+| FF | 12733 | 4065 |
+| LUT | 13982 | 13718 |
+
+优化后所有流水循环均II=1、循环约束满足，无WARNING/ERROR；3×3主循环路径约6.51 ns，预算余量约0.79 ns。上述数值来自HLS估计，不是Vivado布局布线后的routed timing；尤其Top仅0.088 ns估计余量，不代表最终硬件时序已收敛。1×1循环II=1只表示连续输入事务，满Tile的平均速率仍为4G输入/G输出，不是持续每拍输出一个Pack。
+
+综合脚本、日志和工程位于源码树外`build/hls/im2row_yolo_optimize/`（项目根目录下）；最终源码的日志为`final_synth.log`，报告位于`project/optimized/syn/report/`。原`/home/liaoyingkai/High_Level_Synthesis/cnn_im2row_test`基线工程未被覆盖。系统G++与Vitis Clang 3.9静态语法检查、差异检查通过；本轮未实现或修改TB，未运行C simulation、RTL co-simulation或功能回归。跨Tile返回、G=1换行、W=13边界、输入气泡/输出反压及连续调用切换仍须功能/RTL验证。
