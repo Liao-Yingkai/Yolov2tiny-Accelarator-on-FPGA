@@ -1,6 +1,6 @@
 # YOLOv2-tiny 重构方案草案
 
-记录日期：2026-11-01。状态：讨论暂存，尚未实施或完成资源、时序验证。
+记录日期：2026-11-01，更新日期：2026-11-02。状态：分模块重构中；Im2Row已独立综合，整条YOLO流水尚未完成实现或验证。
 
 本文作为后续从 MNIST 扩展到 YOLOv2-tiny VOC 的设计输入，整理最近讨论的结论，并区分已确定方向、优先评估方案和待定事项。它不表示当前 HLS 已支持 YOLO，也不直接授权修改所有工程。
 
@@ -40,7 +40,7 @@
 | Activation Pack | 4 个空间位置 × 同一 Cin Group 的 8 个通道，数据 256 bit |
 | Weight Pack | 4 个 Cout Lane × 同一 Cin Group 的 8 个权重，数据 256 bit |
 | Acc / Activation Tile | 4 个空间位置 × 4 个输出通道的结果，分别为 INT32 / INT8 |
-| Cout 缓存块 | 片上同时驻留权重的多个 Cout 计算 Tile，大小尚未冻结 |
+| Cout 缓存块 | 暂定最多32个Cout，即8个计算Tile；不足32的层只加载实际Tile，后续按综合BRAM占用调整 |
 
 `value[spatial_lane][cout_lane]` 的两个维度是空间位置与输出通道，不能当作图像上的 4 行×4 列。Pool 对同一通道的 H/W 邻域比较，不对这个数值矩阵直接做二维池化。
 
@@ -67,7 +67,7 @@ DDR 输入 Feature Map
 - 层间 Feature Map 使用 DDR 两个互不重叠的区域交替读写，不继续用 MNIST 的整层 BRAM FIFO 保存层间结果。
 - 近期继续采用 `m_axi + s_axilite`，模块内部使用 `hls::stream`。外置 AXI DMA、独立 RTL 交付及平台依赖问题暂缓，不以“m_axi 不能导出 RTL”为设计前提。
 
-层内的优先调度方向如下，确切函数接口待缓存容量和 DDR 布局确定后设计：
+层内按最多32个Cout一个缓存块调度；确切函数接口及Feature DDR布局仍待后续模块设计：
 
 ```text
 layer
@@ -86,9 +86,11 @@ layer
 
 Cin Group 之间不清零、不单独输出、不单独执行 Bias/Requant。完整归约结束后，才排空阵列并输出当前结果 Tile。回放期间不读取新 Activation，依靠 stream 反压，不新增 pause/stop 接口。
 
-## 4. BRAM 预算先于 Cout 缓存数量
+## 4. 暂定32个Cout缓存及BRAM预算
 
-不冻结缓存 8、16 或其他固定数量的 Cout。计算并行度固定为 4，但缓存数量由实际 BRAM 预算决定，可以按层选择不同数量。
+当前实现目标暂定同时驻留最多32个Cout，即8个4-Cout计算Tile。PE计算并行度仍为4，不扩展成32列阵列。后续依据整条流水综合后的BRAM占用再调整驻留数量；这不是已验证可装入目标器件的资源结论。
+
+每个缓存块从全局Cout Tile编号开始，加载`min(8, 总Cout Tile数-起始Tile号)`个连续Tile。Conv1只有16个Cout，只加载4个Tile，不为填满缓存而额外导出16个通道。Prediction导出至128个物理Cout，其中最后3个Lane无效；最后一个32-Cout块有29个逻辑有效通道。
 
 定义：
 
@@ -97,8 +99,14 @@ Cin Groups = ceil(Cin / 8)
 K Tokens   = Kh × Kw × Cin Groups
 
 单个 4-Cout 权重块的数据容量 = K Tokens × 32 Byte
+32-Cout 权重缓存最大容量 = 8 × 1152 × 32 Byte = 288 KiB
 单个 Spatial Tile 的 Activation Replay = K Tokens × 32 Byte
+Activation Replay最大数据容量 = 1152 × 32 Byte = 36 KiB
 ```
+
+权重优先按4个64-bit Cout Lane Bank组织，local_cout_tile与token进入深度地址：`local_cout_tile*K Tokens+token`，最大深度9216。不要将8个local_cout_tile维完全分区为8套浅RAM，也不默认增加权重双缓冲。288 KiB是有效数据容量，实际BRAM占用须计入宽深配置和端口带来的碎片。
+
+当前Im2Row独立综合占52个BRAM_18K；该存储与Activation Replay、Pool、Writer、AXI等必须一起预算，不能只评估Weight Buffer。
 
 缓存越多 Cout，通常能减少 Feature DDR 重读和 Im2Row 重启次数，但不能先把 BRAM 全部分给权重。预算必须同时覆盖：
 
@@ -108,11 +116,11 @@ K Tokens   = Kh × Kw × Cin Groups
 - 必要的 Formatter / Burst 缓冲、FIFO 和 AXI 适配器内部存储；
 - Bank、端口及宽深配置带来的 BRAM 碎片和实现余量。
 
-权重缓存应只有一个明确的所有者，不在 Loader 和 Systolic 中重复保存同一份完整缓存块。参数在缓存块有效期间驻留并复用，不随每个 Spatial Tile 重读 DDR。
+权重缓存由Systolic唯一拥有，Loader只按顺序读DDR并输出weight_stream，不重复保存同一份完整缓存块。参数在缓存块有效期间驻留并复用，不随每个 Spatial Tile 重读 DDR。覆盖权重前须完成旧缓存块的所有使用，第一版不做跨缓存块预取重叠。
 
 数组容量应按支持层中实际最大的工作集确定，不能机械地把最大 W 与最大 Cin 相乘。缓存层数、单双缓冲、Bank 组织和各层可驻留 Cout 数量均须先核算，再决定是否增加预取重叠。
 
-## 5. DDR 布局与 PyTorch 导出：仍待冻结
+## 5. DDR Feature布局待定，权重导出格式已约定
 
 必须分清三个顺序：DDR 物理布局、stream 事务顺序、PE 归约顺序。不能因 DDR 布局变化而把一个输出的 Cin Group 拆成多次独立归约。
 
@@ -133,18 +141,20 @@ Feature 的 DDR 物理布局尚未确定：
 
 确定布局时，要一起写清 Loader 的连续读取块、重排存储量、Writer 的输出粒度、尾通道 Padding、行/块对齐和地址公式。两个 DDR Feature 区域容量按所有实际保存 Tensor 的物理大小取上限，包含输入和存储对齐，不能直接固定为约 0.7 MB。
 
-权重逻辑仍对应 `W[k][cout]`，其中 `k=((kh*Kw)+kw)*Cin+cin`。Exporter 可离线打包成硬件消费顺序，暂按下列方向评估：
+权重逻辑仍对应 `W[k][cout]`，其中 `k=((kh*Kw)+kw)*Cin+cin`。逻辑NPY保留`[Kh*Kw*Cin,Cout]`，物理BIN采用如下独立于缓存块容量的布局：
 
 ```text
-cout_cache_block → local_cout_tile → kh → kw → cin_group
+global_cout_tile → kh → kw → cin_group
     → cout_lane → cin_lane
 ```
 
-是否包含物理尾部字节、与缓存块大小是否绑定、各层参数偏移均待 ABI 冻结后同步到 exporter、loader、testbench 和 PS。不能通过只改一侧解决布局问题。
+物理Shape为`[ceil(Cout/4),Kh*Kw*ceil(Cin/8),4,8]`，每个事务32字节。Exporter将Cin/Cout物理尾部权重置零，Loader不重新插入通道或按旧紧凑Cin布局消费字节。Systolic仍自行屏蔽逻辑无效Cin，不能只依赖文件补零；当前MNIST版本的这项保护位于Systolic，不在Loader。
+
+32-Cout缓存块只是文件中最多8个连续Cout Tile的读取范围；调整缓存数量不应改变BIN布局。精确导出索引、二进制文件、参数排列和metadata由PyTorch工程的`YOLOV2_TINY/README.md`维护，后续由负责Exporter的agent同步实现，HLS侧不另维护一份导出规格。Loader、TB和PS后续必须遵循同一版本。Feature DDR布局仍未冻结。
 
 ## 6. Im2Row：多 Group 的 BRAM 窗口方案
 
-详细接口、BRAM组织、候选预取调度和待确认要求见[YOLOv2-tiny Im2Row设计](im2row.md)。2026-11-02已明确Im2Row只支持本YOLO层表，采用扩展后的ConvGeometry结构配置，不保留旧二层bool接口的设计要求；源码尚未实施。
+详细接口、BRAM组织、调度和验证边界见[YOLOv2-tiny Im2Row设计](im2row.md)。2026-11-02已实现本YOLO层表及ConvGeometry接口，独立HLS综合达到II=1；功能仿真、RTL反压及与其他模块的集成尚未验证。不保留旧二层bool接口。
 
 ### 6.1 输出顺序和边界
 
@@ -162,7 +172,7 @@ kh → kw → cin_group
 - Cin 尾组按 `group*8+lane<Cin` 判定，不能继续用 MNIST 的层模式特判。
 - Padding 不使输出空间 Lane 无效；不存在的空间 Lane 则 `spatial_valid=0`。
 
-### 6.2 优先评估：保留空间结构，将 Group 存入 BRAM 深度
+### 6.2 已实现的存储方向：保留空间结构，将 Group 存入 BRAM 深度
 
 保留两行循环 Line Buffer、双 Strip 及窗口重叠关系。每个 Word 为 64 bit，不使用一次容纳全部 Cin 的超宽 Word。
 
@@ -172,17 +182,17 @@ Strip 的逻辑内容为：
 [ping_pong][3行][P+2列][cin_group]
 ```
 
-不同 Group 使用不同存储地址。空间维根据并行访问做 Banking；Group 维保留为 RAM 深度，不 complete partition 成全部 FF。Ping-Pong 的物理分 Bank 或合并地址方式待端口排表确定。
+不同 Group 使用不同存储地址。空间维根据并行访问做 Banking；Group 维保留为 RAM 深度，不 complete partition 成全部 FF。当前Ping-Pong已合并到每个Strip Bank的深度地址，采用18个64-bit、一读一写BRAM Bank。
 
 这解决的是“保存全部待复用 Group，但不全部展开为寄存器”。不是只保存一个 Group、覆盖后再从已失效的 Line Buffer 找回旧值。
 
 Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先进入仍需要它的 Strip，之后才能用下一输入行覆盖对应地址。当前输出使用当前 Strip，下一 Strip 在另一 Ping-Pong 区域准备；重叠列也按 Group 保留或复制。
 
-3×3的kernel位置q仍为0～8，每个q内遍历G个Group；若使用扁平Token，则范围是0～9G-1。复制/预取必须覆盖全部Group，不能只在扁平token等于3/6/7/8时各做一次。实施前须明确BRAM延迟、端口与反压；操作重叠不一定冲突，一读一写Bank和已读Word转发可能支持原来的连续输出目标。
+3×3的kernel位置q仍为0～8，每个q内遍历G个Group；若使用扁平Token，则范围是0～9G-1。复制/预取覆盖全部Group，不能只在扁平token等于3/6/7/8时各做一次。当前采用一拍BRAM读延迟、逐Bank统一写入口与已读Word转发达到独立综合II=1；反压和数据正确性仍待仿真。
 
-1×1优先评估缓存前三个位置、在第四个位置的各Group到来时直接组合输出，避免先收齐4G个输入再独立输出G个Token。单路64-bit输入下的收集时间不等于PE必然空闲，须结合Systolic Replay调度分析。
+1×1已采用缓存前三个位置、在第四个位置的各Group到来时直接组合输出，避免先收齐4G个输入再独立输出G个Token。单路64-bit输入下的收集时间不等于PE必然空闲，须结合Systolic Replay调度分析。
 
-本方案为优先评估方向，尚未证明 BRAM容量、端口和目标 II 均满足；若需改变两行/Strip结构，应先说明取舍，不自行替换架构。
+该存储方向已在独立Im2Row综合中实现并达到II=1，但不代表整条流水的BRAM预算或功能已通过；后续改变两行/Strip结构仍须先说明取舍，不自行替换架构。
 
 ## 7. Systolic 与 PostProcess
 
@@ -193,24 +203,53 @@ Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先�
 - 保留错拍、Valid 传播、初始化和排空机制。`K+6`仅为4×4阵列的逻辑步数模型，不等于实测 Tile 间隔。
 - 分开处理传播 Token Valid、Spatial Valid、Cout尾部有效性和Cin尾组有效性。
 - Prediction 的125通道最后一个4-Cout Tile只有一个有效通道；若按8通道打包，最后一组则有5个有效通道，不能混淆两种尾部。
-- 不把逻辑 Cin 有效性依赖于上游恰好填零；具体屏蔽位置在接口设计时明确。
+- Systolic入口按`group*8+cin_lane<Cin`屏蔽无效权重通道；即使物理BIN已补零，也保留模块自身的逻辑Cin保护。Loader只恢复文件字节，不承担补零或二次重排。
 
-### 7.2 PostProcess 数值方向
+### 7.2 一次性PostProcess与QAT边界调整
 
-当前 YOLO QAT 在 Conv 输出和 LeakyReLU 输出各有一次独立 FakeQuant。优先保持现有 QAT 结构，在一个 PostProcess 模块中明确表达两个数值边界：
+已决定取消Conv1～Conv8卷积输出、激活之前的activation FakeQuant。PyTorch后续需改为：
 
 ```text
-Accumulator + Bias
-    → Conv 输出 Requant、舍入、INT8 饱和
-    → LeakyReLU 与激活输出 Requant
-    → 舍入、INT8 饱和
+输入FakeQuant
+    → Conv（保留per-output-channel weight FakeQuant，BN提前折叠）
+    → LeakyReLU(alpha=0.1)
+    → 输出activation FakeQuant
 ```
 
-第二阶段可由 exporter 生成正负分支 multiplier/shift，分别表示 `scale_conv/scale_activation` 与 `0.1*scale_conv/scale_activation`，不需要硬件浮点反量化。
+Conv1～Conv8只在LeakyReLU之后形成INT8输出边界；Pool不增加量化边界，沿用输入scale。Prediction没有激活函数，保留预测卷积输出的activation FakeQuant。不能将Conv的整个qconfig设为None而丢失权重FakeQuant，也不能让容器或Identity额外插入中间activation FakeQuant。
 
-这是暂定数值基线，不是已经冻结的全部整数算法。两次边界的舍入、负数右移、饱和、bias 范围和参数格式，必须先由 YOLO exporter / Golden Model 确定。不能未经证明直接合并乘数并消掉中间舍入、饱和，也不能直接声称 MNIST 的截断规则等于当前 YOLO QAT。
+这是对QAT结构的主动修改，不是仅将旧模型的两个scale代数合并。旧QAT的中间舍入/饱和不可逆，新方案不能宣称逐位等价；需用新结构重新QAT微调并验证精度。保留FP32 checkpoint初始化路径，旧双边界QAT checkpoint不能静默当成新方案使用。
 
-逻辑上保留两阶段，不等于必须实现两套完全并行乘法器；物理复用按吞吐和综合结果决定。Prediction 不执行 LeakyReLU，输出原始预测量的量化表示，供后续检测处理使用。
+HLS MAC与PostProcess仍分离。令`a=accumulator+bias`，每个输出通道仅导出一组`M, S`，沿用MNIST的INT32 bias及Q31/frexp multiplier、总右移shift表示：
+
+```text
+r[c] = input_scale * weight_scale[c] / output_scale
+r[c] ≈ M[c] / 2^S[c]
+```
+
+其中output_scale直接取LeakyReLU后的FakeQuant，Prediction则取其卷积输出FakeQuant；不再保留中间scale_conv或第二组scale换算参数。
+
+alpha不进入DDR参数，由HLS使用相同frexp/Q31方式生成的固定整数常量表示：`ALPHA_MULTIPLIER=1717986918`、`ALPHA_SHIFT=34`，近似0.1。为统一后续实现与整数Golden，加载参数时派生：
+
+```text
+M_positive = M
+M_negative = (INT64(M) * ALPHA_MULTIPLIER + 2^33) >> 34
+```
+
+上述非负系数派生采用最近值、half-up；它是每通道参数准备，不是对逐元素requant乘积加rounding offset。负分支继续使用同一个S，不再做frexp归一化，也不从文件读取另一组系数。常量乘法及系数缓存的资源仍需后续综合确认。
+
+每个有效结果只执行一次requant：
+
+```text
+M_selected = LeakyReLU启用且a<0 ? M_negative : M_positive
+product = INT64(a) * INT64(M_selected)
+scaled = product arithmetic-right-shift S
+output = signed INT8 clamp(scaled, -128, 127)
+```
+
+逐元素右移沿用当前整数硬件的直接截断，不加rounding offset，负值按算术右移向负无穷取整。中途不先将a截成INT8，不先对负INT8乘alpha再截断；bias相加须满足INT32范围契约，乘法保留INT64。Prediction禁用LeakyReLU，所有符号都使用M_positive，不执行ReLU或十分类Softmax。
+
+整数Golden必须使用相同的alpha常量、负系数派生及最终截断规则。其与PyTorch FakeQuant最近偶数舍入、FP32 bias和系数近似之间的差异需单独评估，不能宣称调整后QAT与整数推理天然逐位一致。无效spatial/Cout Lane不参与bias与requant，结果为零。
 
 ## 8. Pool：原值行缓存与边界暂存
 
@@ -262,17 +301,17 @@ Accumulator + Bias
 | 待定事项 | 需要形成的结论 |
 |---|---|
 | 片上存储预算 | 各 Buffer容量、Bank及端口组织、实际BRAM余量 |
-| Cout驻留数量 | 每层缓存块大小、尾块处理、是否需要Activation Replay |
+| Cout驻留数量 | 暂定最多32通道，BRAM综合后复核；按实际Tile数处理小层/尾块，配置Activation Replay |
 | Feature DDR布局 | Loader与Writer共同使用的地址公式、Burst和局部重排需求 |
-| 导出ABI | 权重/参数/Feature物理排列、位序、尾通道与对齐规则 |
+| 导出ABI | 详细权重/参数/BIN约定由PyTorch工程文档维护；HLS及调用方后续同步，Feature DDR布局仍待确定 |
 | Im2Row多Group调度 | Strip BRAM访问表、Line Buffer覆盖时刻、启动及行尾处理 |
 | 1×1路径 | 四空间位置收集、Group读取与无Padding路径 |
-| YOLO整数数值 | 两次量化边界、LeakyReLU、舍入及饱和Golden |
+| YOLO整数数值 | 已决定移除激活前FakeQuant、采用一次性PostProcess；固定alpha常量及负分支系数派生，需新QAT微调、整数Golden及误差验证 |
 | Pool输出契约 | 当前Cout块结果的顺序、延迟输出、8通道组装位置 |
-| 调用配置 | 已确定采用ConvGeometry；仍需补齐YOLO字段、派生值校验及调用方迁移 |
+| 调用配置 | 已在同一ConvGeometry九层表补齐Pool/Bypass、输出、激活及32-Cout缓存字段并编译期校验；本次仅静态检查，字段消费者及调用方仍待迁移 |
 | 性能目标 | 目标分辨率、频率、fps及有效DDR带宽预算 |
 
-没有完成这些结论前，不把缓存8/16个Cout、Blocked8布局、全部FIFO固定depth=2或某个II视为已冻结条件。
+缓存数量当前暂定32个Cout，仍受后续综合预算约束；不据此冻结Feature Blocked8布局、全部FIFO depth=2或整条流水II。
 
 先前约2.84 fps仅是416输入、100 MHz、II=1、每Tile按K+6推进并含行尾空Lane的估算，不是综合或板测结论，也不是设计目标。性能评估须同时计入DDR重读、Im2Row预装、权重加载和流水停顿，不能只凭读取字节数认定某层必然受带宽限制。
 
@@ -289,4 +328,4 @@ Accumulator + Bias
 
 每个模块建立stream读写数量守恒；按获准阶段分别进行静态检查、C-sim、综合和co-sim。综合检查BRAM实际映射、端口冲突、归约II、阵列实例数；co-sim检查反压、FIFO深度、边界排空和层切换。不能把语法通过当成功能、资源或时序已经验证。
 
-本次仅新增本文，未修改源码、导出程序或工程，也未运行仿真、综合。
+本次更新设计文档，不修改HLS源码、PyTorch程序或工程，不运行仿真或综合。上述Im2Row结果引用前一轮已完成的独立综合。
