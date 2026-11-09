@@ -86,6 +86,13 @@ void clear_accumulator(
 using spatial_mask_t = ap_uint<SYSTOLIC_SPATIAL_PAR>;
 using cout_mask_t = ap_uint<SYSTOLIC_COUT_PAR>;
 using yolo_weight_address_t = ap_uint<YOLO_TINY_WEIGHT_ADDRESS_BITS>;
+// 9216 个逻辑地址拆成 8192 + 1024：两个推断 RAM 分别看见自己的实际深度。
+// 主段深度为 2 的幂，最高位选段；两段的段内地址都直接取低位。
+constexpr int WEIGHT_MAIN_ADDRESS_BITS = config_log2(YOLO_TINY_WEIGHT_BUFFER_DEPTH);
+constexpr int WEIGHT_MAIN_DEPTH = 1 << WEIGHT_MAIN_ADDRESS_BITS;
+constexpr int WEIGHT_TAIL_DEPTH = YOLO_TINY_WEIGHT_BUFFER_DEPTH - WEIGHT_MAIN_DEPTH;
+static_assert(WEIGHT_TAIL_DEPTH > 0, "Split weight storage requires a nonempty tail");
+constexpr int WEIGHT_TAIL_ADDRESS_BITS = bits_for_max(WEIGHT_TAIL_DEPTH - 1);
 using yolo_step_t = ap_uint<bits_for_max(YOLO_TINY_ACTIVATION_REPLAY_CAPACITY +
                                         SYSTOLIC_WAVEFRONT_DRAIN_STEPS)>;
 
@@ -166,10 +173,14 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
     const int last_global_tile_local = geometry.cout_tiles - 1 - first_cout_tile;
     const bool replay_needed = block_cout_tiles > 1;
 
-    // 只分区 lane 维：每拍四个 64-bit 字，local_cout_tile 和 token 共享深度。
-    packed_weight_lane_t weight_bank[SYSTOLIC_COUT_PAR][YOLO_TINY_WEIGHT_BUFFER_DEPTH];
-#pragma HLS ARRAY_PARTITION variable=weight_bank complete dim=1
-#pragma HLS BIND_STORAGE variable=weight_bank type=ram_1p impl=bram
+    // 按 Cout lane 分成四路，每路各有主段与尾段。两段合起来仍只保存一份权重，
+    // local_cout_tile 和 token 共用原逻辑地址；分段不改变每步的 256-bit 供数。
+    packed_weight_lane_t weight_main[SYSTOLIC_COUT_PAR][WEIGHT_MAIN_DEPTH];
+    packed_weight_lane_t weight_tail[SYSTOLIC_COUT_PAR][WEIGHT_TAIL_DEPTH];
+#pragma HLS ARRAY_PARTITION variable=weight_main complete dim=1
+#pragma HLS ARRAY_PARTITION variable=weight_tail complete dim=1
+#pragma HLS BIND_STORAGE variable=weight_main type=ram_1p impl=bram
+#pragma HLS BIND_STORAGE variable=weight_tail type=ram_1p impl=bram
     packed_activation_lane_t activation_bank[SYSTOLIC_SPATIAL_PAR][YOLO_TINY_ACTIVATION_REPLAY_CAPACITY];
 #pragma HLS ARRAY_PARTITION variable=activation_bank complete dim=1
 #pragma HLS BIND_STORAGE variable=activation_bank type=ram_1p impl=bram
@@ -179,9 +190,17 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
     for (yolo_weight_address_t address = 0; address < weight_packs; ++address) {
 #pragma HLS PIPELINE II=1
         const weight_pack_t weight = weight_stream.read();
+        const bool tail_segment = address[WEIGHT_MAIN_ADDRESS_BITS];
+        const unsigned main_index = address.range(WEIGHT_MAIN_ADDRESS_BITS - 1, 0).to_uint();
+        const unsigned tail_index = address.range(WEIGHT_TAIL_ADDRESS_BITS - 1, 0).to_uint();
         for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
 #pragma HLS UNROLL
-            weight_bank[j][address.to_uint()] = pack_weight_lane(weight.lane[j]);
+            const packed_weight_lane_t word = pack_weight_lane(weight.lane[j]);
+            if (tail_segment) {
+                weight_tail[j][tail_index] = word;
+            } else {
+                weight_main[j][main_index] = word;
+            }
         }
     }
 
@@ -243,9 +262,14 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
                         }
                     }
                     const yolo_weight_address_t weight_address = weight_base + step;
+                    const bool tail_segment = weight_address[WEIGHT_MAIN_ADDRESS_BITS];
+                    const unsigned main_index = weight_address.range(WEIGHT_MAIN_ADDRESS_BITS - 1, 0).to_uint();
+                    const unsigned tail_index = weight_address.range(WEIGHT_TAIL_ADDRESS_BITS - 1, 0).to_uint();
                     for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
 #pragma HLS UNROLL
-                        weight_in[j].weight = unpack_weight_lane(weight_bank[j][weight_address.to_uint()]);
+                        const packed_weight_lane_t word = tail_segment
+                            ? weight_tail[j][tail_index] : weight_main[j][main_index];
+                        weight_in[j].weight = unpack_weight_lane(word);
                         weight_in[j].valid = cout_valid[j];  // 随权重错拍和传播；Cin 补零由 BIN 保证。
                     }
                 } else {

@@ -104,7 +104,7 @@ K Tokens   = Kh × Kw × Cin Groups
 Activation Replay最大数据容量 = 1152 × 32 Byte = 36 KiB
 ```
 
-权重优先按4个64-bit Cout Lane Bank组织，local_cout_tile与token进入深度地址：`local_cout_tile*K Tokens+token`，最大深度9216。不要将8个local_cout_tile维完全分区为8套浅RAM，也不默认增加权重双缓冲。288 KiB是有效数据容量，实际BRAM占用须计入宽深配置和端口带来的碎片。
+权重按4个64-bit Cout Lane Bank组织，逻辑地址为`local_cout_tile*K Tokens+token`，最大深度9216。每路显式拆为8192主段和1024尾段，以避免单个9216深度RAM在旧综合中映射过粗；拆分后的实际资源仍待复核。不要将8个local_cout_tile维完全分区为8套浅RAM，也不默认增加权重双缓冲。288 KiB是有效数据容量，实际BRAM占用须计入宽深配置和端口带来的碎片。
 
 当前Im2Row独立综合占52个BRAM_18K；该存储与Activation Replay、Pool、Writer、AXI等必须一起预算，不能只评估Weight Buffer。
 

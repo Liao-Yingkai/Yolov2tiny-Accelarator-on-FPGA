@@ -47,9 +47,17 @@ DDR 起始字节地址 = layer_weight_base + first_cout_tile * R * 32
 本地权重地址     = local_cout_tile * R + token
 ```
 
-- **Weight Buffer**：Systolic 独占一份缓存，按 4 个 64-bit Cout Lane Bank 组织，每 Bank 最大深度 `8*1152=9216`。计算时四 Bank 各读一字，合计提供 256 bit/步。首版整块预加载后才计算，写入与读取分阶段，优先验证单口 BRAM 映射；逻辑载荷 288 KiB。Loader 不另留一份完整块缓存。
+- **Weight Buffer**：Systolic 独占一份缓存，按 4 个 64-bit Cout Lane Bank 组织，每路逻辑深度 `8*1152=9216`，实现为 `8192` 主段和 `1024` 尾段两个单口 BRAM。计算时每路取同一逻辑地址的一字，合计提供 256 bit/步。首版整块预加载后才计算，写入与读取分阶段；逻辑载荷仍为 288 KiB。Loader 不另留一份完整块缓存。
 - **Activation Replay**：4 个 64-bit Spatial Lane Bank，每 Bank 最大深度 1152，逻辑载荷 36 KiB。只缓存一个 Spatial Tile，不保存完整 Feature Map。`spatial_valid` 从该 Tile 首 token 取出、单独保存。`B=1` 可跳过 Replay 写入，但支持多 Tile 的同一份硬件仍需预留该缓存。
 - 深度使用 `config.h` 的 YOLO 派生容量，地址递增不要求内循环每步乘法；不将本地 8 个 Cout Tile 展开成 8 套 RAM 或 PE。实际 BRAM 数量、读延迟、地址对齐和 `II=1` 需综合确认，逻辑载荷不等于器件占用。
+
+### 权重 Bank 分段与 BRAM 预算
+
+旧实现每路只有一个 `9216×64` 数组。Vitis HLS 估算每路需要 64 个 BRAM18K；旧 Vivado 2022.2 checkpoint 中，每路确实有 32 个 `RAMB36E1`，均以 A 口 2-bit 读写、B 口不用，即横向拼成 `16384×64` 的资源容量。逻辑数组仍只访问 9216 个地址，余下深度是映射碎片，不是多缓存了一份权重。四个权重 Bank 共占 128 个 RAMB36；加上四个 Replay Bank 原本需要 16 个，超出器件的 140 个。因此旧 Vivado 综合把一个 Replay Bank 自动转为 LUTRAM，最终报告 140 个 RAMB36 加 1152 个分布式 RAM LUT。
+
+当前实现保留逻辑地址 `0…9215`，用地址 bit 13 选择存储段：`0…8191` 取低 13 位访问主段；`8192…9215` 取低 10 位访问尾段 `0…1023`。装载和回放使用同一映射。分段与 `local_cout_tile` 边界无关，跨段不增加 token、跳过地址或改变顺序。
+
+按每路 `8192×64` 约 16 个 RAMB36、`1024×64` 约 2 个 RAMB36 估算，四路权重目标约 **72 个 RAMB36**。Replay 源码保持不变；若四路 Replay 都回到 BRAM，Systolic 目标约 **88 个 RAMB36 等效容量**。以上是设计预算，拆分后只做了静态检查，尚未重新综合。复核时需确认主/尾段实际映射、Replay 不落 LUTRAM、跨段读返回对齐以及归约 II/时序。
 
 ### Valid 与结果交付
 
