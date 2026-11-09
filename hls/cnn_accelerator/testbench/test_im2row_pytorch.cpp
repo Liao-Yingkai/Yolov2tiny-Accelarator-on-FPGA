@@ -1,193 +1,239 @@
 #include "../src/im2row/im2row.h"
 
-// 临时使用绝对路径读取 PyTorch dump_trace.py 生成的单图 golden trace。
-// 后续系统集成时可改为由构建脚本传入的相对 include 路径。
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0000.h"
-
 #include <cerrno>
-#include <sys/stat.h>
-
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
+#include <sys/stat.h>
 
 /*
- * Im2Row 的 PyTorch 对照 testbench。
- *
- * dump_trace.py 把 PyTorch/NumPy golden model 的 unfold 矩阵按 row-major
- * 导出：Conv1 为 [784][9]，Conv2 为 [196][72]。本 TB 不重排 DUT 输出：
- * 直接按 Im2Row stream 的 row -> tile_x -> token -> lane -> physical channel
- * 顺序恢复逻辑 (y,x,kh,kw,c)，并索引对应 unfold 元素。
- *
- * Conv1 输入来自 trace_input_int8_hwc；其 physical c1..c7 特意填入非零值，
- * 用于确认 Im2Row 只保留逻辑 c0。Conv2 输入直接来自 pool1 trace，因为它
- * 是 Conv2 的实际上游 NHWC 输出。每层只调用一次 im2row，不与其他 HLS DUT
- * 串接，因此可作为独立 C-sim / co-sim top 使用。
+ * YOLOv2-tiny 真实整数 golden 对照；不是浮点/QAT 中间激活。
+ * 输入 y,x,group，每包8通道；输出 y,tile_x,kh,kw,group，每包4×8。
+ * 输入 BIN 是紧凑 HWC：((y*W+x)*Cin+c)，尾通道由 TB 补零。
+ * packed golden 为 [H,ceil(W/4),K*K*G,4,8]，沿 stream 顺序每次读32字节；
+ * 第二参考 unfold 为 [H*W,K*K*Cin]，按逻辑坐标独立索引，不复刻缓存调度。
+ * 输入/输出事务分别由 H*W*G、H*ceil(W/4)*K*K*G 推导。
+ * CSV 每包一行；expected_lN_cM 来自 packed BIN，reference_match 表示其全部
+ * 32个元素与 unfold 一致，actual_lN_cM 是 DUT 的 signed INT8；match 包含
+ * 数据、参考一致性及 valid 检查。C-sim 无法验证 RTL 的反压与吞吐行为。
  */
 namespace {
+constexpr int PACK_ELEMENTS = IM2ROW_P * FEATURE_PACK_CHANNELS;
+const char* sample_suffix = "0000";
+const std::string trace_directory =
+    "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/trace/";
 
 bool make_directory(const char* path) {
-    return mkdir(path, 0777) == 0 || errno == EEXIST;
+    if (mkdir(path, 0777) == 0) return true;
+    struct stat info;
+    return errno == EEXIST && stat(path, &info) == 0 && S_ISDIR(info.st_mode);
 }
 
-bool open_csv(std::ofstream& file, const std::string& path,
-              const char* header) {
-    file.open(path);
-    if (!file) {
-        std::cerr << "无法打开 CSV: " << path << std::endl;
+bool open_binary(std::ifstream& file, const std::string& path, std::size_t bytes) {
+    file.open(path.c_str(), std::ios::binary | std::ios::ate);
+    if (!file || file.tellg() != static_cast<std::streamoff>(bytes)) {
+        std::cerr << "BIN不存在或字节长度错误: " << path << '\n';
         return false;
     }
-    file << header << '\n';
+    file.seekg(0);
+    return bool(file);
+}
+
+bool read_binary(const std::string& path, std::size_t bytes,
+                 std::vector<int8_t>& data) {
+    std::ifstream file;
+    if (!open_binary(file, path, bytes)) return false;
+    data.resize(bytes);
+    if (!file.read(reinterpret_cast<char*>(data.data()), bytes)) {
+        std::cerr << "BIN读取失败: " << path << '\n';
+        return false;
+    }
     return true;
 }
 
-int input_value(bool conv2, int y, int x, int channel) {
-    if (!conv2) {
-        // Conv1 实际只有 c0；非逻辑 physical channel 用 poison 验证规范化。
-        return channel == 0 ? trace_input_int8_hwc[y * CNN_CONV1_W + x]
-                            : 71 + channel;
-    }
-    return trace_pool1_int8_nhwc[(y * CNN_CONV2_W + x) * CNN_CONV2_CIN +
-                                 channel];
+// 只输出前10条完整坐标；错误总数始终累计，不依赖 assert。
+void report(int errors, const char* name, const char* kind, int y, int tile,
+            int kh, int kw, int group, int lane, int channel, int expected, int actual) {
+    if (errors <= 10)
+        std::cerr << name << ' ' << kind << " y=" << y << " tile_x=" << tile
+                  << " kh=" << kh << " kw=" << kw << " group=" << group
+                  << " lane=" << lane << " channel=" << channel
+                  << " expected=" << expected << " actual=" << actual << '\n';
 }
 
-int unfold_value(bool conv2, int spatial, int token, int channel) {
-    if (!conv2) {
-        return channel == 0 ? trace_conv1_unfold_int8[
-                                  spatial * SYSTOLIC_KERNEL_TOKENS + token]
-                            : 0;
+// 返回 false 只表示文件/目录等基础设施错误，main 必须立即失败退出。
+bool run_layer(const ConvGeometry& g, const char* name, const char* source,
+               const char* csv_name, const std::string& directory,
+               hls::stream<channel_pack_t>& input,
+               hls::stream<activation_pack_t>& output, int& total_errors) {
+    if (!input.empty() || !output.empty()) {
+        std::cerr << "调用开始时stream非空: " << csv_name << '\n';
+        return false;
     }
-    return trace_conv2_unfold_int8[
-        spatial * (SYSTOLIC_KERNEL_TOKENS * CNN_CONV2_CIN) +
-        token * CNN_CONV2_CIN + channel];
-}
+    const int groups = (g.cin + FEATURE_PACK_CHANNELS - 1) / FEATURE_PACK_CHANNELS;
+    const int tiles = (g.w + IM2ROW_P - 1) / IM2ROW_P;
+    const int expected_inputs = g.h * g.w * groups;
+    const int expected_outputs = g.h * tiles * g.kernel * g.kernel * groups;
+    const std::size_t input_bytes = std::size_t(g.h) * g.w * g.cin;
+    const std::size_t unfold_bytes = input_bytes * g.kernel * g.kernel;
+    std::vector<int8_t> image, unfold;
+    std::ifstream packed;
+    if (!read_binary(trace_directory + "trace_" + source + "_" + sample_suffix + ".bin", input_bytes, image) ||
+        !read_binary(trace_directory + "trace_" + name + "_unfold_int8_" + sample_suffix + ".bin", unfold_bytes, unfold) ||
+        !open_binary(packed, trace_directory + "trace_" + name + "_im2row_int8_" + sample_suffix + ".bin",
+                     std::size_t(expected_outputs) * PACK_ELEMENTS)) return false;
 
-int run_layer(layer_mode_t layer_mode, hls::stream<pixel_t>& input_stream,
-              hls::stream<activation_pack_t>& output_stream,
-              const char* name, const std::string& directory) {
-    const bool conv2 = (layer_mode == LAYER2_MODE);
-    const int H = conv2 ? CNN_CONV2_H : CNN_CONV1_H;
-    const int W = conv2 ? CNN_CONV2_W : CNN_CONV1_W;
-    const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
-    const int expected_inputs = H * W;
-    const int expected_outputs = H * tiles_per_row * SYSTOLIC_KERNEL_TOKENS;
-    const std::string prefix = directory + "/" + name;
-    std::ofstream input_csv, output_csv;
-    if (!open_csv(input_csv, prefix + "_input.csv",
-                  "y,x,physical_channel,value") ||
-        !open_csv(output_csv, prefix + "_output.csv",
-                  "transaction,y,tile_x,token,kh,kw,lane,physical_channel,"
-                  "expected_valid,actual_valid,expected,actual,match")) {
-        return 1;
+    const std::string prefix = directory + "/" + csv_name;
+    std::ofstream input_csv((prefix + "_input.csv").c_str());
+    std::ofstream output_csv((prefix + "_output.csv").c_str());
+    if (!input_csv || !output_csv) {
+        std::cerr << "CSV打开失败: " << prefix << '\n';
+        return false;
     }
+    input_csv << "transaction,y,x,group";
+    for (int c = 0; c < FEATURE_PACK_CHANNELS; ++c) input_csv << ",c" << c;
+    input_csv << '\n';
+    output_csv << "transaction,y,tile_x,kh,kw,group,expected_valid,actual_valid";
+    for (int kind = 0; kind < 2; ++kind)
+        for (int lane = 0; lane < IM2ROW_P; ++lane)
+            for (int c = 0; c < FEATURE_PACK_CHANNELS; ++c)
+                output_csv << ',' << (kind == 0 ? "expected" : "actual")
+                           << "_l" << lane << "_c" << c;
+    output_csv << ",reference_match,match\n";
 
-    int inputs_written = 0;
-    for (int y = 0; y < H; ++y) {
-        for (int x = 0; x < W; ++x) {
-            pixel_t pixel;
-            for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
-                const int value = input_value(conv2, y, x, channel);
-                pixel.channel[channel] = value;
-                input_csv << y << ',' << x << ',' << channel << ',' << value
-                          << '\n';
-            }
-            input_stream.write(pixel);
-            ++inputs_written;
-        }
-    }
-
-    im2row(input_stream, output_stream, layer_mode);
-
-    int errors = 0;
-    int comparisons = 0;
-    int outputs_read = 0;
-    for (int y = 0; y < H; ++y) {
-        for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-            const int expected_valid = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
-                ? CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
-            for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS; ++token) {
-                const activation_pack_t actual = output_stream.read();
-                const int actual_valid = actual.spatial_valid.to_uint();
-                if (actual_valid != expected_valid) {
-                    ++errors;
-                    if (errors <= 10) {
-                        std::cerr << name << " valid错误: y=" << y
-                                  << " tile=" << tile_x << " token=" << token
-                                  << " 期望=" << expected_valid
-                                  << " 实际=" << actual_valid << std::endl;
-                    }
+    int errors = 0, written = 0, read = 0;
+    std::size_t comparisons = 0;
+    // 每层直接取真实上游 trace，绝不把未迁移的其它 HLS 模块串接进来。
+    for (int y = 0; y < g.h; ++y)
+        for (int x = 0; x < g.w; ++x)
+            for (int group = 0; group < groups; ++group) {
+                channel_pack_t pack;
+                input_csv << written << ',' << y << ',' << x << ',' << group;
+                for (int cl = 0; cl < FEATURE_PACK_CHANNELS; ++cl) {
+                    const int c = group * FEATURE_PACK_CHANNELS + cl;
+                    const int value = c < g.cin ? int(image[(std::size_t(y) * g.w + x) * g.cin + c]) : 0;
+                    pack.channel[cl] = value;
+                    input_csv << ',' << value;
                 }
-                for (int lane = 0; lane < IM2ROW_P; ++lane) {
-                    const int x = tile_x * IM2ROW_P + lane;
-                    const bool valid = (expected_valid & (1 << lane)) != 0;
-                    for (int channel = 0; channel < IM2ROW_MAX_CHANNELS;
-                         ++channel) {
-                        const int expected = valid ? unfold_value(
-                            conv2, y * W + x, token, channel) : 0;
-                        const int got = actual.pixel[lane].channel[channel].to_int();
-                        const bool match = actual_valid == expected_valid &&
-                                           got == expected;
-                        output_csv << outputs_read << ',' << y << ',' << tile_x
-                                   << ',' << token << ',' << token / IM2ROW_KERNEL << ','
-                                   << token % IM2ROW_KERNEL << ',' << lane << ',' << channel
-                                   << ',' << expected_valid << ',' << actual_valid
-                                   << ',' << expected << ',' << got << ',' << match
-                                   << '\n';
-                        ++comparisons;
-                        if (!match && errors < 10) {
-                            std::cerr << name << " 数据错误: y=" << y
-                                      << " tile=" << tile_x << " token=" << token
-                                      << " lane=" << lane << " c=" << channel
-                                      << " 期望=" << expected << " 实际=" << got
-                                      << std::endl;
+                input_csv << '\n';
+                input.write(pack);
+                ++written;
+            }
+    im2row(input, output, g);
+    for (int y = 0; y < g.h; ++y)
+        for (int tile = 0; tile < tiles; ++tile)
+            for (int kh = 0; kh < g.kernel; ++kh)
+                for (int kw = 0; kw < g.kernel; ++kw)
+                    for (int group = 0; group < groups; ++group) {
+                        int8_t expected[PACK_ELEMENTS];
+                        if (!packed.read(reinterpret_cast<char*>(expected), sizeof(expected))) {
+                            std::cerr << "packed BIN异常EOF: " << name << '\n';
+                            return false;
                         }
-                        if (!match) ++errors;
+                        // 缺包时不做阻塞 read；仍导出全部参考，actual 用0且 match=0。
+                        const bool present = !output.empty();
+                        activation_pack_t actual;
+                        if (present) { actual = output.read(); ++read; }
+                        else {
+                            actual.spatial_valid = 0;
+                            for (int lane = 0; lane < IM2ROW_P; ++lane)
+                                for (int cl = 0; cl < FEATURE_PACK_CHANNELS; ++cl)
+                                    actual.pixel[lane].channel[cl] = 0;
+                            ++errors;
+                            report(errors, name, "missing_pack", y, tile, kh, kw, group, -1, -1, 1, 0);
+                        }
+                        unsigned mask = 0;
+                        for (int lane = 0; lane < IM2ROW_P; ++lane)
+                            if (tile * IM2ROW_P + lane < g.w) mask |= 1u << lane;
+                        const unsigned actual_mask = actual.spatial_valid.to_uint();
+                        bool match = present && mask == actual_mask;
+                        bool reference_match = true;
+                        if (present && mask != actual_mask) {
+                            ++errors;
+                            report(errors, name, "valid", y, tile, kh, kw, group, -1, -1, mask, actual_mask);
+                        }
+                        int got[PACK_ELEMENTS];
+                        for (int lane = 0; lane < IM2ROW_P; ++lane)
+                            for (int cl = 0; cl < FEATURE_PACK_CHANNELS; ++cl) {
+                                const int c = group * FEATURE_PACK_CHANNELS + cl;
+                                const int x = tile * IM2ROW_P + lane;
+                                // unfold 无物理尾通道和不存在的位置；这些元素必须为零。
+                                int logical = 0;
+                                if (x < g.w && c < g.cin) {
+                                    const std::size_t index =
+                                        (std::size_t(y) * g.w + x) * g.kernel * g.kernel * g.cin +
+                                        (kh * g.kernel + kw) * g.cin + c;
+                                    logical = int(unfold[index]);
+                                }
+                                const int i = lane * FEATURE_PACK_CHANNELS + cl;
+                                got[i] = actual.pixel[lane].channel[cl].to_int();
+                                if (int(expected[i]) != logical) {
+                                    reference_match = false;
+                                    ++errors;
+                                    report(errors, name, "packed/unfold", y, tile, kh, kw, group, lane, c, logical, int(expected[i]));
+                                }
+                                if (present && got[i] != int(expected[i])) {
+                                    match = false;
+                                    ++errors;
+                                    report(errors, name, "data", y, tile, kh, kw, group, lane, c, int(expected[i]), got[i]);
+                                }
+                                if (present) ++comparisons;
+                            }
+                        const int transaction = (((y * tiles + tile) * g.kernel + kh) * g.kernel + kw) * groups + group;
+                        output_csv << transaction << ',' << y << ',' << tile << ',' << kh << ',' << kw
+                                   << ',' << group << ',' << mask << ',' << actual_mask;
+                        for (int i = 0; i < PACK_ELEMENTS; ++i) output_csv << ',' << int(expected[i]);
+                        for (int i = 0; i < PACK_ELEMENTS; ++i) output_csv << ',' << got[i];
+                        output_csv << ',' << reference_match << ',' << (match && reference_match) << '\n';
                     }
-                }
-                ++outputs_read;
-            }
-        }
+    // 精确长度已在打开时检查，这里再确认顺序读取恰好抵达EOF。
+    if (packed.peek() != std::char_traits<char>::eof() || packed.bad()) {
+        std::cerr << "packed BIN尾部读取异常: " << name << '\n';
+        return false;
     }
-    if (inputs_written != expected_inputs || outputs_read != expected_outputs ||
-        !input_stream.empty() || !output_stream.empty()) {
-        ++errors;
+    int remaining_inputs = 0, extra_outputs = 0;
+    while (!input.empty()) { input.read(); ++remaining_inputs; }
+    while (!output.empty()) { output.read(); ++extra_outputs; }
+    errors += remaining_inputs + extra_outputs;
+    if (written != expected_inputs || read != expected_outputs) ++errors;
+    input_csv.flush();
+    output_csv.flush();
+    if (!input_csv.good() || !output_csv.good()) {
+        std::cerr << "CSV写入失败: " << prefix << '\n';
+        return false;
     }
-    std::cout << "Im2Row PyTorch " << name << " 输入事务=" << inputs_written
-              << '/' << expected_inputs << " 输出事务=" << outputs_read << '/'
-              << expected_outputs << " 检查元素数=" << comparisons
-              << " 错误数=" << errors << ' ' << (errors ? "FAIL" : "PASS")
-              << std::endl;
-    return errors;
+    std::cout << csv_name << " 输入事务=" << written << '/' << expected_inputs
+              << " 输出事务=" << read << '/' << expected_outputs
+              << " 剩余输入事务=" << remaining_inputs << " 多余输出事务=" << extra_outputs
+              << " 验证元素数=" << comparisons << " 错误数=" << errors
+              << ' ' << (errors ? "FAIL" : "PASS") << '\n';
+    total_errors += errors;
+    return true;
 }
-
-}  // namespace
-
-static_assert(sizeof(trace_input_int8_hwc) / sizeof(trace_input_int8_hwc[0]) ==
-              CNN_CONV1_H * CNN_CONV1_W * CNN_CONV1_CIN,
-              "trace input shape changed");
-static_assert(sizeof(trace_conv1_unfold_int8) / sizeof(trace_conv1_unfold_int8[0]) ==
-              CNN_CONV1_H * CNN_CONV1_W * SYSTOLIC_KERNEL_TOKENS,
-              "conv1 unfold shape changed");
-static_assert(sizeof(trace_pool1_int8_nhwc) / sizeof(trace_pool1_int8_nhwc[0]) ==
-              CNN_CONV2_H * CNN_CONV2_W * CNN_CONV2_CIN,
-              "pool1 trace shape changed");
-static_assert(sizeof(trace_conv2_unfold_int8) / sizeof(trace_conv2_unfold_int8[0]) ==
-              CNN_CONV2_H * CNN_CONV2_W * SYSTOLIC_KERNEL_TOKENS * CNN_CONV2_CIN,
-              "conv2 unfold shape changed");
+} // namespace
 
 int main() {
     const std::string directory = "simulation_data/pytorch/im2row";
-    if (!make_directory("simulation_data") ||
-        !make_directory("simulation_data/pytorch") ||
+    if (!make_directory("simulation_data") || !make_directory("simulation_data/pytorch") ||
         !make_directory(directory.c_str())) {
-        std::cerr << "无法创建 CSV 目录: " << directory << std::endl;
+        std::cerr << "无法创建CSV目录: " << directory << '\n';
         return 1;
     }
-    hls::stream<pixel_t> input_stream;
-    hls::stream<activation_pack_t> output_stream;
+    const char* names[] = {"conv1", "conv2", "conv3", "conv4", "conv5", "conv6", "conv7", "conv8", "prediction"};
+    const char* sources[] = {"input_int8_hwc", "pool1_int8_hwc", "pool2_int8_hwc", "pool3_int8_hwc",
+                             "pool4_int8_hwc", "pool5_int8_hwc", "pool6_int8_hwc",
+                             "conv7_postprocess_int8_hwc", "conv8_postprocess_int8_hwc"};
+    hls::stream<channel_pack_t> input;
+    hls::stream<activation_pack_t> output;
     int errors = 0;
-    errors += run_layer(LAYER1_MODE, input_stream, output_stream, "conv1", directory);
-    errors += run_layer(LAYER2_MODE, input_stream, output_stream, "conv2", directory);
-    std::cout << "Im2Row PyTorch CSV保存路径=" << directory << std::endl;
+    for (int i = 0; i < YOLO_TINY_LAYER_COUNT; ++i)
+        if (!run_layer(YOLO_TINY_GEOMETRIES[i], names[i], sources[i], names[i], directory,
+                       input, output, errors)) return 1;
+    // 复用同一对stream，覆盖 Prediction G128/1×1 → Conv1 G1/3×3 的调用边界。
+    if (!run_layer(YOLO_TINY_GEOMETRIES[0], names[0], sources[0], "conv1_repeat", directory,
+                   input, output, errors)) return 1;
+    std::cout << "CSV目录=" << directory << '\n';
     return errors ? 1 : 0;
 }

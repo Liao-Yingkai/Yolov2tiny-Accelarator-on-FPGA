@@ -50,16 +50,16 @@ struct inference_result_t {
 };
 
 // 一个空间位置上的连续8通道组；不承诺包含完整逻辑 pixel 的全部通道。
-// Conv1 仅 channel0 有效，Pool2 的16通道由两个 channel pack 表达。
+// Im2Row 的 channel c 对应逻辑通道 group*8+c，尾通道规范化为零。
 struct channel_pack_t {
     activation_t channel[FEATURE_PACK_CHANNELS];
 };
 using pixel_t = channel_pack_t;  // 兼容既有 Im2Row/stream/testbench 接口。
 
 // activation_pack_t 是 Im2Row 到 Systolic 的基本流事务：P 个像素属于同一输出行、
-// 同一 Tile 和同一个 (kh,kw)。Systolic 的接口目标是在每个成功接收周期消费一个 Pack。
-// spatial_valid 只标记空间 Lane 是否真实存在，在同一 Tile 的9拍内保持不变；
-// 卷积 Padding 对应的 Lane 仍有效，而行尾不存在的 Lane 为0且其 pixel 在9拍内均为全零。
+// 同一 Tile 和同一个 (kh,kw,cin_group)。其他计算模块仍处于旧网络迁移阶段。
+// spatial_valid 在同一 Tile 的全部 K 个事务内保持不变；卷积 Padding 不清除
+// valid，行尾不存在的 Lane 则 valid=0 且其 pixel 全零。
 struct activation_pack_t {
     pixel_t pixel[IM2ROW_P];
     ap_uint<IM2ROW_P> spatial_valid;
