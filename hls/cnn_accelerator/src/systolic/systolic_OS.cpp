@@ -1,6 +1,10 @@
 #include "systolic.h"
 #include "../channel_pack.h"
 
+#ifndef __SYNTHESIS__
+#include <cassert>
+#endif
+
 namespace {
 
 using product_t = ap_int<PRODUCT_BITS>;
@@ -15,7 +19,7 @@ dot_t dot_product(const pixel_t& activation,
 #pragma HLS INLINE
     product_t product0 =
         (product_t)(activation.channel[0] * weight.channel[0]);
-    // 权重入口已按逻辑 Cin 规范化，Conv1 的内部 channel[1..7] 恒为零。
+    // 不在 PE 内判断 Cin：权重 BIN 与 Im2Row 已按约定对 Cin 尾通道补零。
     product_t product1 =
         (product_t)(activation.channel[1] * weight.channel[1]);
     product_t product2 =
@@ -79,232 +83,201 @@ void clear_accumulator(
     }
 }
 
+using spatial_mask_t = ap_uint<SYSTOLIC_SPATIAL_PAR>;
+using cout_mask_t = ap_uint<SYSTOLIC_COUT_PAR>;
+using yolo_weight_address_t = ap_uint<YOLO_TINY_WEIGHT_ADDRESS_BITS>;
+using yolo_step_t = ap_uint<bits_for_max(YOLO_TINY_ACTIVATION_REPLAY_CAPACITY +
+                                        SYSTOLIC_WAVEFRONT_DRAIN_STEPS)>;
+
+void advance_os_array(
+    const pixel_with_valid_pack_t (&activation_edge)[SYSTOLIC_SPATIAL_PAR],
+    const weight_with_valid_pack_t (&weight_edge)[SYSTOLIC_COUT_PAR],
+    pixel_with_valid_pack_t (&activation_trans)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR],
+    weight_with_valid_pack_t (&weight_trans)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR],
+    acc_t (&accumulator)[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR],
+    const spatial_mask_t& spatial_valid) {
+#pragma HLS INLINE
+    // 从右下往左上更新，保证读取的是相邻 PE 上一步的操作数。
+    for (int i = SYSTOLIC_SPATIAL_PAR - 1; i >= 0; --i) {
+#pragma HLS UNROLL
+        for (int j = SYSTOLIC_COUT_PAR - 1; j >= 0; --j) {
+#pragma HLS UNROLL
+            weight_trans[i][j] = i == 0 ? weight_edge[j] : weight_trans[i - 1][j];
+            activation_trans[i][j] = j == 0 ? activation_edge[i] : activation_trans[i][j - 1];
+            if (activation_trans[i][j].valid && weight_trans[i][j].valid && spatial_valid[i]) {
+                const dot_t dot = dot_product(activation_trans[i][j].pixel, weight_trans[i][j].weight);
+                accumulator[i][j] += acc_t(dot);
+            }
+        }
+    }
+}
+
+template <typename Operand, int Lanes>
+void clear_os_skew(Operand (&delay)[Lanes][Lanes - 1], const Operand& zero) {
+#pragma HLS INLINE
+    // Lane i 只使用前 i 级，Lane 0 直通。未使用的单元不读、不写。
+    for (int lane = 1; lane < Lanes; ++lane) {
+#pragma HLS UNROLL
+        for (int stage = 0; stage < Lanes - 1; ++stage) {
+#pragma HLS UNROLL
+            if (stage < lane) delay[lane][stage] = zero;
+        }
+    }
+}
+
+template <typename Operand, int Lanes>
+void skew_os_input(const Operand (&input)[Lanes],
+                   Operand (&delay)[Lanes][Lanes - 1],
+                   Operand (&edge)[Lanes]) {
+#pragma HLS INLINE
+    edge[0] = input[0];
+    for (int lane = 1; lane < Lanes; ++lane) {
+#pragma HLS UNROLL
+        edge[lane] = delay[lane][lane - 1];
+        for (int stage = Lanes - 2; stage > 0; --stage) {
+#pragma HLS UNROLL
+            if (stage < lane) delay[lane][stage] = delay[lane][stage - 1];
+        }
+        delay[lane][0] = input[lane];  // 最后写新 token，payload 与 valid 同步延迟。
+    }
+}
+
 }  // namespace
 
 void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
                  hls::stream<weight_pack_t>& weight_stream,
-                 hls::stream<acc_tile_t>& output_stream,
-                 layer_mode_t layer_mode) {
-    const ConvGeometry geometry = conv_geometry(layer_mode);
-    // 同一个物理PE阵列由一位调用级模式在Conv1、Conv2之间分时复用。
-    const int spatial_tiles = geometry.spatial_tiles;
-    const int cout_tiles = geometry.cout_tiles;
-    const int activation_replay_used = geometry.reduction_steps;
+                 hls::stream<yolo_acc_tile_t>& output_stream,
+                 const ConvGeometry& geometry,
+                 int first_cout_tile,
+                 int block_cout_tiles) {
+#ifndef __SYNTHESIS__
+    // 层几何由固定表提供；只校验调用方传入的块范围与缓存边界。
+    assert(geometry.reduction_steps > 0 &&
+           geometry.reduction_steps <= YOLO_TINY_ACTIVATION_REPLAY_CAPACITY);
+    assert(block_cout_tiles > 0 && block_cout_tiles <= geometry.resident_cout_tiles &&
+           block_cout_tiles <= YOLO_TINY_MAX_RESIDENT_COUT_TILES &&
+           first_cout_tile >= 0 && first_cout_tile <= geometry.cout_tiles - block_cout_tiles);
+    assert(block_cout_tiles * geometry.reduction_steps <= YOLO_TINY_WEIGHT_BUFFER_DEPTH);
+#endif
+    const yolo_step_t reduction_steps = geometry.reduction_steps;  // R：包括全部 kernel 位置和 Cin Group。
+    const yolo_step_t wavefront_steps = reduction_steps + SYSTOLIC_WAVEFRONT_DRAIN_STEPS;
+    const ap_uint<bits_for_max(YOLO_TINY_MAX_RESIDENT_COUT_TILES)> resident_tiles = block_cout_tiles;
+    const yolo_weight_address_t weight_packs = resident_tiles * reduction_steps;
+    const int last_global_tile_local = geometry.cout_tiles - 1 - first_cout_tile;
+    const bool replay_needed = block_cout_tiles > 1;
 
-    // 四个独立64-bit Cout Lane Bank。首个 spatial tile 只写入，后续 Tile
-    // 只读取；ram_1p 因此足够。综合时必须确认这些 Bank 映射到 BRAM。
-    packed_weight_lane_t
-        weight_bank[SYSTOLIC_COUT_PAR][SYSTOLIC_WEIGHT_BUFFER_DEPTH];
+    // 只分区 lane 维：每拍四个 64-bit 字，local_cout_tile 和 token 共享深度。
+    packed_weight_lane_t weight_bank[SYSTOLIC_COUT_PAR][YOLO_TINY_WEIGHT_BUFFER_DEPTH];
 #pragma HLS ARRAY_PARTITION variable=weight_bank complete dim=1
 #pragma HLS BIND_STORAGE variable=weight_bank type=ram_1p impl=bram
-
-    // 四个独立64-bit spatial Lane Bank。每字是一个 pixel_t 的8个通道；首个
-    // Cout Tile 只写入，后续 Cout Tile 只回放。lane 维完整分区确保每拍可从
-    // 4个物理 Bank 同时取得一个完整 activation token（256 bit/cycle）。
-    // spatial_valid 在同一 Tile 的9个 token 内不变，单独保存在
-    // tile_spatial_valid，不进入 replay BRAM。
-    packed_activation_lane_t
-        activation_bank[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_ACTIVATION_REPLAY_CAPACITY];
+    packed_activation_lane_t activation_bank[SYSTOLIC_SPATIAL_PAR][YOLO_TINY_ACTIVATION_REPLAY_CAPACITY];
 #pragma HLS ARRAY_PARTITION variable=activation_bank complete dim=1
 #pragma HLS BIND_STORAGE variable=activation_bank type=ram_1p impl=bram
 
-    // spatial_tile 与 Im2Row 的 row -> tile_x 顺序完全等价：Conv1 共有196个，
-    // Conv2 共有56个。合并计数器不改变 activation 或 result 的事务顺序。
-    for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
-        const bool first_spatial_tile = (spatial_tile == 0);
-        ap_uint<SYSTOLIC_SPATIAL_PAR> tile_spatial_valid = 0;
-        ap_uint<SYSTOLIC_WEIGHT_ADDRESS_BITS> weight_base = 0;
+    // 权重 stream 已按 local_cout_tile -> token 排列，按地址顺序装入即可。
+    // 首版不做预取；直到本块权重全部写完，才消费第一笔 Im2Row activation。
+    for (yolo_weight_address_t address = 0; address < weight_packs; ++address) {
+#pragma HLS PIPELINE II=1
+        const weight_pack_t weight = weight_stream.read();
+        for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
+#pragma HLS UNROLL
+            weight_bank[j][address.to_uint()] = pack_weight_lane(weight.lane[j]);
+        }
+    }
 
-        for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
-            // PE、入口和错拍状态仅属于当前 Cout Tile；全量初始化后再推进15步波前。
-            // replay BRAM 仍在完整层作用域，跨 Tile 数据与流事务顺序保持不变。
+    // Im2Row 的 y -> tile_x 顺序可用一个空间 Tile 游标表示，不跨块保存状态。
+    for (int spatial_tile = 0; spatial_tile < geometry.spatial_tiles; ++spatial_tile) {
+        spatial_mask_t spatial_valid = 0;
+        yolo_weight_address_t weight_base = 0;
+        for (int local_cout_tile = 0; local_cout_tile < block_cout_tiles; ++local_cout_tile) {
+            const cout_mask_t cout_valid = local_cout_tile == last_global_tile_local
+                ? cout_mask_t(geometry.last_cout_valid_mask)
+                : cout_mask_t((1u << SYSTOLIC_COUT_PAR) - 1u);
+            const bool from_stream = local_cout_tile == 0;
+
             acc_t accumulator[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
-#pragma HLS ARRAY_PARTITION variable=accumulator complete dim=0
-
-            // activation传播寄存器
             pixel_with_valid_pack_t activation_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
-#pragma HLS ARRAY_PARTITION variable=activation_trans complete dim=0
-
-            // weight传播寄存器
             weight_with_valid_pack_t weight_trans[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+            pixel_with_valid_pack_t activation_delay[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_SPATIAL_PAR - 1];
+            weight_with_valid_pack_t weight_delay[SYSTOLIC_COUT_PAR][SYSTOLIC_COUT_PAR - 1];
+#pragma HLS ARRAY_PARTITION variable=accumulator complete dim=0
+#pragma HLS ARRAY_PARTITION variable=activation_trans complete dim=0
 #pragma HLS ARRAY_PARTITION variable=weight_trans complete dim=0
-
-            // activation pe边界输入寄存器
-            pixel_with_valid_pack_t activation_edge[SYSTOLIC_SPATIAL_PAR] = {
-                zero_activation, zero_activation, zero_activation, zero_activation};
-#pragma HLS ARRAY_PARTITION variable=activation_edge complete dim=0
-
-            // weight pe边界输入寄存器
-            weight_with_valid_pack_t weight_edge[SYSTOLIC_COUT_PAR] = {
-                zero_weight, zero_weight, zero_weight, zero_weight};
-#pragma HLS ARRAY_PARTITION variable=weight_edge complete dim=0
-
-            // activation错拍寄存器
-            pixel_with_valid_pack_t A1_delay[1] = {zero_activation, };
-            pixel_with_valid_pack_t A2_delay[2] = {zero_activation, zero_activation, };
-            pixel_with_valid_pack_t A3_delay[3] = {
-                zero_activation, zero_activation, zero_activation, };
-#pragma HLS ARRAY_PARTITION variable=A1_delay complete
-#pragma HLS ARRAY_PARTITION variable=A2_delay complete
-#pragma HLS ARRAY_PARTITION variable=A3_delay complete
-
-            // weight错拍寄存器
-            weight_with_valid_pack_t W1_delay[1] = {zero_weight, };
-            weight_with_valid_pack_t W2_delay[2] = {zero_weight, zero_weight, };
-            weight_with_valid_pack_t W3_delay[3] = {
-                zero_weight, zero_weight, zero_weight, };
-#pragma HLS ARRAY_PARTITION variable=W1_delay complete
-#pragma HLS ARRAY_PARTITION variable=W2_delay complete
-#pragma HLS ARRAY_PARTITION variable=W3_delay complete
-
+#pragma HLS ARRAY_PARTITION variable=activation_delay complete dim=0
+#pragma HLS ARRAY_PARTITION variable=weight_delay complete dim=0
             clear_accumulator(accumulator);
             clear_activation_trans(activation_trans);
             clear_weight_trans(weight_trans);
-            for (int cycle = 0; cycle < SYSTOLIC_WAVEFRONT_STEPS; ++cycle) {
+            clear_os_skew(activation_delay, zero_activation);
+            clear_os_skew(weight_delay, zero_weight);
+
+            // 一个 Tile 内不区分 3×3 / 1×1：只在全部 R 个 token 结束后排空。
+            for (yolo_step_t step = 0; step < wavefront_steps; ++step) {
 #pragma HLS PIPELINE II=1
-
-                // 边界填充
-                activation_edge[1] = A1_delay[0];
-                activation_edge[2] = A2_delay[1];
-                activation_edge[3] = A3_delay[2];
-                weight_edge[1] = W1_delay[0];
-                weight_edge[2] = W2_delay[1];
-                weight_edge[3] = W3_delay[2];
-
-                // 滞后寄存器
-                A3_delay[2] = A3_delay[1];
-                A3_delay[1] = A3_delay[0];
-                A2_delay[1] = A2_delay[0];
-
-                W3_delay[2] = W3_delay[1];
-                W3_delay[1] = W3_delay[0];
-                W2_delay[1] = W2_delay[0];
-
-                activation_pack_t activation_raw;
-                weight_pack_t weight_raw;
-                if (cycle < activation_replay_used) {
-                    const ap_uint<SYSTOLIC_WEIGHT_ADDRESS_BITS> weight_address = weight_base + cycle;
-
-                    if (cout_tile == 0) {
-                        activation_raw = activation_stream.read();
-
-                        if (cycle == 0) {
-                            tile_spatial_valid = activation_raw.spatial_valid;
-                        }
-
-                        // 填充activation
-                        activation_edge[0].pixel = activation_raw.pixel[0];
-                        A1_delay[0].pixel = activation_raw.pixel[1];
-                        A2_delay[0].pixel = activation_raw.pixel[2];
-                        A3_delay[0].pixel = activation_raw.pixel[3];
-
-                        // 保存activation
-                        for (int spatial_lane = 0;
-                             spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
+                pixel_with_valid_pack_t activation_in[SYSTOLIC_SPATIAL_PAR];
+                weight_with_valid_pack_t weight_in[SYSTOLIC_COUT_PAR];
+                pixel_with_valid_pack_t activation_edge[SYSTOLIC_SPATIAL_PAR];
+                weight_with_valid_pack_t weight_edge[SYSTOLIC_COUT_PAR];
+#pragma HLS ARRAY_PARTITION variable=activation_in complete
+#pragma HLS ARRAY_PARTITION variable=weight_in complete
+#pragma HLS ARRAY_PARTITION variable=activation_edge complete
+#pragma HLS ARRAY_PARTITION variable=weight_edge complete
+                if (step < reduction_steps) {
+                    const unsigned token = step.to_uint();
+                    if (from_stream) {
+                        const activation_pack_t activation = activation_stream.read();
+                        if (step == 0) spatial_valid = activation.spatial_valid;
+                        for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
 #pragma HLS UNROLL
-                            activation_bank[spatial_lane][cycle] =
-                                pack_activation_lane(activation_raw.pixel[spatial_lane]);
-                        }
-                    } else {
-                        // 填充activation
-                        activation_edge[0].pixel = unpack_activation_lane(activation_bank[0][cycle]);
-                        A1_delay[0].pixel = unpack_activation_lane(activation_bank[1][cycle]);
-                        A2_delay[0].pixel = unpack_activation_lane(activation_bank[2][cycle]);
-                        A3_delay[0].pixel = unpack_activation_lane(activation_bank[3][cycle]);
-                    }
-                    activation_edge[0].valid = (ap_uint<1>) 1;
-                    A1_delay[0].valid = (ap_uint<1>) 1;
-                    A2_delay[0].valid = (ap_uint<1>) 1;
-                    A3_delay[0].valid = (ap_uint<1>) 1;
-
-                    if (first_spatial_tile) {
-                        weight_raw = weight_stream.read();
-
-                        // Conv1 即使输入权重的无效 Cin 非零，也在入口清零；
-                        weight_pack_t normalized_weight;
-                        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
-#pragma HLS UNROLL
-                            for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
-#pragma HLS UNROLL
-                                normalized_weight.lane[cout_lane].channel[channel] =
-                                    (channel < geometry.cin) ?
-                                        weight_raw.lane[cout_lane].channel[channel] : weight_t(0);
+                            activation_in[i].pixel = activation.pixel[i];
+                            activation_in[i].valid = 1;
+                            if (replay_needed) {
+                                activation_bank[i][token] = pack_activation_lane(activation.pixel[i]);
                             }
                         }
-
-                        weight_edge[0].weight = normalized_weight.lane[0];
-                        W1_delay[0].weight = normalized_weight.lane[1];
-                        W2_delay[0].weight = normalized_weight.lane[2];
-                        W3_delay[0].weight = normalized_weight.lane[3];
-
-                        // 保存weight
-                        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
-#pragma HLS UNROLL
-                            weight_bank[cout_lane][weight_address] =
-                                pack_weight_lane(normalized_weight.lane[cout_lane]);
-                        }
                     } else {
-                        weight_edge[0].weight = unpack_weight_lane(weight_bank[0][weight_address]);
-                        W1_delay[0].weight = unpack_weight_lane(weight_bank[1][weight_address]);
-                        W2_delay[0].weight = unpack_weight_lane(weight_bank[2][weight_address]);
-                        W3_delay[0].weight = unpack_weight_lane(weight_bank[3][weight_address]);
-                    }
-                    weight_edge[0].valid = (ap_uint<1>) 1;
-                    W1_delay[0].valid = (ap_uint<1>) 1;
-                    W2_delay[0].valid = (ap_uint<1>) 1;
-                    W3_delay[0].valid = (ap_uint<1>) 1;
-                } else {
-                    // 9拍输入注入完毕，随后6拍注入零事务排空波前。
-                    activation_edge[0] = zero_activation;
-                    A1_delay[0] = zero_activation;
-                    A2_delay[0] = zero_activation;
-                    A3_delay[0] = zero_activation;
-                    weight_edge[0] = zero_weight;
-                    W1_delay[0] = zero_weight;
-                    W2_delay[0] = zero_weight;
-                    W3_delay[0] = zero_weight;
-                }
-
-                // Output-stationary脉动阵列
-                for (int spatial_lane = SYSTOLIC_SPATIAL_PAR - 1; spatial_lane >= 0; --spatial_lane) {
+                        for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
 #pragma HLS UNROLL
-                    for (int cout_lane = SYSTOLIC_COUT_PAR - 1; cout_lane >= 0; --cout_lane) {
-#pragma HLS UNROLL
-                        // activation与weight array脉动赋值
-                        weight_trans[spatial_lane][cout_lane] = (spatial_lane == 0) ?
-                            weight_edge[cout_lane] : weight_trans[spatial_lane - 1][cout_lane];
-                        activation_trans[spatial_lane][cout_lane] = (cout_lane == 0) ?
-                            activation_edge[spatial_lane] : activation_trans[spatial_lane][cout_lane - 1];
-
-                        if (activation_trans[spatial_lane][cout_lane].valid &&
-                            weight_trans[spatial_lane][cout_lane].valid &&
-                            tile_spatial_valid[spatial_lane]) {
-                            const dot_t dot = dot_product(
-                                activation_trans[spatial_lane][cout_lane].pixel,
-                                weight_trans[spatial_lane][cout_lane].weight);
-                            accumulator[spatial_lane][cout_lane] += (acc_t) dot;
+                            activation_in[i].pixel = unpack_activation_lane(activation_bank[i][token]);
+                            activation_in[i].valid = 1;
                         }
                     }
+                    const yolo_weight_address_t weight_address = weight_base + step;
+                    for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
+#pragma HLS UNROLL
+                        weight_in[j].weight = unpack_weight_lane(weight_bank[j][weight_address.to_uint()]);
+                        weight_in[j].valid = cout_valid[j];  // 随权重错拍和传播；Cin 补零由 BIN 保证。
+                    }
+                } else {
+                    // 排空只停止注入；已进入错拍线或阵列的有效 token 继续推进。
+                    for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
+#pragma HLS UNROLL
+                        activation_in[i] = zero_activation;
+                    }
+                    for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
+#pragma HLS UNROLL
+                        weight_in[j] = zero_weight;
+                    }
                 }
+                skew_os_input(activation_in, activation_delay, activation_edge);
+                skew_os_input(weight_in, weight_delay, weight_edge);
+                advance_os_array(activation_edge, weight_edge, activation_trans,
+                                 weight_trans, accumulator, spatial_valid);
             }
 
-            // 9步注入与6步排空后，所有 PE 均已将 token8 累加写回 accumulator；
-            // 本次 stream write 若阻塞，
-            // 外层控制器不会推进到下一 Cout Tile 或消费下一 activation。
-            acc_tile_t result;
-            result.spatial_valid = tile_spatial_valid;
-            for (int spatial_lane = 0;
-                 spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
+            // 无效 lane 从未更新，其值仍为清零后的 0；下游依然需要两种 mask。
+            yolo_acc_tile_t result;
+            result.spatial_valid = spatial_valid;
+            result.cout_valid = cout_valid;
+            for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
 #pragma HLS UNROLL
-                for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR;
-                     ++cout_lane) {
+                for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
 #pragma HLS UNROLL
-                    result.value[spatial_lane][cout_lane] =
-                        accumulator[spatial_lane][cout_lane];
+                    result.value[i][j] = accumulator[i][j];
                 }
             }
             output_stream.write(result);
-            weight_base += SYSTOLIC_KERNEL_TOKENS;
+            weight_base += reduction_steps;  // 下一本地计算 Tile 的连续权重段。
         }
     }
 }
