@@ -1,8 +1,8 @@
 # YOLOv2-tiny Im2Row 设计
 
-更新日期：2026-11-03。状态：固定YOLO配置补全与表内专门化已实现，本次仅做静态检查；2026-11-02的II=1、52个BRAM_18K等综合结果属于修改前版本，不覆盖本次新增字段或条件简化。未运行C simulation或RTL co-simulation，功能与RTL反压尚未验证。
+更新日期：2026-11-08。状态：固定YOLO配置补全与表内专门化已实现；新增读取真实YOLO BIN的Im2Row testbench，本次仅做导出数据核对及静态检查。2026-11-02的II=1、52个BRAM_18K等综合结果属于修改前版本，不覆盖后续新增字段或条件简化。新版testbench尚未运行C simulation或RTL co-simulation，不能据此声称DUT功能或RTL反压验证通过。
 
-本文描述 YOLOv2-tiny VOC 的接口、存储契约和源码实现，不保留旧网络的设计章节。本轮仅修改config、Im2Row及对应说明，不修改Core、其他计算模块或testbench；不以静态检查代替仿真、综合或RTL反压验证。总体背景见[YOLOv2-tiny重构方案](yolov2_tiny_refactor_plan.md)。
+本文描述 YOLOv2-tiny VOC 的接口、存储契约和源码实现，不保留旧网络的设计章节。当前测试更新不修改Im2Row、Core或其他计算模块；不以静态检查代替仿真、综合或RTL反压验证。总体背景见[YOLOv2-tiny重构方案](yolov2_tiny_refactor_plan.md)。
 
 ## 1. 已确定的范围
 
@@ -409,3 +409,42 @@ testbench使用简单确定性数据和源坐标reference，保留详细中文�
 综合脚本、日志和工程位于源码树外`build/hls/im2row_yolo_optimize/`（项目根目录下）；最终源码的日志为`final_synth.log`，报告位于`project/optimized/syn/report/`。原`/home/liaoyingkai/High_Level_Synthesis/cnn_im2row_test`基线工程未被覆盖。系统G++与Vitis Clang 3.9静态语法检查、差异检查通过；本轮未实现或修改TB，未运行C simulation、RTL co-simulation或功能回归。跨Tile返回、G=1换行、W=13边界、输入气泡/输出反压及连续调用切换仍须功能/RTL验证。
 
 2026-11-03本次额外简化：1×1仅Prediction使用，尾收集Lane固定为表内常量0；`spatial_lane<last_gather_lane`已保证索引至多2，删除重复`<3`判断。不改变收集循环、缓存、输出及任何真实边界保护。3×3的RAW distance=2 true、RAM尺寸/Bank、pragma和q调度不变。本次检查日志位于项目根目录`build/hls/yolo_fixed_geometry/`，仅G++及Vitis Clang 3.9的`-fsyntax-only`和编译期值断言，不运行程序、仿真或综合。
+
+## 14. 真实PyTorch导出数据testbench
+
+当前YOLO测试入口为`cnn_accelerator/testbench/test_im2row_pytorch.cpp`。HLS工程设置`im2row`为唯一Top，设计文件只需`src/im2row/im2row.cpp`及其头文件，testbench只加入这个文件，不加入其他含`main()`的测试。旧`test_im2row.cpp`仍为未迁移的MNIST程序数据测试，不能直接用于当前接口。
+
+本测试读取`/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/trace/`中的真实样本`0000`，不再include旧MNIST trace头文件。迁移机器或切换导出目录时修改testbench顶部路径；切换样本时修改样本后缀。先在Python工程运行`export.py`和`dump_trace.py`，同一份trace必须配套生成时的权重及量化参数；本测试本身不重新生成或修改它们。
+
+Python的`dump_trace.py`以导出的整数权重和参数进行数学参考计算，使用标准PyTorch unfold生成窗口；后续层输入来自整数参考，不是QAT浮点激活。2026-11-08已核对导出脚本、文档及现有样本：九层权重BIN与逻辑NPY一致，bias/M/S的BIN与相应NPY一致；所有Im2Row BIN和unfold BIN均与独立源坐标参考逐元素一致。这是数据契约检查，不是HLS DUT仿真结果。
+
+### 14.1 各层输入来源
+
+| 当前Im2Row配置 | 上游BIN边界（省略`trace_`和`_0000.bin`） |
+|---|---|
+| Conv1 | `input_int8_hwc` |
+| Conv2～Conv6 | `pool1_int8_hwc`～`pool5_int8_hwc` |
+| Conv7 | `pool6_int8_hwc` |
+| Conv8 | `conv7_postprocess_int8_hwc` |
+| Prediction | `conv8_postprocess_int8_hwc` |
+
+每层独立读取自己的上游HWC文件，不串接其他HLS模块。原始输入仅含`H*W*Cin`个signed INT8字节：按`y→x→group`组装输入事务，通道`c=group*8+cin_lane`，索引为`(y*W+x)*Cin+c`。Conv1的逻辑输入为RGB三通道，不是单通道；组内其余五通道填零，空间Padding不作为输入发送。
+
+### 14.2 输出比较与事务检查
+
+输出按`y→tile_x→kh→kw→group`直接消费，不缓存完整输出再重排。每个事务顺序读取`trace_<层名>_im2row_int8_0000.bin`的32个字节，其偏移为：
+
+```text
+T = ceil(W/4), G = ceil(Cin/8), R = Kh*Kw*G
+token = (kh*Kw+kw)*G+group
+byte_offset = 32*((y*T+tile_x)*R+token)+8*spatial_lane+cin_lane
+```
+
+同时用`trace_<层名>_unfold_int8_0000.bin`作逻辑位置交叉核对：有效空间位置`x=tile_x*4+spatial_lane`、有效通道`c=group*8+cin_lane`对应
+`(y*W+x)*(Kh*Kw*Cin)+(kh*Kw+kw)*Cin+c`。无效空间Lane或通道不访问unfold，期望值为零；空间Padding已体现在unfold内容中。
+
+BIN不保存`spatial_valid`或C++结构体。掩码独立根据`tile_x*4+lane<W`计算，W=26每行末Tile为`0011`、W=13为`0001`，卷积Padding不改变它。每层检查输入`H*W*G`和输出`H*T*R`的事务数、stream清空、BIN精确长度和读取状态。九层之后再次运行Conv1，检查Prediction/G128到3×3/G1的连续调用切换。
+
+CSV写入当前仿真工作目录下`simulation_data/pytorch/im2row/`，完整保留实际输入及输出期望值、实际值、valid和match。每个Pack一行，避免每个标量一行造成过大文件；每层及重复调用使用不同文件名。终端仅输出事务数、验证元素数、错误数和PASS/FAIL；失败返回非零，错误详情限制前若干项。CSV列名中的Lane为同一行的空间位置，channel为组内Cin Lane。
+
+本轮不运行C-sim、RTL co-sim或综合。后续仿真才验证DUT是否符合这些文件；真实接口气泡、反压、RAM读写调度、II和时序还需相应RTL测试或综合报告确认。
