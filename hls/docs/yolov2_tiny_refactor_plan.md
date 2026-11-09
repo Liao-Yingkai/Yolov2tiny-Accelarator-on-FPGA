@@ -8,7 +8,7 @@
 
 近期首先重构 HLS 计算与存储调度，保留单套物理计算流水。PyTorch exporter、Golden Model、testbench 随接口和数值契约确定后同步更新；Vivado、Vitis、摄像头和检测结果显示不在当前实施范围内。
 
-软件参考工程：`/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/`，重点参考 `model.py`、`quant.py` 和 `README.md`。该工程目前尚未完成硬件整数参数导出，不能认为其数值规则已经全部冻结。
+软件参考工程：`/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/`。Systolic 首版沿用该工程 `export.py` 和 `README.md` 冻结的整数权重 BIN 布局，使用 `dump_trace.py` 的逐层整数数据做对照。
 
 输入为 RGB，参考分辨率为 416×416，Batch 第一版为 1。下表的空间尺寸均采用 H×W：
 
@@ -86,9 +86,9 @@ layer
 
 Cin Group 之间不清零、不单独输出、不单独执行 Bias/Requant。完整归约结束后，才排空阵列并输出当前结果 Tile。回放期间不读取新 Activation，依靠 stream 反压，不新增 pause/stop 接口。
 
-## 4. 暂定32个Cout缓存及BRAM预算
+## 4. 首版32个Cout缓存及BRAM预算
 
-当前实现目标暂定同时驻留最多32个Cout，即8个4-Cout计算Tile。PE计算并行度仍为4，不扩展成32列阵列。后续依据整条流水综合后的BRAM占用再调整驻留数量；这不是已验证可装入目标器件的资源结论。
+首版各层统一按最多32个Cout驻留设计，包括Conv8，即最多8个4-Cout计算Tile。PE计算并行度仍为4，不扩展成32列阵列。后续依据整条流水综合后的BRAM占用再调整驻留数量；这不是已验证可装入目标器件的资源结论。
 
 每个缓存块从全局Cout Tile编号开始，加载`min(8, 总Cout Tile数-起始Tile号)`个连续Tile。Conv1只有16个Cout，只加载4个Tile，不为填满缓存而额外导出16个通道。Prediction导出至128个物理Cout，其中最后3个Lane无效；最后一个32-Cout块有29个逻辑有效通道。
 
@@ -116,7 +116,7 @@ Activation Replay最大数据容量 = 1152 × 32 Byte = 36 KiB
 - 必要的 Formatter / Burst 缓冲、FIFO 和 AXI 适配器内部存储；
 - Bank、端口及宽深配置带来的 BRAM 碎片和实现余量。
 
-权重缓存由Systolic唯一拥有，Loader只按顺序读DDR并输出weight_stream，不重复保存同一份完整缓存块。参数在缓存块有效期间驻留并复用，不随每个 Spatial Tile 重读 DDR。覆盖权重前须完成旧缓存块的所有使用，第一版不做跨缓存块预取重叠。
+权重缓存由Systolic唯一拥有，Loader只按顺序读DDR并输出weight_stream，不重复保存同一份完整缓存块。参数在缓存块有效期间驻留并复用，不随每个 Spatial Tile 重读 DDR。覆盖权重前须完成旧缓存块的所有使用。第一版整块预加载后再计算；后续明确安排加载重叠，优先恢复首 Spatial Tile 边算边填，再评估跨块预取。见 [OS 实现计划](systolic_os.md#后续性能优化重叠权重加载)。
 
 数组容量应按支持层中实际最大的工作集确定，不能机械地把最大 W 与最大 Cin 相乘。缓存层数、单双缓冲、Bank 组织和各层可驻留 Cout 数量均须先核算，再决定是否增加预取重叠。
 
@@ -148,7 +148,7 @@ global_cout_tile → kh → kw → cin_group
     → cout_lane → cin_lane
 ```
 
-物理Shape为`[ceil(Cout/4),Kh*Kw*ceil(Cin/8),4,8]`，每个事务32字节。Exporter将Cin/Cout物理尾部权重置零，Loader不重新插入通道或按旧紧凑Cin布局消费字节。Systolic仍自行屏蔽逻辑无效Cin，不能只依赖文件补零；当前MNIST版本的这项保护位于Systolic，不在Loader。
+物理Shape为`[ceil(Cout/4),Kh*Kw*ceil(Cin/8),4,8]`，每个事务32字节。Exporter将Cin/Cout物理尾部权重置零，Loader不重新插入通道或按旧紧凑Cin布局消费字节。YOLO 版依赖冻结的权重 BIN 和 Im2Row 的 Cin 补零契约，Systolic 不重复清零无效 Cin；空间与 Cout 的 mask 仍独立生效。这与旧 MNIST Systolic 的入口处理不同。
 
 32-Cout缓存块只是文件中最多8个连续Cout Tile的读取范围；调整缓存数量不应改变BIN布局。精确导出索引、二进制文件、参数排列和metadata由PyTorch工程的`YOLOV2_TINY/README.md`维护，后续由负责Exporter的agent同步实现，HLS侧不另维护一份导出规格。Loader、TB和PS后续必须遵循同一版本。Feature DDR布局仍未冻结。
 
@@ -198,12 +198,14 @@ Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先�
 
 ### 7.1 Systolic
 
+详细接口、循环、缓存和验收步骤见 [YOLOv2-tiny Systolic 重构计划](systolic_os.md#yolov2-tiny-重构计划)。首版各层统一按最多 32 Cout 驻留，Conv8 不例外；一次 Systolic 调用处理一个驻留块。
+
 - 保留传统 4×4 OS，Activation 向右、Weight 向下传播，PE 内 Dot8，INT32 累加。
 - 支持可变 K Tokens；1×1 也连续归约全部 Cin Group，不按 Group 重启波前。
 - 保留错拍、Valid 传播、初始化和排空机制。`K+6`仅为4×4阵列的逻辑步数模型，不等于实测 Tile 间隔。
 - 分开处理传播 Token Valid、Spatial Valid、Cout尾部有效性和Cin尾组有效性。
 - Prediction 的125通道最后一个4-Cout Tile只有一个有效通道；若按8通道打包，最后一组则有5个有效通道，不能混淆两种尾部。
-- Systolic入口按`group*8+cin_lane<Cin`屏蔽无效权重通道；即使物理BIN已补零，也保留模块自身的逻辑Cin保护。Loader只恢复文件字节，不承担补零或二次重排。
+- Cin 无效 lane 由导出文件和 Im2Row 补零；`cout_valid` 按全局计算 Tile 生成，在权重注入端合入传播 valid，并随结果交给下游。Loader 只恢复文件字节，不承担补零或二次重排。
 
 ### 7.2 一次性PostProcess与QAT边界调整
 
@@ -301,7 +303,7 @@ output = signed INT8 clamp(scaled, -128, 127)
 | 待定事项 | 需要形成的结论 |
 |---|---|
 | 片上存储预算 | 各 Buffer容量、Bank及端口组织、实际BRAM余量 |
-| Cout驻留数量 | 暂定最多32通道，BRAM综合后复核；按实际Tile数处理小层/尾块，配置Activation Replay |
+| Cout驻留数量 | 首版各层最多32通道，BRAM综合后复核；按实际Tile数处理小层/尾块，配置Activation Replay |
 | Feature DDR布局 | Loader与Writer共同使用的地址公式、Burst和局部重排需求 |
 | 导出ABI | 详细权重/参数/BIN约定由PyTorch工程文档维护；HLS及调用方后续同步，Feature DDR布局仍待确定 |
 | Im2Row多Group调度 | Strip BRAM访问表、Line Buffer覆盖时刻、启动及行尾处理 |
@@ -311,7 +313,7 @@ output = signed INT8 clamp(scaled, -128, 127)
 | 调用配置 | 已在同一ConvGeometry九层表补齐Pool/Bypass、输出、激活及32-Cout缓存字段并编译期校验；本次仅静态检查，字段消费者及调用方仍待迁移 |
 | 性能目标 | 目标分辨率、频率、fps及有效DDR带宽预算 |
 
-缓存数量当前暂定32个Cout，仍受后续综合预算约束；不据此冻结Feature Blocked8布局、全部FIFO depth=2或整条流水II。
+缓存数量首版按32个Cout设计，仍受后续综合预算约束；不据此冻结Feature Blocked8布局、全部FIFO depth=2或整条流水II。
 
 先前约2.84 fps仅是416输入、100 MHz、II=1、每Tile按K+6推进并含行尾空Lane的估算，不是综合或板测结论，也不是设计目标。性能评估须同时计入DDR重读、Im2Row预装、权重加载和流水停顿，不能只凭读取字节数认定某层必然受带宽限制。
 
