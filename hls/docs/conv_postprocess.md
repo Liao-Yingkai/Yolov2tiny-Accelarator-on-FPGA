@@ -54,6 +54,14 @@ out = clamp((INT64(a) * m) 算术右移 S, -128, 127)
 
 ## 4. 验证
 
-独立验收：用同一套 Python 导出的 Systolic INT32、bias/quant BIN 对照 PostProcess INT8 BIN，覆盖 Conv1 小块、多块参数切换、Prediction 最后一个 Cout Tile、两种无效 lane、bias 改变符号、负支截断和上下饱和。核对每层/每块事务数，不将定向测试数据混入真实 BIN。
+HLS Top 设为 `conv_postprocess`，设计源文件选 `conv_postprocess.cpp`，testbench 只加入 [`test_conv_postprocess_pytorch.cpp`](../cnn_accelerator/testbench/test_conv_postprocess_pytorch.cpp)。测试路径和样本号集中在 testbench 顶部，默认使用 `YOLOV2_TINY/generated/` 的样本 `0000`。每层读取同一套导出的四个文件：
 
-当前已通过 G++ 和 Vitis HLS 2022.2 Clang 的 C++14 静态语法检查。YOLO BIN testbench 待实现；功能、II、时序和资源待验证。
+- `trace/trace_<layer>_systolic_int32_hwc_0000.bin`：bias 前的 little-endian INT32 HWC 输入。
+- `bins/<layer>_bias.bin`、`bins/<layer>_quant.bin`：参数按逻辑 Cout 排布；quant 先存全部 `M`，再存全部 `S`，均为 little-endian INT32。组包时先判 Cout 边界再读文件。
+- `trace/trace_<layer>_postprocess_int8_hwc_0000.bin`：预期的 signed INT8 HWC 结果。
+
+默认跑九层，一层调用一次。输入按 Cout 块、行、空间 Tile 和本地 Cout Tile 组包；输出按相同顺序恢复 HWC 坐标逐项核对，不重排完整输出。检查两种 valid、无效 lane 为零、BIN 字节数和流事务数。数值边界的定向测试与真实 BIN 对照分开，不修改导出文件。
+
+**testbench 只读 BIN，不导出 CSV 或其他数据文件。** 终端输出每层事务数、验证元素数、错误数和 PASS/FAIL，错误详情限前 10 条，失败返回非零。此规则也适用于后续 YOLO testbench；Im2Row 和 Systolic 现有 CSV 代码留待后续移除。
+
+样本 `0000` 已通过 G++ 主机功能测试：9 层、100 个 Cout 块、371072 个输出 Tile，共核对 5937152 个物理 lane 元素，错误数为 0，两个 mask 和事务数检查均通过。Vitis HLS 2022.2 Clang 静态检查通过。未运行 RTL co-sim 或综合；本结果不覆盖 RTL 时序和反压。
