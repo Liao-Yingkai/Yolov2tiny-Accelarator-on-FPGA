@@ -5,14 +5,6 @@
 // 并行度、缓存容量和事务数量；数据类型与stream事务结构位于types.h。
 // YOLO按层枚举选配置；旧layer_mode_t接口仅留给尚未迁移的MNIST模块。
 
-// 编译期选择：1 使用 Output-stationary，0 使用 Broadcast。
-#ifndef CNN_SYSTOLIC_USE_OS
-#define CNN_SYSTOLIC_USE_OS 1
-#endif
-#if CNN_SYSTOLIC_USE_OS != 0 && CNN_SYSTOLIC_USE_OS != 1
-#error "CNN_SYSTOLIC_USE_OS must be 0 or 1"
-#endif
-
 // 量化标量位宽。
 constexpr int ACTIVATION_BITS = 8;
 constexpr int WEIGHT_BITS = 8;
@@ -154,7 +146,7 @@ constexpr int yolo_max_resident_weights(int count = YOLO_TINY_LAYER_COUNT) {
             YOLO_TINY_GEOMETRIES[count - 1].reduction_steps,
         yolo_max_resident_weights(count - 1));
 }
-// 仅为后续YOLO消费者预留容量；不替换尚未迁移的MNIST缓存常量。
+// YOLO Systolic 缓存容量；不替换尚未迁移的 MNIST 缓存常量。
 constexpr int YOLO_TINY_ACTIVATION_REPLAY_CAPACITY = yolo_max_field(&ConvGeometry::reduction_steps);
 constexpr int YOLO_TINY_WEIGHT_BUFFER_DEPTH = yolo_max_resident_weights();
 constexpr int YOLO_TINY_WEIGHT_ADDRESS_BITS = bits_for_max(YOLO_TINY_WEIGHT_BUFFER_DEPTH);
@@ -197,10 +189,9 @@ constexpr int SYSTOLIC_SUM2_BITS = PRODUCT_BITS + 1;
 constexpr int SYSTOLIC_SUM4_BITS = PRODUCT_BITS + 2;
 constexpr int SYSTOLIC_DOT_BITS = PRODUCT_BITS + 3;
 
-// Output-stationary Systolic 波前步数。
-constexpr int SYSTOLIC_WAVEFRONT_STEPS =
-    (SYSTOLIC_KERNEL_TOKENS - 1) + (SYSTOLIC_COUT_PAR - 1) +
-    (SYSTOLIC_SPATIAL_PAR - 1) + 1;
+// OS 阵列最后一个 PE 相对入口的传播延迟；注入完 R 个 token 后排空这几步。
+constexpr int SYSTOLIC_WAVEFRONT_DRAIN_STEPS =
+    (SYSTOLIC_COUT_PAR - 1) + (SYSTOLIC_SPATIAL_PAR - 1);
 
 // 每层卷积由固定几何参数派生的stream事务形状。
 constexpr int CNN_CONV1_TILES_PER_ROW =

@@ -1,5 +1,7 @@
 # Systolic / Broadcast PE Array 设计
 
+本文记录旧 MNIST 广播式实现。新版 YOLO 采用传统 OS 阵列，见 [YOLOv2-tiny Systolic 重构计划](systolic_os.md#yolov2-tiny-重构计划)。
+
 > 本轮修订：Systolic 自行按层模式选择有效 Cin；Loader 不再补零，权重 header 改为紧凑硬件顺序。变更摘要见 [模块边界修订](module_boundary_todo.md)，统一 Loader 后的集成综合与三图 RTL co-sim 结果见 [DDR Wrapper](ddr_wrapper.md)。未进行 Vivado 布局布线或板测。
 
 ## 1. 模块定位与当前状态

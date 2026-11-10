@@ -57,23 +57,22 @@ struct channel_pack_t {
 using pixel_t = channel_pack_t;  // 兼容既有 Im2Row/stream/testbench 接口。
 
 // activation_pack_t 是 Im2Row 到 Systolic 的基本流事务：P 个像素属于同一输出行、
-// 同一 Tile 和同一个 (kh,kw,cin_group)。其他计算模块仍处于旧网络迁移阶段。
-// spatial_valid 在同一 Tile 的全部 K 个事务内保持不变；卷积 Padding 不清除
+// 同一 Tile 和同一个 (kh,kw,cin_group)。
+// spatial_valid 在同一 Tile 的全部 R 个事务内保持不变；卷积 Padding 不清除
 // valid，行尾不存在的 Lane 则 valid=0 且其 pixel 全零。
 struct activation_pack_t {
     pixel_t pixel[IM2ROW_P];
     ap_uint<IM2ROW_P> spatial_valid;
 };
 
-// 一个 weight_lane_t 对应当前 Cout Tile 中的一条输出通道，并固定打包8个
-// 物理输入通道。Conv1 的有效 Cin 由 Systolic 保证；stream 保持8个物理 Cin，
-// DDR 权重仍使用紧凑的原始逻辑 Cin 布局。
+// 一个 weight_lane_t 对应一个 Cout Lane 的同一组 8 个物理 Cin 权重。
+// YOLO 权重 BIN 已按组补零；旧 MNIST 的逻辑 Cin 则仍由旧 Systolic 保证。
 struct weight_lane_t {
     weight_t channel[SYSTOLIC_CIN_PAR];
 };
 
-// Weight stream 的一个事务对应相同 (cout_tile, kh, kw) 下的全部4条 Cout
-// Lane。其 stream 顺序为 cout_tile -> token(kh*3+kw)。
+// 一个事务是同一 (cout_tile, kh, kw, cin_group) 的 4 Cout × 8 Cin 权重。
+// YOLO 块内按 local_cout_tile -> kh -> kw -> cin_group 发送；旧 MNIST 只有一组 Cin。
 struct weight_pack_t {
     weight_lane_t lane[SYSTOLIC_COUT_PAR];
 };
@@ -83,6 +82,14 @@ struct weight_pack_t {
 struct acc_tile_t {
     acc_t value[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
     ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
+};
+
+// YOLO 独立结果类型；旧 MNIST 的 acc_tile_t 和下游接口保持不变。
+// 空间与 Cout 无效 lane 的结果为零；下游访问 bias/M/S 前仍须检查 cout_valid。
+struct yolo_acc_tile_t {
+    acc_t value[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+    ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
+    ap_uint<SYSTOLIC_COUT_PAR> cout_valid;
 };
 
 // ConvPostProcess 输出保持与 acc_tile_t 相同的 spatial_tile -> cout_tile 事务
