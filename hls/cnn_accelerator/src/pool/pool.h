@@ -3,14 +3,12 @@
 
 #include "../types.h"
 
-// 固定2x2、stride=2 MaxPool。输入事务必须保持
-// row -> tile_x -> cout_tile 顺序，其中每个 activation_tile_t 包含4个连续
-// 空间 Lane 和4条连续输出通道。输出为紧密的 NHWC 通道 Pack 流：
-// pooled_H -> pooled_W -> channel_pack。
-//
-// layer_mode在一次完整层调用中保持稳定：LAYER1_MODE选择Pool1，LAYER2_MODE选择Pool2。
-void maxpool(hls::stream<activation_tile_t>& input_stream,
-             hls::stream<channel_pack_t>& output_stream,
-             layer_mode_t layer_mode);
+// 固定 YOLO 层表：一次调用处理整层，每个 Cout 块独立建立行缓存状态。
+// 支持 2x2 stride=2、Conv6 的 stride=1 右/下补边，以及无 Pool 的 Bypass。
+// 输入与输出均为 Cout 块 -> y -> tile_x -> local_cout_tile；每个输出 Tile
+// 含同一行最多 4 个连续输出位置和 4 个 Cout，不在这里组装 8 通道 Pack。
+void maxpool(hls::stream<yolo_activation_tile_t>& input_stream,
+             hls::stream<yolo_activation_tile_t>& output_stream,
+             const ConvGeometry& geometry);
 
 #endif  // CNN_ACCELERATOR_POOL_POOL_H_

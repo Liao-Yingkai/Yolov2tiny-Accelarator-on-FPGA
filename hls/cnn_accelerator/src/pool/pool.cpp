@@ -6,236 +6,265 @@
 
 namespace {
 
-// 每个输入事务有4个 spatial lane 和4个 Cout lane，每个元素为INT8，故一个
-// Line Buffer 字为128 bit。固定布局为 lane-major / cout-lane-minor：
-// word[(spatial_lane * 4 + cout_lane) * 8 +: 8] = value[spatial_lane][cout_lane]。
-// 写入和读取都复制INT8二进制补码位型；解包后再恢复为 activation_t 做有符号比较。
-constexpr int POOL_LINE_WORD_BITS =
-    SYSTOLIC_SPATIAL_PAR * SYSTOLIC_COUT_PAR * ACTIVATION_BITS;
-using pool_line_word_t = ap_uint<POOL_LINE_WORD_BITS>;
+constexpr int CHANNEL_TILE_BITS = CONV_COUT_PAR * ACTIVATION_BITS;
+constexpr int LINE_WORD_BITS = CONV_SPATIAL_PAR * CHANNEL_TILE_BITS;
+constexpr int PAIR_BITS = 2 * CHANNEL_TILE_BITS;
+constexpr unsigned FULL_SPATIAL_MASK = (1u << CONV_SPATIAL_PAR) - 1;
+constexpr unsigned FULL_COUT_MASK = (1u << CONV_COUT_PAR) - 1;
+constexpr int POOL_PAD_VALUE = -(1 << (ACTIVATION_BITS - 1));  // signed INT8 的最小值。
+using line_word_t = ap_uint<LINE_WORD_BITS>;       // 4 个位置 × 4 个 Cout，保存原始值。
+using channel_tile_t = ap_uint<CHANNEL_TILE_BITS>;  // 单个位置的 4 个 Cout。
+using pair_word_t = ap_uint<PAIR_BITS>;            // stride=2 产生的两个池化位置。
 
-pool_line_word_t pack_line_word(const activation_tile_t& input) {
-#pragma HLS INLINE
-    pool_line_word_t packed = 0;
-    for (int spatial_lane = 0; spatial_lane < SYSTOLIC_SPATIAL_PAR;
-         ++spatial_lane) {
-#pragma HLS UNROLL
-        for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR;
-             ++cout_lane) {
-#pragma HLS UNROLL
-            const int low_bit =
-                (spatial_lane * SYSTOLIC_COUT_PAR + cout_lane) *
-                ACTIVATION_BITS;
-            const int high_bit = low_bit + ACTIVATION_BITS - 1;
-            packed.range(high_bit, low_bit) =
-                input.value[spatial_lane][cout_lane].range(
-                    ACTIVATION_BITS - 1, 0);
-        }
-    }
-    return packed;
-}
+static_assert(CONV_SPATIAL_PAR == 4, "Pool 每个空间 Tile 固定为四个位置");
+constexpr ConvGeometry STRIDE1_GEOMETRY =
+    YOLO_TINY_GEOMETRIES[static_cast<int>(YoloTinyLayer::Conv6)];
+static_assert(STRIDE1_GEOMETRY.pool_stride == 1 && STRIDE1_GEOMETRY.tail_spatial_lanes == 1 &&
+                  STRIDE1_GEOMETRY.pool_padding_right == 1 &&
+                  STRIDE1_GEOMETRY.pool_padding_bottom == 1,
+              "stride=1 调度要求右/下补一格，且末 Tile 只有一个真实位置");
 
-activation_t unpack_line_value(const pool_line_word_t& packed,
-                               int spatial_lane,
-                               int cout_lane) {
+activation_t unpack_value(const line_word_t& word, int lane, int oc) {
 #pragma HLS INLINE
-    const int low_bit =
-        (spatial_lane * SYSTOLIC_COUT_PAR + cout_lane) * ACTIVATION_BITS;
-    const int high_bit = low_bit + ACTIVATION_BITS - 1;
+    const int lo = lane * CHANNEL_TILE_BITS + oc * ACTIVATION_BITS;
     activation_t value;
-    value.range(ACTIVATION_BITS - 1, 0) = packed.range(high_bit, low_bit);
+    value.range(ACTIVATION_BITS - 1, 0) = word.range(lo + ACTIVATION_BITS - 1, lo);
     return value;
 }
 
-activation_t signed_max2(activation_t left, activation_t right) {
+line_word_t pack_input(const yolo_activation_tile_t& input) {
 #pragma HLS INLINE
-    return (left > right) ? left : right;
-}
-
-// 以平衡树完成四个INT8值的有符号最大值；不能比较原始 ap_uint 位型。
-activation_t signed_max4(activation_t top_left,
-                         activation_t top_right,
-                         activation_t bottom_left,
-                         activation_t bottom_right) {
-#pragma HLS INLINE
-    const activation_t top_max = signed_max2(top_left, top_right);
-    const activation_t bottom_max = signed_max2(bottom_left, bottom_right);
-    return signed_max2(top_max, bottom_max);
-}
-
-ap_uint<POOL_HALF_BITS> make_pooled_half(const pool_line_word_t& top_word,
-                                         const activation_tile_t& bottom_tile,
-                                         int first_spatial_lane) {
-#pragma HLS INLINE
-    ap_uint<POOL_HALF_BITS> half = 0;
-    for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
+    line_word_t word = 0;
+    for (int lane = 0; lane < CONV_SPATIAL_PAR; ++lane) {
 #pragma HLS UNROLL
-        const activation_t pooled = signed_max4(
-            unpack_line_value(top_word, first_spatial_lane, cout_lane),
-            unpack_line_value(top_word, first_spatial_lane + 1, cout_lane),
-            bottom_tile.value[first_spatial_lane][cout_lane],
-            bottom_tile.value[first_spatial_lane + 1][cout_lane]);
-        const int low_bit = cout_lane * ACTIVATION_BITS;
-        const int high_bit = low_bit + ACTIVATION_BITS - 1;
-        half.range(high_bit, low_bit) = pooled.range(ACTIVATION_BITS - 1, 0);
-    }
-    return half;
-}
-
-channel_pack_t make_channel_pack(ap_uint<POOL_HALF_BITS> low_half,
-                                 ap_uint<POOL_HALF_BITS> high_half) {
-#pragma HLS INLINE
-    channel_pack_t pack;
-    for (int channel = 0; channel < IM2ROW_MAX_CHANNELS; ++channel) {
+        for (int oc = 0; oc < CONV_COUT_PAR; ++oc) {
 #pragma HLS UNROLL
-        const ap_uint<POOL_HALF_BITS> source = (channel < SYSTOLIC_COUT_PAR) ?
-            low_half : high_half;
-        const int local_channel =
-            (channel < SYSTOLIC_COUT_PAR) ? channel :
-                                            channel - SYSTOLIC_COUT_PAR;
-        const int low_bit = local_channel * ACTIVATION_BITS;
-        const int high_bit = low_bit + ACTIVATION_BITS - 1;
-        pack.channel[channel].range(ACTIVATION_BITS - 1, 0) =
-            source.range(high_bit, low_bit);
+            const int lo = lane * CHANNEL_TILE_BITS + oc * ACTIVATION_BITS;
+            word.range(lo + ACTIVATION_BITS - 1, lo) =
+                input.value[lane][oc].range(ACTIVATION_BITS - 1, 0);
+        }
     }
-    return pack;
+    return word;
 }
 
-// 每个输入空间 tile 产生两个横向的2x2窗口。Pool2末tile仅lane0/1有效，
-// 因而只产生position0。
-ap_uint<2> make_pool_valid(ap_uint<SYSTOLIC_SPATIAL_PAR> top_valid,
-                           ap_uint<SYSTOLIC_SPATIAL_PAR> bottom_valid) {
+line_word_t read_input(hls::stream<yolo_activation_tile_t>& input_stream,
+                       const ConvGeometry& g, int tile_x) {
 #pragma HLS INLINE
-    ap_uint<2> valid = 0;
-    valid[0] = top_valid[0] && top_valid[1] &&
-               bottom_valid[0] && bottom_valid[1];
-    valid[1] = top_valid[2] && top_valid[3] &&
-               bottom_valid[2] && bottom_valid[3];
-    return valid;
+    const yolo_activation_tile_t input = input_stream.read();
+#ifndef __SYNTHESIS__
+    const unsigned spatial_mask = tile_x == g.last_tile_x
+        ? g.tail_spatial_valid_mask : FULL_SPATIAL_MASK;
+    // 只有 Bypass 的 Prediction 有 Cout 尾组。参与 Pool 的层通道 Tile 均完整。
+    assert(input.spatial_valid == spatial_mask && input.cout_valid == FULL_COUT_MASK);
+#endif
+    return pack_input(input);
+}
+
+activation_t signed_max2(activation_t a, activation_t b) {
+#pragma HLS INLINE
+    return a > b ? a : b;
+}
+
+// 分别解包为 signed INT8 后再比较，不比较 ap_uint 的原始位型。
+activation_t signed_max4(activation_t a, activation_t b, activation_t c, activation_t d) {
+#pragma HLS INLINE
+    return signed_max2(signed_max2(a, b), signed_max2(c, d));
+}
+
+// 一个空间窗口、四个独立 Cout。左右可以来自同一 Tile，也可以来自相邻 Tile。
+channel_tile_t pool_window(const line_word_t& top_left, int left_lane,
+                           const line_word_t& bottom_left,
+                           const line_word_t& top_right, int right_lane,
+                           const line_word_t& bottom_right, bool right_valid) {
+#pragma HLS INLINE
+    channel_tile_t result = 0;
+    for (int oc = 0; oc < CONV_COUT_PAR; ++oc) {
+#pragma HLS UNROLL
+        const activation_t value = signed_max4(
+            unpack_value(top_left, left_lane, oc),
+            right_valid ? unpack_value(top_right, right_lane, oc) : activation_t(POOL_PAD_VALUE),
+            unpack_value(bottom_left, left_lane, oc),
+            right_valid ? unpack_value(bottom_right, right_lane, oc) : activation_t(POOL_PAD_VALUE));
+        const int lo = oc * ACTIVATION_BITS;
+        result.range(lo + ACTIVATION_BITS - 1, lo) = value.range(ACTIVATION_BITS - 1, 0);
+    }
+    return result;
+}
+
+void write_output(hls::stream<yolo_activation_tile_t>& output_stream,
+                  const line_word_t& word, unsigned spatial_mask) {
+#pragma HLS INLINE
+    yolo_activation_tile_t output;
+    output.spatial_valid = spatial_mask;
+    output.cout_valid = FULL_COUT_MASK;
+    for (int lane = 0; lane < CONV_SPATIAL_PAR; ++lane) {
+#pragma HLS UNROLL
+        for (int oc = 0; oc < CONV_COUT_PAR; ++oc) {
+#pragma HLS UNROLL
+            output.value[lane][oc] = (spatial_mask & (1u << lane))
+                ? unpack_value(word, lane, oc) : activation_t(0);
+        }
+    }
+    output_stream.write(output);
+}
+
+void store_raw_row(hls::stream<yolo_activation_tile_t>& input_stream,
+                   line_word_t line_buffer[YOLO_TINY_POOL_LINE_WORDS],
+                   const ConvGeometry& g, int block_tiles) {
+#pragma HLS INLINE
+    int address = 0;  // 行内地址顺序：tile_x -> local_cout_tile。
+    for (int tile_x = 0; tile_x < g.tiles_per_row; ++tile_x) {
+        for (int ct = 0; ct < block_tiles; ++ct) {
+#pragma HLS PIPELINE II=1
+            line_buffer[address++] = read_input(input_stream, g, tile_x);
+        }
+    }
+}
+
+void pool_stride2(hls::stream<yolo_activation_tile_t>& input_stream,
+                  hls::stream<yolo_activation_tile_t>& output_stream,
+                  line_word_t line_buffer[YOLO_TINY_POOL_LINE_WORDS],
+                  const ConvGeometry& g, int block_tiles) {
+#pragma HLS INLINE
+    pair_word_t pending_pair[YOLO_TINY_MAX_RESIDENT_COUT_TILES];  // 前一个空间 Tile 的两个结果。
+#pragma HLS ARRAY_PARTITION variable=pending_pair complete
+    const int output_tail_lanes = (g.output_w - 1) % CONV_SPATIAL_PAR + 1;
+    const unsigned output_tail_mask = (1u << output_tail_lanes) - 1;
+
+    for (int y = 0; y < g.h; ++y) {
+        if ((y & 1) == 0) {
+            store_raw_row(input_stream, line_buffer, g, block_tiles);
+            continue;
+        }
+
+        int address = 0;
+        for (int tile_x = 0; tile_x < g.tiles_per_row; ++tile_x) {
+            const bool second_pair = (tile_x & 1) != 0;
+            const bool last_tile = tile_x == g.last_tile_x;
+            for (int ct = 0; ct < block_tiles; ++ct) {
+#pragma HLS PIPELINE II=1
+                const line_word_t top = line_buffer[address++];
+                const line_word_t bottom = read_input(input_stream, g, tile_x);
+
+                // 偶数行只写、奇数行只读，仍沿用旧的隔行缓存与两组 2x2 窗口。
+                pair_word_t pair;
+                pair.range(CHANNEL_TILE_BITS - 1, 0) =
+                    pool_window(top, 0, bottom, top, 1, bottom, true);
+                pair.range(PAIR_BITS - 1, CHANNEL_TILE_BITS) =
+                    pool_window(top, 2, bottom, top, 3, bottom, true);
+
+                if (second_pair || last_tile) {
+                    line_word_t output_word = 0;
+                    if (second_pair) {
+                        output_word.range(PAIR_BITS - 1, 0) = pending_pair[ct];
+                        output_word.range(LINE_WORD_BITS - 1, PAIR_BITS) = pair;
+                    } else {
+                        // Conv4/5 的最后一个输入 Tile 无右邻，直接发出未配对的结果。
+                        output_word.range(PAIR_BITS - 1, 0) = pair;
+                    }
+                    write_output(output_stream, output_word,
+                                 last_tile ? output_tail_mask : FULL_SPATIAL_MASK);
+                } else {
+                    pending_pair[ct] = pair;
+                }
+            }
+        }
+    }
+}
+
+void pool_stride1(hls::stream<yolo_activation_tile_t>& input_stream,
+                  hls::stream<yolo_activation_tile_t>& output_stream,
+                  line_word_t line_buffer[YOLO_TINY_POOL_LINE_WORDS],
+                  const ConvGeometry& g, int block_tiles) {
+#pragma HLS INLINE
+    line_word_t pending_prefix[YOLO_TINY_MAX_RESIDENT_COUT_TILES];  // 上一 Tile 已算完的 lane0~2。
+    channel_tile_t top_edge[YOLO_TINY_MAX_RESIDENT_COUT_TILES];     // 上一 Tile 顶行的原始 lane3。
+    channel_tile_t bottom_edge[YOLO_TINY_MAX_RESIDENT_COUT_TILES];  // 上一 Tile 底行的原始 lane3。
+#pragma HLS ARRAY_PARTITION variable=pending_prefix complete
+#pragma HLS ARRAY_PARTITION variable=top_edge complete
+#pragma HLS ARRAY_PARTITION variable=bottom_edge complete
+
+    // 先存真实 row0。最后多走一行，用 INT8 最小值模拟下补边，不消费输入。
+    store_raw_row(input_stream, line_buffer, g, block_tiles);
+    line_word_t padded_bottom;
+    for (int i = 0; i < CONV_SPATIAL_PAR * CONV_COUT_PAR; ++i) {
+#pragma HLS UNROLL
+        padded_bottom.range((i + 1) * ACTIVATION_BITS - 1, i * ACTIVATION_BITS) =
+            activation_t(POOL_PAD_VALUE);
+    }
+    for (int bottom_y = 1; bottom_y <= g.h; ++bottom_y) {
+        const bool pad_bottom = bottom_y == g.h;
+        int address = 0;
+        for (int tile_x = 0; tile_x < g.tiles_per_row; ++tile_x) {
+            const bool last_tile = tile_x == g.last_tile_x;
+            for (int ct = 0; ct < block_tiles; ++ct) {
+#pragma HLS PIPELINE II=1
+                const line_word_t top = line_buffer[address];  // 锁存上一行原值。
+                line_word_t bottom = padded_bottom;
+                if (!pad_bottom) {
+                    bottom = read_input(input_stream, g, tile_x);
+                    line_buffer[address] = bottom;  // 旧值已锁存，当前位置更新为当前行。
+                }
+                ++address;
+
+                if (tile_x != 0) {
+                    // 上一 Tile 的 lane3 与当前 Tile 的 lane0 成窗；不能跨 Cout Tile。
+                    const line_word_t previous_top = top_edge[ct];
+                    const line_word_t previous_bottom = bottom_edge[ct];
+                    line_word_t output_word = pending_prefix[ct];
+                    output_word.range(LINE_WORD_BITS - 1, 3 * CHANNEL_TILE_BITS) =
+                        pool_window(previous_top, 0, previous_bottom, top, 0, bottom, true);
+                    write_output(output_stream, output_word, FULL_SPATIAL_MASK);
+                }
+
+                line_word_t prefix = 0;
+                // Conv6 末 Tile 只有 lane0；其右邻用 -128，lane1~3 不产生逻辑输出。
+                for (int lane = 0; lane < 3; ++lane) {
+#pragma HLS UNROLL
+                    if (lane == 0 || !last_tile) {
+                        prefix.range((lane + 1) * CHANNEL_TILE_BITS - 1, lane * CHANNEL_TILE_BITS) =
+                            pool_window(top, lane, bottom, top, lane + 1, bottom, !last_tile);
+                    }
+                }
+                pending_prefix[ct] = prefix;
+                if (!last_tile) {
+                    top_edge[ct] = top.range(LINE_WORD_BITS - 1, 3 * CHANNEL_TILE_BITS);
+                    bottom_edge[ct] = bottom.range(LINE_WORD_BITS - 1, 3 * CHANNEL_TILE_BITS);
+                }
+            }
+        }
+
+        // 先发完倒数第二个空间 Tile 的全部 Cout，再按相同 Cout 顺序发末 Tile。
+        for (int ct = 0; ct < block_tiles; ++ct) {
+#pragma HLS PIPELINE II=1
+            write_output(output_stream, pending_prefix[ct], g.tail_spatial_valid_mask);
+        }
+    }
 }
 
 }  // namespace
 
-void maxpool(hls::stream<activation_tile_t>& input_stream,
-             hls::stream<channel_pack_t>& output_stream,
-             layer_mode_t layer_mode) {
-    const bool is_pool2 = (layer_mode == LAYER2_MODE);
-    const ConvGeometry geometry = conv_geometry(layer_mode);
-    // 一位调用级模式选择固定Pool1/Pool2调度。
-    const int feature_height = geometry.h;
-    const int tiles_per_row = geometry.tiles_per_row;
-    const int cout_tiles = geometry.cout_tiles;
+void maxpool(hls::stream<yolo_activation_tile_t>& input_stream,
+             hls::stream<yolo_activation_tile_t>& output_stream,
+             const ConvGeometry& geometry) {
+    // 只缓存当前 Cout 块的上一行。Stride=1 需要读口与写口，stride=2 不同时读写。
+    line_word_t line_buffer[YOLO_TINY_POOL_LINE_WORDS];
+#pragma HLS BIND_STORAGE variable=line_buffer type=ram_s2p impl=bram latency=1
 
-    // 地址按每行输入事务顺序递增。Pool1使用地址0..13，Pool2使用
-    // 地址0..15；偶数行只写、随后的奇数行只读，因此
-    // 单端口BRAM在一个控制分支内不会有并发读写需求。
-    pool_line_word_t line_buffer[POOL_LINE_BUFFER_DEPTH];
-#pragma HLS BIND_STORAGE variable=line_buffer type=ram_1p impl=bram
-
-    // line_valid 只保存上一偶数行各空间tile的4-bit valid；同一tile所有
-    // Cout transaction 的mask必须一致，非综合态立即检查这一流协议。
-    ap_uint<SYSTOLIC_SPATIAL_PAR> line_valid[POOL_MAX_TILES_PER_ROW];
-#pragma HLS ARRAY_PARTITION variable=line_valid complete dim=1
-
-    // [pooled position][Cout tile]，每个half含该Cout tile的4个pool结果。
-    // 完全分区后每拍可独立写两个half，避免64-bit连续read-modify-write依赖。
-    ap_uint<POOL_HALF_BITS> pooled_half[2][POOL_MAX_COUT_TILES];
-#pragma HLS ARRAY_PARTITION variable=pooled_half complete dim=0
-
-#ifndef __SYNTHESIS__
-    int input_read_count = 0;
-    int output_write_count = 0;
-#endif
-
-    for (int row = 0; row < feature_height; ++row) {
-        if ((row & 1) == 0) {
-            // 偶数行只消费输入并写上一行缓存，严格不读取该single-port BRAM。
-            int line_address = 0;
-            for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-                for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
-#pragma HLS PIPELINE II=1
-                    const activation_tile_t input = input_stream.read();
-#ifndef __SYNTHESIS__
-                    ++input_read_count;
-#endif
-                    if (cout_tile == 0) {
-                        line_valid[tile_x] = input.spatial_valid;
-                    } else {
-#ifndef __SYNTHESIS__
-                        assert(input.spatial_valid == line_valid[tile_x]);
-#endif
-                    }
-                    line_buffer[line_address] = pack_line_word(input);
-                    ++line_address;
-                }
-            }
+    for (int block = 0; block < geometry.cache_blocks; ++block) {
+        const int block_tiles = block == geometry.cache_blocks - 1
+            ? geometry.last_cache_tiles : geometry.resident_cout_tiles;
+        if (geometry.pool_stride == 2) {
+            pool_stride2(input_stream, output_stream, line_buffer, geometry, block_tiles);
+        } else if (geometry.pool_stride == 1) {
+            pool_stride1(input_stream, output_stream, line_buffer, geometry, block_tiles);
         } else {
-            // 奇数行只读取上一偶数行缓存。每一个Cout transaction产生两个
-            // 一个POOL_HALF_BITS half；全部Cout tile完成后才按position -> pack输出。
-            int line_address = 0;
-            for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-                ap_uint<SYSTOLIC_SPATIAL_PAR> bottom_valid = 0;
-                ap_uint<2> pool_valid = 0;
-                for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
+            // 无 Pool 层原样透传，含 Prediction 的空间尾 mask 和 Cout 尾 mask。
+            const int block_transactions = geometry.spatial_tiles * block_tiles;
+            for (int i = 0; i < block_transactions; ++i) {
 #pragma HLS PIPELINE II=1
-                    const activation_tile_t bottom = input_stream.read();
-                    const pool_line_word_t top = line_buffer[line_address];
-#ifndef __SYNTHESIS__
-                    ++input_read_count;
-#endif
-                    if (cout_tile == 0) {
-                        bottom_valid = bottom.spatial_valid;
-#ifndef __SYNTHESIS__
-                        assert(bottom_valid == line_valid[tile_x]);
-#endif
-                        pool_valid = make_pool_valid(line_valid[tile_x],
-                                                     bottom_valid);
-                    } else {
-#ifndef __SYNTHESIS__
-                        assert(bottom.spatial_valid == bottom_valid);
-#endif
-                    }
-                    pooled_half[0][cout_tile] = make_pooled_half(top, bottom, 0);
-                    pooled_half[1][cout_tile] = make_pooled_half(top, bottom, 2);
-                    ++line_address;
-                }
-
-                // Cout%8是pack完整性的实际固定约束。单一output_slot循环
-                // 保持position -> pack顺序，且每次迭代最多执行一次stream write。
-                // Pool1有一个pack，Pool2有两个；每个位置总是低Cout组在前。
-                const int channel_packs = is_pool2 ? CNN_POOL2_CHANNEL_PACKS :
-                                                     CNN_POOL1_CHANNEL_PACKS;
-                const int output_slots = 2 * channel_packs;
-                for (int output_slot = 0; output_slot < output_slots;
-                     ++output_slot) {
-#pragma HLS PIPELINE II=1
-                    // 固定网络中Pool1每位置1个pack、Pool2每位置2个pack。
-                    // 显式使用移位和掩码，避免共享Pool实例在运行时mode下
-                    // 从“除以1或2”表达式推导出不必要的可变除法/取模逻辑。
-                    const int pooled_position =
-                        is_pool2 ? (output_slot >> 1) : output_slot;
-                    const int pack_index = is_pool2 ? (output_slot & 1) : 0;
-                    if (pool_valid[pooled_position]) {
-                        const int low_cout_tile = pack_index * 2;
-                        const channel_pack_t output = make_channel_pack(
-                            pooled_half[pooled_position][low_cout_tile],
-                            pooled_half[pooled_position][low_cout_tile + 1]);
-                        output_stream.write(output);
-#ifndef __SYNTHESIS__
-                        ++output_write_count;
-#endif
-                    }
-                }
+                output_stream.write(input_stream.read());
             }
         }
     }
-
-#ifndef __SYNTHESIS__
-    const int expected_input_tiles = is_pool2 ? CNN_POOL2_INPUT_TRANSACTIONS :
-                                                CNN_POOL1_INPUT_TRANSACTIONS;
-    const int expected_output_packs = is_pool2 ? CNN_POOL2_OUTPUT_TRANSACTIONS :
-                                                CNN_POOL1_OUTPUT_TRANSACTIONS;
-    assert(input_read_count == expected_input_tiles);
-    assert(output_write_count == expected_output_packs);
-#endif
 }

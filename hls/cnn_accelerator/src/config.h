@@ -151,6 +151,15 @@ constexpr int YOLO_TINY_ACTIVATION_REPLAY_CAPACITY = yolo_max_field(&ConvGeometr
 constexpr int YOLO_TINY_WEIGHT_BUFFER_DEPTH = yolo_max_resident_weights();
 constexpr int YOLO_TINY_WEIGHT_ADDRESS_BITS = bits_for_max(YOLO_TINY_WEIGHT_BUFFER_DEPTH);
 constexpr int YOLO_TINY_MAX_RESIDENT_COUT_TILES = yolo_max_field(&ConvGeometry::resident_cout_tiles);
+// Pool 只缓存当前 Cout 块的一行原值。Bypass 层不占行缓存。
+constexpr int yolo_max_pool_line_words(int count = YOLO_TINY_LAYER_COUNT) {
+    return count == 0 ? 0 : config_max(
+        YOLO_TINY_GEOMETRIES[count - 1].pool_stride == 0 ? 0 :
+            YOLO_TINY_GEOMETRIES[count - 1].tiles_per_row *
+                YOLO_TINY_GEOMETRIES[count - 1].resident_cout_tiles,
+        yolo_max_pool_line_words(count - 1));
+}
+constexpr int YOLO_TINY_POOL_LINE_WORDS = yolo_max_pool_line_words();
 // 逐层/相邻层详尽校验放在build静态检查TU，不增加生产配置校验框架。
 constexpr int YOLO_TINY_PREDICTION_TAIL_LAST_LANE =
     YOLO_TINY_GEOMETRIES[static_cast<int>(YoloTinyLayer::Prediction)].tail_spatial_lanes - 1;
@@ -252,11 +261,8 @@ constexpr int SYSTOLIC_WEIGHT_BUFFER_DEPTH =
     config_max(CNN_CONV1_WEIGHT_TRANSACTIONS, CNN_CONV2_WEIGHT_TRANSACTIONS);
 constexpr int SYSTOLIC_WEIGHT_ADDRESS_BITS = bits_for_max(SYSTOLIC_WEIGHT_BUFFER_DEPTH);
 
-// 固定2x2、stride-2 MaxPool几何参数。输入使用卷积输出Tile，输出为紧密
-// NHWC channel pack。
-constexpr int POOL_KERNEL = 2;
+// Legacy MNIST 池化输出几何：供尚未迁移的 Core、FC 使用。
 constexpr int POOL_STRIDE = 2;
-constexpr int POOL_HALF_BITS = SYSTOLIC_COUT_PAR * ACTIVATION_BITS;
 constexpr int CNN_POOL1_H = CNN_CONV1_H / POOL_STRIDE;
 constexpr int CNN_POOL1_W = CNN_CONV1_W / POOL_STRIDE;
 constexpr int CNN_POOL1_C = CNN_CONV1_COUT;
@@ -265,23 +271,10 @@ constexpr int CNN_POOL2_W = CNN_CONV2_W / POOL_STRIDE;
 constexpr int CNN_POOL2_C = CNN_CONV2_COUT;
 constexpr int CNN_POOL1_CHANNEL_PACKS = CNN_POOL1_C / IM2ROW_MAX_CHANNELS;
 constexpr int CNN_POOL2_CHANNEL_PACKS = CNN_POOL2_C / IM2ROW_MAX_CHANNELS;
-constexpr int CNN_POOL1_INPUT_TRANSACTIONS =
-    CNN_CONV1_SPATIAL_TILES * CNN_CONV1_COUT_TILES;
-constexpr int CNN_POOL2_INPUT_TRANSACTIONS =
-    CNN_CONV2_SPATIAL_TILES * CNN_CONV2_COUT_TILES;
 constexpr int CNN_POOL1_OUTPUT_TRANSACTIONS =
     CNN_POOL1_H * CNN_POOL1_W * CNN_POOL1_CHANNEL_PACKS;
 constexpr int CNN_POOL2_OUTPUT_TRANSACTIONS =
     CNN_POOL2_H * CNN_POOL2_W * CNN_POOL2_CHANNEL_PACKS;
-constexpr int POOL_LINE_BUFFER_DEPTH =
-    (CNN_CONV1_TILES_PER_ROW * CNN_CONV1_COUT_TILES >
-     CNN_CONV2_TILES_PER_ROW * CNN_CONV2_COUT_TILES)
-        ? CNN_CONV1_TILES_PER_ROW * CNN_CONV1_COUT_TILES
-        : CNN_CONV2_TILES_PER_ROW * CNN_CONV2_COUT_TILES;
-constexpr int POOL_MAX_TILES_PER_ROW =
-    (CNN_CONV1_TILES_PER_ROW > CNN_CONV2_TILES_PER_ROW)
-        ? CNN_CONV1_TILES_PER_ROW : CNN_CONV2_TILES_PER_ROW;
-constexpr int POOL_MAX_COUT_TILES = SYSTOLIC_MAX_COUT_TILES;
 
 // 固定FC 784 -> 10；输入为紧密的Pool2 NHWC stream。
 constexpr int FC_COUT_PAR = 5;
@@ -346,9 +339,6 @@ static_assert(CONV_SPATIAL_PAR == 4 && CONV_COUT_PAR == 4,
 static_assert(CONV_CIN_PAR == 8 && FC_CIN_PAR == 8 &&
               FEATURE_PACK_CHANNELS == CONV_CIN_PAR,
               "Fixed dot8 and feature packs require eight channels");
-static_assert(POOL_KERNEL == 2 && POOL_STRIDE == 2 &&
-              2 * CONV_COUT_PAR == FEATURE_PACK_CHANNELS,
-              "Pool combines two four-channel halves");
 
 static_assert(CNN_CONV1_COUT % SYSTOLIC_COUT_PAR == 0,
               "Conv1 Cout must fill systolic output tiles");
@@ -362,8 +352,6 @@ static_assert(CNN_CONV1_H % POOL_STRIDE == 0 &&
 static_assert(CNN_POOL1_C % IM2ROW_MAX_CHANNELS == 0 &&
               CNN_POOL2_C % IM2ROW_MAX_CHANNELS == 0,
               "Pool output channels must fill channel packs");
-static_assert(POOL_HALF_BITS * 2 == IM2ROW_MAX_CHANNELS * ACTIVATION_BITS,
-              "Two pooled halves must compose one channel pack");
 static_assert(CNN_CONV1_TAIL_LANES >= 1 &&
               CNN_CONV1_TAIL_LANES <= SYSTOLIC_SPATIAL_PAR &&
               CNN_CONV2_TAIL_LANES >= 1 &&
@@ -380,11 +368,6 @@ static_assert(SYSTOLIC_WEIGHT_BUFFER_DEPTH >=
               SYSTOLIC_WEIGHT_BUFFER_DEPTH >=
               CNN_CONV2_COUT_TILES * SYSTOLIC_KERNEL_TOKENS,
               "Weight buffer must hold either convolution layer");
-static_assert(POOL_LINE_BUFFER_DEPTH >=
-              CNN_CONV1_TILES_PER_ROW * CNN_CONV1_COUT_TILES &&
-              POOL_LINE_BUFFER_DEPTH >=
-              CNN_CONV2_TILES_PER_ROW * CNN_CONV2_COUT_TILES,
-              "Pool line buffer must hold one complete input row");
 static_assert(TOP_PHASE_COUNT == 2,
               "Top must execute exactly the two fixed convolution phases");
 static_assert(TOP_STREAM_DEPTH >= 2,

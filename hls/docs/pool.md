@@ -1,67 +1,63 @@
-# MaxPool 设计
+# YOLOv2-tiny MaxPool 设计
 
-## 范围与接口
+## 接口与事务顺序
 
-`maxpool` 固定实现 `2×2`、`stride=2` 的有符号 INT8 MaxPool：
+`maxpool(input_stream, output_stream, geometry)` 一次处理一层，配置来自固定
+`ConvGeometry` 层表。输入和输出均为 `yolo_activation_tile_t`：
+`value[spatial_lane][cout_lane]` 是 4 个连续横坐标 × 4 个输出通道的 signed INT8。
 
-```cpp
-void maxpool(hls::stream<activation_tile_t>& input_stream,
-             hls::stream<channel_pack_t>& output_stream,
-             layer_mode_t layer_mode);
-```
+流顺序为 **Cout 驻留块 → 行 → 空间 Tile → 块内 Cout Tile**。模块内部按层表
+切换驻留块，不要求 Top 遍历块。同一 Tile 只含一行；输出按池化后的坐标重新紧密
+排列，每个空间 Tile 最多 4 个连续结果。Writer 再把两个 4-Cout Tile 组装成
+8 通道 Pack；Pool 不做通道拼接或 DDR 寻址。
 
-接口只支持两种固定模式；具体形状、事务数、Line Buffer深度和channel-pack数由`src/config.h`的编译期表达式生成：
+| 卷积层 | 池化配置 | 输出宽度 |
+|---|---|---:|
+| Conv1–Conv5 | 2×2，stride=2，无补边 | 208 / 104 / 52 / 26 / 13 |
+| Conv6 | 2×2，stride=1，只在右侧、下侧各补 1 | 13 |
+| Conv7–Conv8、Prediction | Bypass，逐 Tile 原样转发 | 13 |
 
-| 模式 | 输入 `(H,W,Cout)` | 输入 Tile | 输出尺寸 | 输出 pack |
-|---|---:|---:|---:|---:|
-| Pool1 | `LAYER1_MODE`，`28×28×8` | `28×7×2 = 392` | `14×14×8` | `196` |
-| Pool2 | `LAYER2_MODE`，`14×14×16` | `14×4×4 = 224` | `7×7×16` | `98` |
+输入 Tile 数为 `H × ceil(W/4) × ceil(Cout/4)`，输出 Tile 数为
+`Ho × ceil(Wo/4) × ceil(Cout/4)`。这不是层表里 `output_transactions`
+表示的 8 通道 Pack 数。池化层的 Cout Tile 全有效；输出尾位置由 `spatial_valid`
+标记，非法位置 payload 为 0。Bypass 保留两种输入 mask 和 payload，含
+Prediction 的最后一个 Cout Tile（`0001`）。
 
-综合态由调用级`layer_mode`选择Pool1或Pool2，模式在单次层调用中保持稳定且不进入stream事务。`channel_pack_t`是`pixel_t`的类型别名，一个输出事务表示一个空间位置的连续8个物理通道。
+## 一行原值缓存
 
-## 数据顺序与有效位
+地址按 `tile_x × 当前块的 Cout Tile 数 + local_cout_tile` 排列。一个 128-bit
+字保存 4×4 个**原始** INT8，缓存深度由活跃 Pool 层表推导，为 416 字。没有全层
+feature map 缓存，也不在行缓存中保存水平 max。字内顺序为 spatial lane 在外、
+Cout lane 在内；比较前恢复 signed INT8。
 
-输入严格为：
+共享行缓存绑定为 `ram_s2p/bram`，请求 1 拍读延迟。stride=2 隔行只写或只读；
+stride=1 对同一地址先取旧行原值，再写入当前行。未使用 pragma 强行忽略该依赖。
+内层 Cout Tile 循环请求 `II=1`；实际读写排程、映射、II 和外层 Tile 切换开销
+需综合确认。流端阻塞时不承诺固定吞吐。
 
-```text
-row -> tile_x -> cout_tile
-```
+## Stride=2：隔行缓存、合并半 Tile
 
-每个 `activation_tile_t` 有4个连续空间 lane 与4条连续 Cout lane。输出不携带坐标或无效占位，紧密顺序为：
+偶数行写入原值；奇数行读取对应的偶数行并分别计算输入 lane (0,1) 与 (2,3)
+的两个 2×2 最大值。第一个输入空间 Tile 的结果按块内 Cout Tile 暂存，与第二个
+输入空间 Tile 的结果合并成 4 个连续池化位置。Conv4/Conv5 的最后一个输入空间
+Tile 没有配对的右邻，直接输出，分别仅 lane 0–1 / lane 0 有效。无效输入不会
+影响任何合法窗口。
 
-```text
-pooled_H -> pooled_W -> channel_pack -> channel
-```
+## Stride=1：读旧行、写新行、跨 Tile
 
-对每个输入空间 tile，两个横向窗口的位置有效位固定为：
+先将输入 row0 写入行缓存。之后当前输入行为 B，缓存的上一行为 A，生成输出行 A。
+以同一个 Cout lane 为例，输入 Tile0 含列 0–3，Tile1 含列 4–7：
 
-```text
-pool_valid[0] = top[0] & top[1] & bottom[0] & bottom[1]
-pool_valid[1] = top[2] & top[3] & bottom[2] & bottom[3]
-```
+1. 处理 Tile0 时锁存 A0–A3，再写入 B0–B3。先算输出 x=0、1、2，
+   暂存这三个结果与**原值** A3、B3，暂不输出完整 Tile。
+2. Tile1 到来后，用 `max(A3,A4,B3,B4)` 补齐 x=3，输出 x=0–3，
+   再暂存 Tile1 的前三个结果与原值 A7、B7。x=7、11 同理。
+3. 末输入 Tile 只有列 12 有效。输出前一 Tile 后，等该行全部 Cout Tile
+   处理完毕，再按相同 Cout 顺序输出 x=12（mask `0001`）。其右邻取 -128。
 
-Pool2每行最后一个 tile 的 `spatial_valid=0011`，因此只写出 position0；position1完全跳过。非综合态会检查同一 `(row,tile_x)` 的所有 Cout tile 具有相同 `spatial_valid`。
-
-## Line Buffer 与计算
-
-Line Buffer 是16个顺序寻址的128-bit字：
-
-```text
-line_address = 0 at the start of each row
-line_buffer[line_address++] for every input Cout transaction
-word[(spatial_lane * 4 + cout_lane) * 8 +: 8]
-    = activation_tile.value[spatial_lane][cout_lane]
-```
-
-每个字保存INT8的二进制补码位型；读出后先恢复 `activation_t`，再进行有符号比较。Pool1使用地址`0..13`，Pool2使用`0..15`。偶数行只读输入流并写BRAM，紧随的奇数行只读BRAM并读取输入流，因此设计请求 `ram_1p` 单端口BRAM，且不会在同一控制分支提出读写同端口请求。
-
-每个奇数行输入事务同时生成两个 `ap_uint<32>` half：每个half包含一个pooled位置、当前Cout tile的4个结果。`pooled_half[2][4]` 完全分区；所有Cout tile完成后，Cout tile `0+1` 合成第一个8-channel pack，Pool2的 `2+3` 合成第二个pack。输出使用一个按`position -> pack`映射的固定`output_slot`循环，目标`II=1`，每次迭代最多写出一个channel pack；无效position的slot只跳过写操作，不产生占位事务。每个pool结果采用平衡的两级有符号比较树。
-
-## 层间连接
-
-Pool1输出由顶层顺序写入深度196的 `hls::stream<channel_pack_t>` BRAM FIFO，之后按原顺序作为Conv2 Im2Row的输入。这是因为两层卷积共享同一套物理卷积流水硬件，两个阶段顺序执行。
-
-Pool2默认直接连接独立FC模块。若FC为多个输出tile回放784个activation，其输入缓存属于FC内部；Pool不要求、更不强制顶层设置FC Input Buffer。FC不复用当前Systolic。
+这些暂存按块内 Cout Tile 独立寻址；新行 Tile0 不读取上一行的边界暂存。真实
+row12 之后用一条值为 -128 的虚拟底行生成最后一行输出，不读输入流、不写行缓存。
+右/下补边参与合法窗口的有符号最大值，不把输入无效 lane 的零当成补边。
 
 ## 当前验证状态
 
