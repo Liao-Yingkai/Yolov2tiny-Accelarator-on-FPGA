@@ -1,240 +1,300 @@
 #include "../src/systolic/systolic.h"
 
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0000.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv1_weight.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv2_weight.h"
-
+#include <algorithm>
 #include <cerrno>
-#include <sys/stat.h>
-
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <string>
-
+#include <sys/stat.h>
+#include <vector>
 
 /*
- * Systolic 的 PyTorch 对照 testbench。
- *
- * activation 不由 HLS Im2Row 产生，而是直接由 PyTorch unfold trace 按
- * spatial_tile -> token -> lane 的硬件流顺序装入。weight 则直接读取 exporter
- * 的 v2 blocked header，按 cout_tile -> token -> cout_lane -> 实际Cin 装入。这使本 TB 仅定位 Systolic
- * 本身的 pack、activation replay、weight replay 与 MAC，而不掩盖上游错误。
- * 输出不做完整 feature map 重排；每个 output transaction 直接映射到 NHWC
- * trace_conv*_systolic_int32_nhwc 的 (y,x,oc) 元素。
+ * YOLOv2-tiny Systolic OS 独立测试：输入和期望结果直接取同一套 Python 导出 BIN。
+ * - Activation [H,T,R,4,8]：按 y -> tile_x -> token 读取，每个 Cout 块重送一次。
+ * - Weight [ceil(Cout/4),R,4,8]：按全局 Cout Tile -> token 读取，每块只取自己的连续片段。
+ * - token = (kh*Kw+kw)*G+group，G=ceil(Cin/8)，R=Kh*Kw*G。
+ * - INT32 golden [H,W,Cout]：无 bias，little-endian；按真实 y/x/oc 随机索引。
+ * - 结果按块 -> y -> tile_x -> local_cout_tile 接收；无效空间/Cout lane 期望为零，
+ *   不访问 golden。分别比较两个 mask，不能用值为零代替 valid。
+ * CSV 每包一行。每层 Activation 只保存一次，权重和结果完整导出。
  */
 namespace {
-static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION == 2,
-              "requires blocked convolution weight headers v2");
+const std::string generated_directory =
+    "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/";
+constexpr char sample_suffix[] = "0000";
+constexpr int ACTIVATION_PACK_BYTES = SYSTOLIC_SPATIAL_PAR * SYSTOLIC_CIN_PAR;
+constexpr int WEIGHT_PACK_BYTES = SYSTOLIC_COUT_PAR * SYSTOLIC_CIN_PAR;
+constexpr int INT32_BYTES = 4;
 
 bool make_directory(const char* path) {
-    return mkdir(path, 0777) == 0 || errno == EEXIST;
+    if (mkdir(path, 0777) == 0) return true;
+    struct stat info;
+    return errno == EEXIST && stat(path, &info) == 0 && S_ISDIR(info.st_mode);
 }
 
-bool open_csv(std::ofstream& file, const std::string& path,
-              const char* header) {
-    file.open(path);
-    if (!file) {
-        std::cerr << "无法打开 CSV: " << path << std::endl;
+bool read_binary(const std::string& path, std::size_t expected_bytes,
+                 std::vector<std::int8_t>& bytes) {
+    std::ifstream file(path.c_str(), std::ios::binary | std::ios::ate);
+    if (!file || file.tellg() != static_cast<std::streamoff>(expected_bytes)) {
+        std::cerr << "BIN不存在或长度错误: " << path << " 期望字节数=" << expected_bytes << '\n';
         return false;
     }
-    file << header << '\n';
+    file.seekg(0);
+    bytes.resize(expected_bytes);
+    if (!file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(expected_bytes))) {
+        std::cerr << "BIN读取失败: " << path << '\n';
+        return false;
+    }
     return true;
 }
 
-int unfold_value(bool conv2, int y, int x, int token, int channel) {
-    if (!conv2) {
-        return channel == 0 ? trace_conv1_unfold_int8[
-            (y * CNN_CONV1_W + x) * SYSTOLIC_KERNEL_TOKENS + token] : 0;
-    }
-    return trace_conv2_unfold_int8[
-        (y * CNN_CONV2_W + x) * (SYSTOLIC_KERNEL_TOKENS * CNN_CONV2_CIN) +
-        token * CNN_CONV2_CIN + channel];
+// 前三字节按无符号解释，最高字节按有符号解释。不依赖宿主字节序或结构体布局。
+std::int32_t read_le_int32(const std::int8_t* byte) {
+    return std::uint8_t(byte[0]) + (std::int32_t(std::uint8_t(byte[1])) << 8) +
+           (std::int32_t(std::uint8_t(byte[2])) << 16) + std::int32_t(byte[3]) * (1 << 24);
 }
 
-int weight_value(bool conv2, int token, int channel, int output) {
-    // v2 头已按 tile/token/lane/Cin 排好，不再从 [K,Cout] 转置。
-    const int pack_lane = ((output / SYSTOLIC_COUT_PAR) * SYSTOLIC_KERNEL_TOKENS + token)
-                          * SYSTOLIC_COUT_PAR + output % SYSTOLIC_COUT_PAR;
-    if (!conv2) {
-        return channel == 0 ? conv1_weight[pack_lane] : 37;
-    }
-    return conv2_weight[pack_lane * CNN_CONV2_CIN + channel];
+unsigned lane_mask(int first, int limit, int lanes) {
+    unsigned mask = 0;
+    for (int lane = 0; lane < lanes; ++lane)
+        if (first + lane < limit) mask |= 1u << lane;
+    return mask;
 }
 
-int golden_value(bool conv2, int y, int x, int output) {
-    if (!conv2) {
-        return trace_conv1_systolic_int32_nhwc[
-            (y * CNN_CONV1_W + x) * CNN_CONV1_COUT + output];
-    }
-    return trace_conv2_systolic_int32_nhwc[
-        (y * CNN_CONV2_W + x) * CNN_CONV2_COUT + output];
+void write_columns(std::ofstream& csv, const char* prefix, int lanes, int channels) {
+    for (int lane = 0; lane < lanes; ++lane)
+        for (int c = 0; c < channels; ++c) csv << ',' << prefix << "_l" << lane << "_c" << c;
 }
 
-int run_layer(layer_mode_t layer_mode,
-              hls::stream<activation_pack_t>& activation_stream,
-              hls::stream<weight_pack_t>& weight_stream,
-              hls::stream<acc_tile_t>& output_stream, const char* name,
-              const std::string& directory) {
-    const bool conv2 = (layer_mode == LAYER2_MODE);
-    const int tiles_per_row = conv2 ? CNN_CONV2_TILES_PER_ROW : CNN_CONV1_TILES_PER_ROW;
-    const int spatial_tiles = conv2 ? CNN_CONV2_SPATIAL_TILES : CNN_CONV1_SPATIAL_TILES;
-    const int cout_tiles = conv2 ? CNN_CONV2_COUT_TILES : CNN_CONV1_COUT_TILES;
-    const std::string prefix = directory + "/" + name;
-    std::ofstream activation_csv, weight_csv, output_csv;
-    if (!open_csv(activation_csv, prefix + "_activations.csv",
-                  "transaction,y,tile_x,token,lane,physical_channel,valid,value") ||
-        !open_csv(weight_csv, prefix + "_weights.csv",
-                  "transaction,cout_tile,token,cout_lane,physical_channel,output,value") ||
-        !open_csv(output_csv, prefix + "_output.csv",
-                  "transaction,y,tile_x,cout_tile,lane,cout_lane,output,"
-                  "expected_valid,actual_valid,expected,actual,match")) {
-        return 1;
+bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_directory,
+               hls::stream<activation_pack_t>& activation_stream,
+               hls::stream<weight_pack_t>& weight_stream,
+               hls::stream<yolo_acc_tile_t>& output_stream, int& total_errors) {
+    // 用逻辑形状推导文件尺寸，避免照用 DUT 派生字段掩盖事务数错误。
+    const int groups = ceil_div(g.cin, SYSTOLIC_CIN_PAR);
+    const int reduction = g.kernel * g.kernel * groups;
+    const int tiles_per_row = ceil_div(g.w, SYSTOLIC_SPATIAL_PAR);
+    const int spatial_tiles = g.h * tiles_per_row;
+    const int cout_tiles = ceil_div(g.cout, SYSTOLIC_COUT_PAR);
+    const int resident_tiles = std::min(YOLO_TINY_COUT_CACHE_TILES, cout_tiles);
+    const int blocks = ceil_div(cout_tiles, resident_tiles);
+    const int activation_packs = spatial_tiles * reduction;
+    const int weight_packs = cout_tiles * reduction;
+    const int output_tiles = spatial_tiles * cout_tiles;
+    if (g.reduction_steps != reduction || g.spatial_tiles != spatial_tiles ||
+        g.cout_tiles != cout_tiles || g.resident_cout_tiles != resident_tiles ||
+        g.cache_blocks != blocks || g.im2row_tokens != activation_packs ||
+        g.weight_transactions != weight_packs) {
+        std::cerr << name << " 层配置与 BIN 事务契约不一致\n";
+        return false;
     }
 
-    int activations_written = 0;
-    for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
-        const int y = spatial_tile / tiles_per_row;
-        const int tile_x = spatial_tile % tiles_per_row;
-        const int valid_mask = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
-            ? CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
-        for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS; ++token) {
-            activation_pack_t pack;
-            pack.spatial_valid = valid_mask;
-            for (int lane = 0; lane < SYSTOLIC_SPATIAL_PAR; ++lane) {
-                const int x = tile_x * SYSTOLIC_SPATIAL_PAR + lane;
-                for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
-                    const int value = (valid_mask & (1 << lane)) ?
-                        unfold_value(conv2, y, x, token, channel) : 0;
-                    pack.pixel[lane].channel[channel] = value;
-                    activation_csv << activations_written << ',' << y << ','
-                                   << tile_x << ',' << token << ',' << lane << ','
-                                   << channel << ','
-                                   << ((valid_mask & (1 << lane)) != 0) << ','
-                                   << value << '\n';
-                }
-            }
-            activation_stream.write(pack);
-            ++activations_written;
+    std::vector<std::int8_t> activation, weight, golden;
+    const std::string layer = name;
+    const std::string trace = generated_directory + "trace/trace_" + layer;
+    const std::string suffix = std::string("_") + sample_suffix + ".bin";
+    if (!read_binary(trace + "_im2row_int8" + suffix,
+                     std::size_t(activation_packs) * ACTIVATION_PACK_BYTES, activation) ||
+        !read_binary(generated_directory + "bins/" + layer + "_weight.bin",
+                     std::size_t(weight_packs) * WEIGHT_PACK_BYTES, weight) ||
+        !read_binary(trace + "_systolic_int32_hwc" + suffix,
+                     std::size_t(g.h) * g.w * g.cout * INT32_BYTES, golden)) return false;
+
+    const std::string prefix = csv_directory + "/" + layer;
+    std::ofstream input_csv((prefix + "_input.csv").c_str());
+    std::ofstream weight_csv((prefix + "_weight.csv").c_str());
+    std::ofstream output_csv((prefix + "_output.csv").c_str());
+    if (!input_csv || !weight_csv || !output_csv) {
+        std::cerr << "CSV打开失败: " << prefix << '\n';
+        return false;
+    }
+    input_csv << "transaction,y,tile_x,token,spatial_valid";
+    write_columns(input_csv, "activation", SYSTOLIC_SPATIAL_PAR, SYSTOLIC_CIN_PAR);
+    input_csv << '\n';
+    weight_csv << "transaction,global_cout_tile,token";
+    write_columns(weight_csv, "weight", SYSTOLIC_COUT_PAR, SYSTOLIC_CIN_PAR);
+    weight_csv << '\n';
+    output_csv << "transaction,block,y,tile_x,global_cout_tile,"
+                  "expected_spatial_valid,actual_spatial_valid,expected_cout_valid,actual_cout_valid";
+    write_columns(output_csv, "expected", SYSTOLIC_SPATIAL_PAR, SYSTOLIC_COUT_PAR);
+    write_columns(output_csv, "actual", SYSTOLIC_SPATIAL_PAR, SYSTOLIC_COUT_PAR);
+    output_csv << ",match\n";
+
+    int errors = 0, activations_written = 0, weights_written = 0, outputs_read = 0;
+    for (int first = 0, block = 0; first < cout_tiles; first += resident_tiles, ++block) {
+        const int count = std::min(resident_tiles, cout_tiles - first);
+        if (!activation_stream.empty() || !weight_stream.empty() || !output_stream.empty()) {
+            std::cerr << name << " block=" << block << " 调用开始时 stream 非空\n";
+            return false;
         }
-    }
 
-    int weights_written = 0;
-    for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
-        for (int token = 0; token < SYSTOLIC_KERNEL_TOKENS; ++token) {
-            weight_pack_t pack;
-            for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR; ++cout_lane) {
-                const int output = cout_tile * SYSTOLIC_COUT_PAR + cout_lane;
-                for (int channel = 0; channel < SYSTOLIC_CIN_PAR; ++channel) {
-                    const int value = weight_value(conv2, token, channel, output);
-                    pack.lane[cout_lane].channel[channel] = value;
-                    weight_csv << weights_written << ',' << cout_tile << ','
-                               << token << ',' << cout_lane << ',' << channel
-                               << ',' << output << ',' << value << '\n';
+        // 每个全局 Cout Tile 在 BIN 中有连续 R 个 Pack。块边界只改变读取区间。
+        for (int ct = first; ct < first + count; ++ct) {
+            for (int token = 0; token < reduction; ++token) {
+                const int index = ct * reduction + token;
+                const std::int8_t* bytes = weight.data() + std::size_t(index) * WEIGHT_PACK_BYTES;
+                weight_pack_t pack;
+                weight_csv << index << ',' << ct << ',' << token;
+                for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
+                    for (int c = 0; c < SYSTOLIC_CIN_PAR; ++c) {
+                        const int value = bytes[j * SYSTOLIC_CIN_PAR + c];
+                        const int ic = (token % groups) * SYSTOLIC_CIN_PAR + c;
+                        const int oc = ct * SYSTOLIC_COUT_PAR + j;
+                        if ((ic >= g.cin || oc >= g.cout) && value != 0) {
+                            std::cerr << name << " 权重尾通道未补零: tile=" << ct
+                                      << " token=" << token << " ic=" << ic << " oc=" << oc << '\n';
+                            return false;
+                        }
+                        pack.lane[j].channel[c] = value;
+                        weight_csv << ',' << value;
+                    }
                 }
+                weight_csv << '\n';
+                weight_stream.write(pack);
+                ++weights_written;
             }
-            weight_stream.write(pack);
-            ++weights_written;
         }
-    }
 
-#if CNN_SYSTOLIC_USE_OS
-    systolic_OS(activation_stream, weight_stream, output_stream, layer_mode);
-#else
-    systolic(activation_stream, weight_stream, output_stream, layer_mode);
-#endif
-
-    int errors = 0;
-    int comparisons = 0;
-    int outputs_read = 0;
-    for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
-        const int y = spatial_tile / tiles_per_row;
-        const int tile_x = spatial_tile % tiles_per_row;
-        const int expected_valid = (conv2 && tile_x == CNN_CONV2_LAST_TILE_X)
-            ? CNN_CONV2_TAIL_SPATIAL_VALID_MASK : CNN_FULL_SPATIAL_VALID_MASK;
-        for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
-            const acc_tile_t actual = output_stream.read();
-            const int actual_valid = actual.spatial_valid.to_uint();
-            for (int lane = 0; lane < SYSTOLIC_SPATIAL_PAR; ++lane) {
-                const int x = tile_x * SYSTOLIC_SPATIAL_PAR + lane;
-                for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR;
-                     ++cout_lane) {
-                    const int output = cout_tile * SYSTOLIC_COUT_PAR + cout_lane;
-                    const int expected = (expected_valid & (1 << lane)) ?
-                        golden_value(conv2, y, x, output) : 0;
-                    const int got = actual.value[lane][cout_lane].to_int();
-                    const bool match = actual_valid == expected_valid && got == expected;
-                    output_csv << outputs_read << ',' << y << ',' << tile_x << ','
-                               << cout_tile << ',' << lane << ',' << cout_lane
-                               << ',' << output << ',' << expected_valid << ','
-                               << actual_valid << ',' << expected << ',' << got
-                               << ',' << match << '\n';
-                    ++comparisons;
-                    if (!match) {
-                        ++errors;
-                        if (errors <= 10) {
-                            std::cerr << name << " 错误: y=" << y << " tile="
-                                      << tile_x << " cout_tile=" << cout_tile
-                                      << " lane=" << lane << " oc=" << output
-                                      << " 期望=" << expected << " 实际=" << got
-                                      << " valid=" << actual_valid << std::endl;
+        // 原始 Activation BIN 不含 mask。按图像宽度重建，不修改有效数据，
+        // 不为每个本地 Cout Tile 重发：块内 Replay 应由 DUT 自己完成。
+        for (int spatial = 0; spatial < spatial_tiles; ++spatial) {
+            const int y = spatial / tiles_per_row;
+            const int tile_x = spatial % tiles_per_row;
+            const unsigned spatial_valid = lane_mask(tile_x * SYSTOLIC_SPATIAL_PAR, g.w,
+                                                     SYSTOLIC_SPATIAL_PAR);
+            for (int token = 0; token < reduction; ++token) {
+                const int index = spatial * reduction + token;
+                const std::int8_t* bytes = activation.data() + std::size_t(index) * ACTIVATION_PACK_BYTES;
+                activation_pack_t pack;
+                pack.spatial_valid = spatial_valid;
+                if (block == 0)
+                    input_csv << index << ',' << y << ',' << tile_x << ',' << token << ',' << spatial_valid;
+                for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
+                    for (int c = 0; c < SYSTOLIC_CIN_PAR; ++c) {
+                        const int value = bytes[i * SYSTOLIC_CIN_PAR + c];
+                        pack.pixel[i].channel[c] = value;
+                        if (block == 0) {
+                            const int ic = (token % groups) * SYSTOLIC_CIN_PAR + c;
+                            if (((spatial_valid & (1u << i)) == 0 || ic >= g.cin) && value != 0) {
+                                std::cerr << name << " Activation 尾部未补零: y=" << y
+                                          << " tile_x=" << tile_x << " token=" << token
+                                          << " lane=" << i << " ic=" << ic << '\n';
+                                return false;
+                            }
+                            input_csv << ',' << value;
                         }
                     }
                 }
+                if (block == 0) input_csv << '\n';
+                activation_stream.write(pack);
+                ++activations_written;
             }
-            ++outputs_read;
+        }
+
+        systolic_OS(activation_stream, weight_stream, output_stream, g, first, count);
+
+        // 不将结果重排成整图。由当前事务恢复 y、x、全局 oc，直接索引 HWC golden。
+        for (int y = 0; y < g.h; ++y) {
+            for (int tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
+                const int first_x = tile_x * SYSTOLIC_SPATIAL_PAR;
+                const unsigned spatial_valid = lane_mask(first_x, g.w, SYSTOLIC_SPATIAL_PAR);
+                for (int ct = first; ct < first + count; ++ct) {
+                    if (output_stream.empty()) {
+                        std::cerr << name << " 缺少输出: block=" << block << " y=" << y
+                                  << " tile_x=" << tile_x << " cout_tile=" << ct << '\n';
+                        return false;
+                    }
+                    const yolo_acc_tile_t actual = output_stream.read();
+                    const int first_oc = ct * SYSTOLIC_COUT_PAR;
+                    const unsigned cout_valid = lane_mask(first_oc, g.cout, SYSTOLIC_COUT_PAR);
+                    const unsigned actual_spatial_valid = actual.spatial_valid.to_uint();
+                    const unsigned actual_cout_valid = actual.cout_valid.to_uint();
+                    bool match = actual_spatial_valid == spatial_valid && actual_cout_valid == cout_valid;
+                    if (!match && ++errors <= 10)
+                        std::cerr << name << " mask错误: block=" << block << " y=" << y
+                                  << " tile_x=" << tile_x << " cout_tile=" << ct
+                                  << " spatial=" << actual_spatial_valid << '/' << spatial_valid
+                                  << " cout=" << actual_cout_valid << '/' << cout_valid
+                                  << " (实际/期望)\n";
+
+                    output_csv << outputs_read++ << ',' << block << ',' << y << ',' << tile_x << ',' << ct
+                               << ',' << spatial_valid << ',' << actual_spatial_valid
+                               << ',' << cout_valid << ',' << actual_cout_valid;
+                    for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
+                        const int x = first_x + i;
+                        for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
+                            const int oc = first_oc + j;
+                            // HWC BIN 不保存物理尾部。必须先判界，不能用 DUT 的 mask 控制参考读取。
+                            std::int32_t expected = 0;
+                            if (x < g.w && oc < g.cout) {
+                                const std::size_t index = (std::size_t(y) * g.w + x) * g.cout + oc;
+                                expected = read_le_int32(golden.data() + index * INT32_BYTES);
+                            }
+                            const std::int32_t got = actual.value[i][j].to_int();
+                            output_csv << ',' << expected;
+                            if (got != expected) {
+                                match = false;
+                                if (++errors <= 10)
+                                    std::cerr << name << " 累加值错误: block=" << block << " y=" << y
+                                              << " x=" << x << " oc=" << oc << " actual=" << got
+                                              << " expected=" << expected << '\n';
+                            }
+                        }
+                    }
+                    for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i)
+                        for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j)
+                            output_csv << ',' << actual.value[i][j].to_int();
+                    output_csv << ',' << match << '\n';
+                }
+            }
+        }
+        if (!activation_stream.empty() || !weight_stream.empty() || !output_stream.empty()) {
+            std::cerr << name << " block=" << block << " 事务数错误: 剩余 activation="
+                      << !activation_stream.empty() << " 剩余 weight=" << !weight_stream.empty()
+                      << " 多余 output=" << !output_stream.empty() << '\n';
+            return false;
         }
     }
-    const int expected_activations = spatial_tiles * SYSTOLIC_KERNEL_TOKENS;
-    const int expected_weights = cout_tiles * SYSTOLIC_KERNEL_TOKENS;
-    const int expected_outputs = spatial_tiles * cout_tiles;
-    if (activations_written != expected_activations ||
-        weights_written != expected_weights || outputs_read != expected_outputs ||
-        !activation_stream.empty() || !weight_stream.empty() ||
-        !output_stream.empty()) {
-        ++errors;
+
+    input_csv.close();
+    weight_csv.close();
+    output_csv.close();
+    if (!input_csv || !weight_csv || !output_csv) {
+        std::cerr << "CSV写入失败: " << prefix << '\n';
+        return false;
     }
-    std::cout << "Systolic PyTorch " << name << " 输入事务="
-              << activations_written << '/' << expected_activations
-              << " 权重事务=" << weights_written << '/' << expected_weights
-              << " 输出事务=" << outputs_read << '/' << expected_outputs
-              << " 检查元素数=" << comparisons << " 错误数=" << errors << ' '
-              << (errors ? "FAIL" : "PASS") << std::endl;
-    return errors;
+    if (activations_written != blocks * activation_packs ||
+        weights_written != weight_packs || outputs_read != output_tiles) ++errors;
+    std::cout << name << " Cout块=" << blocks << " Activation事务=" << activations_written
+              << " Weight事务=" << weights_written << " 输出事务=" << outputs_read
+              << " 验证元素数=" << outputs_read * SYSTOLIC_SPATIAL_PAR * SYSTOLIC_COUT_PAR
+              << " 错误数=" << errors << ' ' << (errors ? "FAIL" : "PASS") << '\n';
+    total_errors += errors;
+    return true;
 }
-
 }  // namespace
-
-static_assert(sizeof(trace_conv1_unfold_int8) / sizeof(trace_conv1_unfold_int8[0]) ==
-              CNN_CONV1_H * CNN_CONV1_W * SYSTOLIC_KERNEL_TOKENS, "conv1 unfold shape changed");
-static_assert(sizeof(trace_conv2_unfold_int8) / sizeof(trace_conv2_unfold_int8[0]) ==
-              CNN_CONV2_H * CNN_CONV2_W * SYSTOLIC_KERNEL_TOKENS * CNN_CONV2_CIN, "conv2 unfold shape changed");
-static_assert(sizeof(trace_conv1_systolic_int32_nhwc) /
-              sizeof(trace_conv1_systolic_int32_nhwc[0]) == CNN_CONV1_H * CNN_CONV1_W * CNN_CONV1_COUT,
-              "conv1 systolic trace shape changed");
-static_assert(sizeof(trace_conv2_systolic_int32_nhwc) /
-              sizeof(trace_conv2_systolic_int32_nhwc[0]) == CNN_CONV2_H * CNN_CONV2_W * CNN_CONV2_COUT,
-              "conv2 systolic trace shape changed");
-static_assert(sizeof(conv1_weight) / sizeof(conv1_weight[0]) == SYSTOLIC_KERNEL_TOKENS * CNN_CONV1_COUT,
-              "conv1 weight shape changed");
-static_assert(sizeof(conv2_weight) / sizeof(conv2_weight[0]) == SYSTOLIC_KERNEL_TOKENS * CNN_CONV2_CIN * CNN_CONV2_COUT,
-              "conv2 weight shape changed");
 
 int main() {
     const std::string directory = "simulation_data/pytorch/systolic";
-    if (!make_directory("simulation_data") ||
-        !make_directory("simulation_data/pytorch") ||
+    if (!make_directory("simulation_data") || !make_directory("simulation_data/pytorch") ||
         !make_directory(directory.c_str())) {
-        std::cerr << "无法创建 CSV 目录: " << directory << std::endl;
+        std::cerr << "无法创建CSV目录: " << directory << '\n';
         return 1;
     }
-    hls::stream<activation_pack_t> activation_stream;
-    hls::stream<weight_pack_t> weight_stream;
-    hls::stream<acc_tile_t> output_stream;
+    const char* names[] = {"conv1", "conv2", "conv3", "conv4", "conv5",
+                           "conv6", "conv7", "conv8", "prediction"};
+    static_assert(sizeof(names) / sizeof(names[0]) == YOLO_TINY_LAYER_COUNT,
+                  "BIN layer names must match the fixed YOLO layer table");
+    hls::stream<activation_pack_t> activation_stream("activation");
+    hls::stream<weight_pack_t> weight_stream("weight");
+    hls::stream<yolo_acc_tile_t> output_stream("result");
     int errors = 0;
-    errors += run_layer(LAYER1_MODE, activation_stream, weight_stream, output_stream,
-                        "conv1", directory);
-    errors += run_layer(LAYER2_MODE, activation_stream, weight_stream, output_stream,
-                        "conv2", directory);
-    std::cout << "Systolic PyTorch CSV保存路径=" << directory << std::endl;
+    // 同一组流依次运行全部层、全部 Cout 块，覆盖 Conv8 跨权重段和 Prediction 尾 Cout。
+    for (int i = 0; i < YOLO_TINY_LAYER_COUNT; ++i)
+        if (!run_layer(YOLO_TINY_GEOMETRIES[i], names[i], directory,
+                       activation_stream, weight_stream, output_stream, errors)) return 1;
+    std::cout << "Systolic OS " << (errors ? "FAIL" : "PASS") << " 错误数=" << errors
+              << " CSV目录=" << directory << '\n';
     return errors ? 1 : 0;
 }

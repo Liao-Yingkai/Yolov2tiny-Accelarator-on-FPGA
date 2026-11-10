@@ -78,7 +78,21 @@ DDR 起始字节地址 = layer_weight_base + first_cout_tile * R * 32
 ### 实现与验收顺序
 
 1. 独立重构 OS（已实现）：接入块配置、可变 R、单缓存预加载、Replay 和两种结果 mask。Im2Row 与 Python BIN 格式不变。旧调用点移除 OS 切换分支，不迁移其数据流或测试数据。已通过 G++ 和 Vitis HLS 2022.2 Clang 的 C++14 静态语法检查；未运行 testbench 或综合。
-2. 用真实 Im2Row 和权重 BIN，按块对照 Python 的 **bias 前 INT32 Systolic** golden，检查数值、mask 与每块流守恒。重点覆盖 RGB、多个 Group、Conv8 多块、Prediction 1×1 和最后 Cout Tile、W=13 行尾、连续调用；加定向非零无效 lane 测试确认 mask 屏蔽，不把该测试误当成允许违反 Cin 补零契约。
+2. 已编写真实 BIN 对照 testbench，见下节。定向非零无效 lane 的屏蔽测试留待补充，不篡改真实 trace，也不把该测试误当成允许违反 Cin 补零契约。
 3. 以 `xc7z020-clg400-2`、10 ns 为评估基线，综合确认单套 `4×4×8` 数据通路、四 Bank 读带宽、实际 BRAM 余量、归约 II 和时序；RTL co-sim 验证输入气泡、输出反压、BRAM 返回与波前排空。32 Cout 为首版目标，不是整机资源已通过的结论。若放不下，优先评估仅 Conv8 降为 16、其余层仍最多 32，保持导出格式不变。
 4. 接入后续 PostProcess、Pool、Loader/Writer 后测量整网基线，再按上节实现加载重叠。Feature DDR 布局、FIFO 深度、板级带宽和最终 fps 指标不阻塞 Systolic 首版独立实现。
+
+### 真实 BIN 对照 testbench
+
+HLS 工程的 Top 设为 `systolic_OS`，设计文件使用 `systolic_OS.cpp`，testbench 仅加入 [`test_systolic_pytorch.cpp`](../cnn_accelerator/testbench/test_systolic_pytorch.cpp)。旧 `test_systolic.cpp` 仍是 MNIST 广播式测试，不用于此 Top。
+
+路径和样本后缀集中在 testbench 顶部，默认读取 `YOLOV2_TINY/generated/` 的样本 `0000`。每层使用以下三份文件，必须来自同一套导出参数：
+
+- `trace/trace_<layer>_im2row_int8_0000.bin`：按 `y → tile_x → token` 的物理 Activation Pack。BIN 不带 mask，按行宽重建 `spatial_valid`。每个 Cout 块重新发送整层一次；不为块内每个 Cout Tile 重复发送。
+- `bins/<layer>_weight.bin`：按全局 Cout Tile 和 token 取本块的连续片段，原样恢复 signed INT8 lane；检查尾部补零，不改动 BIN 数据。
+- `trace/trace_<layer>_systolic_int32_hwc_0000.bin`：按 `(y*W+x)*Cout+oc` 索引 bias 前的 signed little-endian INT32 结果。尾空间或尾 Cout 直接期望零，先判界再访问，不重排整个 DUT 输出。
+
+默认依次验证九层的全部 100 个 Cout 块，覆盖 Conv8 的 `8191 → 8192` 权重地址分段、Prediction 的 1×1 和 `cout_valid=0001`、空间行尾和连续块调用。逐元素核对两个 mask、无效输出清零及事务守恒。当前配置预计输出 371072 个 Tile；完整 RTL co-sim 的阵列推进量约 3500 万步，另有加载和握手开销，耗时不能按 Im2Row 的测试规模估算。
+
+CSV 输出到仿真工作目录下 `simulation_data/pytorch/systolic/`，每层各有 `*_input.csv`、`*_weight.csv`、`*_output.csv`，每 Pack/Tile 一行。同层各块的 Activation 相同，输入 CSV 只记第一块；权重和输出完整记录。终端打印各层事务数与 PASS/FAIL，失败返回非零。已核对现有 27 个 BIN 的字节数，并通过 G++ 和 Vitis HLS 2022.2 Clang 静态语法检查；本次未运行 testbench、仿真或综合。
 
