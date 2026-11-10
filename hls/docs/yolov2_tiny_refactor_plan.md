@@ -1,6 +1,6 @@
 # YOLOv2-tiny 重构方案草案
 
-记录日期：2026-11-01，更新日期：2026-11-02。状态：分模块重构中；Im2Row已独立综合，整条YOLO流水尚未完成实现或验证。
+记录日期：2026-11-01，更新日期：2026-11-10。状态：分模块重构中；DDR 搬运与层间调度已有首版规格，整条 YOLO 流水尚未完成集成或验证。
 
 本文作为后续从 MNIST 扩展到 YOLOv2-tiny VOC 的设计输入，整理最近讨论的结论，并区分已确定方向、优先评估方案和待定事项。它不表示当前 HLS 已支持 YOLO，也不直接授权修改所有工程。
 
@@ -67,13 +67,14 @@ DDR 输入 Feature Map
 - 层间 Feature Map 使用 DDR 两个互不重叠的区域交替读写，不继续用 MNIST 的整层 BRAM FIFO 保存层间结果。
 - 近期继续采用 `m_axi + s_axilite`，模块内部使用 `hls::stream`。外置 AXI DMA、独立 RTL 交付及平台依赖问题暂缓，不以“m_axi 不能导出 RTL”为设计前提。
 
-层内按最多32个Cout一个缓存块调度；确切函数接口及Feature DDR布局仍待后续模块设计：
+层内按最多32个Cout一个缓存块调度，控制与 DDR 契约见
+[Loader、Writer 与层间 DDR 缓冲](yolov2_tiny_ddr_io.md)：
 
 ```text
 layer
     → cout_cache_block
-        → 加载该缓存块的权重及后处理参数
-        → 扫描一次输入 Feature Map
+        → 从整层流消费当前块的权重及后处理参数
+        → 重新调用 Feature Loader 和 Im2Row，各扫描一次
         → output_y
             → tile_x
                 → local_cout_tile
@@ -122,7 +123,7 @@ Activation Replay最大数据容量 = 1152 × 32 Byte = 36 KiB
 
 数组容量应按支持层中实际最大的工作集确定，不能机械地把最大 W 与最大 Cin 相乘。缓存层数、单双缓冲、Bank 组织和各层可驻留 Cout 数量均须先核算，再决定是否增加预取重叠。
 
-## 5. DDR Feature布局待定，权重导出格式已约定
+## 5. 首版 DDR Feature 与模型布局
 
 必须分清三个顺序：DDR 物理布局、stream 事务顺序、PE 归约顺序。不能因 DDR 布局变化而把一个输出的 Cin Group 拆成多次独立归约。
 
@@ -132,16 +133,13 @@ Feature 输入 stream 的设计方向是：
 H → W → cin_group → Pack 内 channel_lane
 ```
 
-每次发送一个 8-channel Pack；实际逻辑 Cin 尾部有效性由配置确定。
+每次发送一个 8-channel Pack。Feature Loader 在发送时补齐最后一组的无效 Cin，
+不把补零字节写回 DDR；Im2Row 的空间 Padding 与 `spatial_valid` 保持不变。
 
-Feature 的 DDR 物理布局尚未确定：
-
-- 普通 NHWC 与逐位置读取全部 Cin Group 自然匹配，但分 Cout 计算的输出写地址不连续。
-- `[channel_group8][H][W][8]` 可在及时组装出 8 通道时改善分组连续写入，但下一层可能需要读取重排；它不是已经选定的方案。
-- 只驻留 4 个 Cout 时，Blocked8 本身不能自动解决半 Pack 组装问题。
-- 非连续地址可以正确写入；局部缓存用于满足打包和改善 Burst，不应把它描述为所有布局下功能正确的必要条件。
-
-确定布局时，要一起写清 Loader 的连续读取块、重排存储量、Writer 的输出粒度、尾通道 Padding、行/块对齐和地址公式。两个 DDR Feature 区域容量按所有实际保存 Tensor 的物理大小取上限，包含输入和存储对齐，不能直接固定为约 0.7 MB。
+Feature DDR 首版采用普通 NHWC：首图为紧凑 RGB，中间通道均对齐到 8，
+Prediction 按 128 个物理槽存 125 个逻辑通道。Writer 只缓存一个空间 Tile
+的当前 Cout 块，按像素写短连续段；跨像素跳地址是这一布局的已知取舍。
+A/B 两区各至少 692,224 B，整层写回完成后交换，不跨层覆盖或预读。
 
 权重逻辑仍对应 `W[k][cout]`，其中 `k=((kh*Kw)+kw)*Cin+cin`。逻辑NPY保留`[Kh*Kw*Cin,Cout]`，物理BIN采用如下独立于缓存块容量的布局：
 
@@ -150,9 +148,14 @@ global_cout_tile → kh → kw → cin_group
     → cout_lane → cin_lane
 ```
 
-物理Shape为`[ceil(Cout/4),Kh*Kw*ceil(Cin/8),4,8]`，每个事务32字节。Exporter将Cin/Cout物理尾部权重置零，Loader不重新插入通道或按旧紧凑Cin布局消费字节。YOLO 版依赖冻结的权重 BIN 和 Im2Row 的 Cin 补零契约，Systolic 不重复清零无效 Cin；空间与 Cout 的 mask 仍独立生效。这与旧 MNIST Systolic 的入口处理不同。
+物理Shape为`[ceil(Cout/4),Kh*Kw*ceil(Cin/8),4,8]`，每个事务32字节。Exporter
+将 Cin/Cout 物理尾权重置零，Weight Loader 整层顺序恢复 Pack，不重复补零。
+Feature 的 Cin 尾零由 Feature Loader 生成，Systolic 不重复处理；空间与 Cout
+的 mask 仍独立生效。
 
-32-Cout缓存块只是文件中最多8个连续Cout Tile的读取范围；调整缓存数量不应改变BIN布局。精确导出索引、二进制文件、参数排列和metadata由PyTorch工程的`YOLOV2_TINY/README.md`维护，后续由负责Exporter的agent同步实现，HLS侧不另维护一份导出规格。Loader、TB和PS后续必须遵循同一版本。Feature DDR布局仍未冻结。
+32-Cout 缓存块只是 Systolic 每次从整层流消费的连续范围；调整驻留数量不应改变
+BIN 布局。模型 BIN 与 metadata 约定由 PyTorch 工程的 `YOLOV2_TINY/README.md`
+维护。HLS 的 DDR 地址、参数组包和写回规则见[搬运规格](yolov2_tiny_ddr_io.md)。
 
 ## 6. Im2Row：多 Group 的 BRAM 窗口方案
 
@@ -171,7 +174,8 @@ kh → kw → cin_group
 - 3×3：stride=1，四侧 Padding=1，卷积填充值为量化零点 0。
 - 1×1：stride=1，无 Padding，不走 3×3 滑窗读取；仍需收集 4 个空间位置并按 Group 输出。
 - 每行单独切 Spatial Tile；例如 W=13 的末 Tile 仅一个 Lane 有效。
-- Cin 尾组按 `group*8+lane<Cin` 判定，不能继续用 MNIST 的层模式特判。
+- 当前源码在 Im2Row 入口清零 Cin 尾组；集成时由 Feature Loader 按
+  `group*8+lane<Cin` 处理，Im2Row 只接收规范化后的固定 8-lane Pack。
 - Padding 不使输出空间 Lane 无效；不存在的空间 Lane 则 `spatial_valid=0`。
 
 ### 6.2 已实现的存储方向：保留空间结构，将 Group 存入 BRAM 深度
@@ -207,7 +211,8 @@ Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先�
 - 保留错拍、Valid 传播、初始化和排空机制。`K+6`仅为4×4阵列的逻辑步数模型，不等于实测 Tile 间隔。
 - 分开处理传播 Token Valid、Spatial Valid、Cout尾部有效性和Cin尾组有效性。
 - Prediction 的125通道最后一个4-Cout Tile只有一个有效通道；若按8通道打包，最后一组则有5个有效通道，不能混淆两种尾部。
-- Cin 无效 lane 由导出文件和 Im2Row 补零；`cout_valid` 按全局计算 Tile 生成，在权重注入端合入传播 valid，并随结果交给下游。Loader 只恢复文件字节，不承担补零或二次重排。
+- 权重 Cin 尾组由导出器补零，Feature Cin 尾组集成时由 Feature Loader 补零；
+  `cout_valid` 按全局计算 Tile 生成，在权重注入端合入传播 valid，并随结果交给下游。
 
 ### 7.2 一次性PostProcess与QAT边界调整
 
@@ -307,22 +312,23 @@ output = signed INT8 clamp(scaled, -128, 127)
   先锁存旧值、后写当前行。内层 Cout Tile 循环目标 II=1，实际排程和映射待综合。
 - Conv7、Conv8、Prediction 原样透传。详细接口与验证见 [Pool 设计](pool.md)。
 
-## 9. 实施前必须补齐的设计
+## 9. 集成决策与待验证事项
 
-| 待定事项 | 需要形成的结论 |
+| 事项 | 当前状态或待验证结论 |
 |---|---|
 | 片上存储预算 | 各 Buffer容量、Bank及端口组织、实际BRAM余量 |
 | Cout驻留数量 | 首版各层最多32通道，BRAM综合后复核；按实际Tile数处理小层/尾块，配置Activation Replay |
-| Feature DDR布局 | Loader与Writer共同使用的地址公式、Burst和局部重排需求 |
-| 导出ABI | 详细权重/参数/BIN约定由PyTorch工程文档维护；HLS及调用方后续同步，Feature DDR布局仍待确定 |
+| Feature DDR布局 | 首版 NHWC 与 A/B 两区已定；实际 burst、端口分组及吞吐待验证 |
+| 导出ABI | 权重/参数/BIN 约定由 PyTorch 工程文档维护，HLS 与调用方按搬运规格接入 |
 | Im2Row多Group调度 | Strip BRAM访问表、Line Buffer覆盖时刻、启动及行尾处理 |
 | 1×1路径 | 四空间位置收集、Group读取与无Padding路径 |
 | YOLO整数数值 | 已决定移除激活前FakeQuant、采用一次性PostProcess；固定alpha常量及负分支系数派生，需新QAT微调、整数Golden及误差验证 |
-| Pool输出契约 | 已确定紧密的池化后 4×4 Tile；Writer 负责 8 通道组装，DDR 地址待定 |
+| Pool输出契约 | 已确定紧密的池化后 4×4 Tile；Writer 按输出坐标组装 8 通道并写 DDR |
 | 调用配置 | 已在同一ConvGeometry九层表补齐Pool/Bypass、输出、激活及32-Cout缓存字段并编译期校验；本次仅静态检查，字段消费者及调用方仍待迁移 |
 | 性能目标 | 目标分辨率、频率、fps及有效DDR带宽预算 |
 
-缓存数量首版按32个Cout设计，仍受后续综合预算约束；不据此冻结Feature Blocked8布局、全部FIFO depth=2或整条流水II。
+缓存数量首版按32个Cout设计，仍受后续综合预算约束。分块 DDR 布局保留为性能备选；
+不预先冻结全部 FIFO 深度或整条流水 II。
 
 先前约2.84 fps仅是416输入、100 MHz、II=1、每Tile按K+6推进并含行尾空Lane的估算，不是综合或板测结论，也不是设计目标。性能评估须同时计入DDR重读、Im2Row预装、权重加载和流水停顿，不能只凭读取字节数认定某层必然受带宽限制。
 

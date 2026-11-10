@@ -33,16 +33,16 @@
             写一个 INT32 结果 Tile
 ```
 
-设 `S=geometry.spatial_tiles`，单次调用读取 **`B*R` 个权重 Pack**、**`S*R` 个 Activation Pack**，输出 **`S*B` 个结果 Tile**。整层权重各读一次，不随空间重扫重复加载；Activation 的整层输入量按 Cout 块数乘以 `S*R`。一块结束后下游自然排空，再切下一块；层间还要等 DDR 写回完成。
+设 `S=geometry.spatial_tiles`，单次调用读取 **`B*R` 个权重 Pack**、**`S*R` 个 Activation Pack**，输出 **`S*B` 个结果 Tile**。整层权重各读一次，不随空间重扫重复加载；Activation 的整层输入量按 Cout 块数乘以 `S*R`。本块卷积生产结束后可启动下一块，不要求层级下游先排空；只有层间切换必须等整层 DDR 写回完成。
 
 通过阻塞 stream 自然传递反压，不增设 pause/busy 信号。Replay 期间上游可在 FIFO 容量内推进，满时由 stream 阻塞。集成时要保证权重能先到达 Systolic；不能让同一 Loader 卡在向浅 Feature FIFO 写数据，还没发出 Systolic 正在等待的权重。
 
 ### 权重加载和缓存
 
-沿用 Python 冻结的物理 BIN：`global_cout_tile → kh → kw → cin_group → cout_lane → cin_lane`。**一个权重 Pack 固定为 `4 Cout × 8 Cin` 的 32 字节**；Loader burst 读的是当前块的连续文件区间，向 Systolic 逐 Pack 发送，不一次发送 32 个 Cout。AXI beat 与 Pack 是不同粒度，例如 64-bit AXI 可用 4 个 beat 拼出一个 Pack。
+沿用 Python 冻结的物理 BIN：`global_cout_tile → kh → kw → cin_group → cout_lane → cin_lane`。**一个权重 Pack 固定为 `4 Cout × 8 Cin` 的 32 字节**。Weight Loader 整层顺序读取并逐 Pack 发送；Systolic 每次只取本块的连续范围，由 FIFO 反压控制读速率。AXI beat 与 Pack 是不同粒度，例如 64-bit AXI 可用 4 个 beat 拼出一个 Pack。
 
 ```text
-DDR 起始字节地址 = layer_weight_base + first_cout_tile * R * 32
+本块在整层流中对应的首字节地址 = layer_weight_base + first_cout_tile * R * 32
 本块有效字节数   = B * R * 32
 本地权重地址     = local_cout_tile * R + token
 ```
@@ -61,12 +61,12 @@ DDR 起始字节地址 = layer_weight_base + first_cout_tile * R * 32
 
 ### Valid 与结果交付
 
-- **Cin 尾通道**是输入数值契约，不是空间 mask：PyTorch 权重 BIN 与 Im2Row 都已对组内无效 Cin 填零。YOLO Systolic 直接使用固定 Dot8，不重复清零；Loader 只恢复文件字节。TB 核对 RGB 的补零契约。
+- **Cin 尾通道**是输入数值契约，不是空间 mask：PyTorch 权重 BIN 已对无效 Cin 填零；Feature 当前由 Im2Row 清零，集成时改由 Feature Loader 负责。YOLO Systolic 直接使用固定 Dot8，不重复清零。Weight Loader 只恢复文件字节。
 - **`spatial_valid`** 从 Im2Row 继承，适用于当前 Spatial Tile 的全部本地 Cout Tile。不存在的空间位置不更新累加器；卷积 Padding 的零值不使真实空间位置失效。
 - **`cout_valid`** 是 4-bit 的计算 Tile mask。在每个本地 Cout Tile 开始时，以 `global_tile=first_cout_tile+local_cout_tile` 判断是否为整层最后一个 Tile；若是则取 `geometry.last_cout_valid_mask`，否则为 `1111`。注入时令权重 lane 的传播 valid 等于 `注入有效归约 token && cout_valid[lane]`，随权重一起错拍、向下传播。排空只停止注入新的有效 token，不丢弃已在传播中的数据。PE 保留激活、权重与空间有效条件；无效 Cout 不更新累加器，输出为零。不删减 token 或结果事务，也不因此减少物理乘法器数。
 - Prediction 的最后一块仍有 8 个物理计算 Tile、29 个逻辑 Cout；仅整层最后一个计算 Tile 的 `cout_valid=0001`，只对应 C124。不能将这个 4-lane mask 与 Writer 的 8 通道末组（5 个有效通道）混用。
 
-结果契约为 INT32 `value[spatial_lane][cout_lane]` 加 `spatial_valid` 和 `cout_valid`，块内顺序 `y → tile_x → local_cout_tile`。块起点与 Tile 数是调用级配置，坐标不必随每个事务发送。Systolic 不缓存整图输出、不重排、不访问 DDR；PostProcess 根据全局 Cout 索引处理参数，先检查 `cout_valid` 再读 bias/M/S；Pool 或 Bypass 后，由 **Writer** 按最终空间坐标和全局 Cout 写回。Feature DDR 物理布局、Writer 的 8 通道组装和 burst 策略留到集成阶段。
+结果契约为 INT32 `value[spatial_lane][cout_lane]` 加 `spatial_valid` 和 `cout_valid`，块内顺序 `y → tile_x → local_cout_tile`。块起点与 Tile 数是调用级配置，坐标不必随每个事务发送。Systolic 不缓存整图输出、不重排、不访问 DDR；Param Loader 在取 bias/M/S 前检查通道边界，PostProcess 只为有效 lane 应用参数。Pool 或 Bypass 后，由 **Writer** 按最终空间坐标和全局 Cout 写回。见 [首版 DDR 布局与 Writer 规格](yolov2_tiny_ddr_io.md)。
 
 ### 后续性能优化：重叠权重加载
 

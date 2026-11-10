@@ -80,7 +80,11 @@ input_id = ((y × W) + x) × G + group
 pack.channel[c] 对应逻辑通道 group×8+c
 ```
 
-消费输入时对 `group×8+c>=Cin` 的物理通道清零。Conv1仅C0～C2有效，Loader不必重复规范化其余5通道。DDR物理布局未冻结，但Loader必须提供这个stream顺序；不得把DDR块间填充当作图像像素送进来。
+当前源码在消费输入时对 `group×8+c>=Cin` 的物理通道清零。按
+[DDR 搬运规格](yolov2_tiny_ddr_io.md)，
+集成时由 Feature Loader 从紧凑 RGB 拆包并补齐无效 Cin，Im2Row 不再重复清零。
+Im2Row 仍每笔接收固定 8-lane Pack，使用 `cin_groups` 控制事务数量；
+`spatial_valid` 仅标记空间位置，不新增通道 mask。Loader 不发送空间 Padding。
 
 ### 3.2 输出顺序
 
@@ -360,7 +364,8 @@ Systolic在Replay其他Cout计算Tile时不需要新Activation，Im2Row可以利
 4. 1×1已采用前三位置缓存、最后位置直接输出；不保证与输入气泡隔离的整段G连续输出，后者需要额外预取保证。
 5. ConvGeometry统一构造及固定表前提的编译期校验已实现；新测试和Top的同步迁移仍需独立完成，配置结构方向本身已确定。
 
-DDR布局与Cout缓存容量尚未冻结，但Loader只要遵循本文件输入契约，Im2Row不应直接依赖DDR地址或Cout数量。
+首版 DDR 布局和重扫边界见 [DDR 搬运规格](yolov2_tiny_ddr_io.md)。Top 在每个
+Cout 块重新调用 Im2Row；Im2Row 自身不依赖 DDR 地址或 Cout 数量。
 
 ## 13. 后续验证与本次范围
 
