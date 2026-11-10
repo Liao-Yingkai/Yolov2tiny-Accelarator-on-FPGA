@@ -292,7 +292,10 @@ output = signed INT8 clamp(scaled, -128, 127)
 
 必须先保护旧行边界，再覆盖相应地址。边界寄存器按行和 local_cout_tile 隔离，行结束后不能把最后一列误当成下一行的左邻居。
 
-输出按窗口空间坐标递增；跨边界窗口等下一 Tile 到达后完成，不能因此先输出更靠右的窗口。输出打包、尾 Tile 的延迟和排空需在接口阶段补全。
+输入和输出均按 `Cout 块 → y → tile_x → local_cout_tile` 排列，输出空间坐标
+按池化后宽度紧密分成连续四位置的 Tile。跨边界窗口等下一 Tile 到达后完成，
+行尾按同一 Cout 顺序排空。stride=2 将相邻输入空间 Tile 的两个半结果合并，
+末输入 Tile 无配对时直接发出带 mask 的结果。8 通道组装留给 Writer。
 
 ### 8.3 Stride、Padding 与 RAM 端口
 
@@ -300,7 +303,9 @@ output = signed INT8 clamp(scaled, -128, 127)
 - Pool6：2×2、stride=1，仅右侧/下侧各补1，输出保持13×13。
 - Pool 填充值为 signed INT8 最小值 -128，不使用0。输入无效 Lane 的零 Payload 不能误参加负数窗口比较。
 - Pool6 右边界使用右补边，最末输入行之后还须完成下补边窗口；带 Padding 的合法输出不能被当作无效位置丢弃。
-- Stride=1必须重新设计读旧值、锁存、写当前行的时序，不能沿用隔行只读/只写的单口前提。优先评估一读一写双端口 BRAM；具体类型、读延迟和目标 II 待排表及综合确认。
+- 首版使用共享的 `ram_s2p/bram`（416×128-bit，请求 1 拍读延迟），stride=1
+  先锁存旧值、后写当前行。内层 Cout Tile 循环目标 II=1，实际排程和映射待综合。
+- Conv7、Conv8、Prediction 原样透传。详细接口与验证见 [Pool 设计](pool.md)。
 
 ## 9. 实施前必须补齐的设计
 
@@ -313,7 +318,7 @@ output = signed INT8 clamp(scaled, -128, 127)
 | Im2Row多Group调度 | Strip BRAM访问表、Line Buffer覆盖时刻、启动及行尾处理 |
 | 1×1路径 | 四空间位置收集、Group读取与无Padding路径 |
 | YOLO整数数值 | 已决定移除激活前FakeQuant、采用一次性PostProcess；固定alpha常量及负分支系数派生，需新QAT微调、整数Golden及误差验证 |
-| Pool输出契约 | 当前Cout块结果的顺序、延迟输出、8通道组装位置 |
+| Pool输出契约 | 已确定紧密的池化后 4×4 Tile；Writer 负责 8 通道组装，DDR 地址待定 |
 | 调用配置 | 已在同一ConvGeometry九层表补齐Pool/Bypass、输出、激活及32-Cout缓存字段并编译期校验；本次仅静态检查，字段消费者及调用方仍待迁移 |
 | 性能目标 | 目标分辨率、频率、fps及有效DDR带宽预算 |
 
@@ -334,4 +339,4 @@ output = signed INT8 clamp(scaled, -128, 127)
 
 每个模块建立stream读写数量守恒；按获准阶段分别进行静态检查、C-sim、综合和co-sim。综合检查BRAM实际映射、端口冲突、归约II、阵列实例数；co-sim检查反压、FIFO深度、边界排空和层切换。不能把语法通过当成功能、资源或时序已经验证。
 
-本次更新设计文档，不修改HLS源码、PyTorch程序或工程，不运行仿真或综合。上述Im2Row结果引用前一轮已完成的独立综合。
+当前 Pool 已独立实现，Core 与 Writer 尚未接入。上述 Im2Row 综合结果来自此前的独立工程。
