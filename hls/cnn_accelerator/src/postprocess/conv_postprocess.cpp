@@ -6,153 +6,162 @@
 
 namespace {
 
-// 与 NumPy 对 signed integer 的 right_shift 语义一致。当前卷积的 ReLU
-// 使输入 product 非负；仍保留负值的符号扩展分支，便于函数数值语义完整。
-ap_int<64> arithmetic_right_shift(ap_int<64> value,
-                                  ap_int<32> shift) {
-#pragma HLS INLINE
-#ifndef __SYNTHESIS__
-    assert(shift >= 0);
-#endif
-    if (shift >= 64) {
-        return (value < 0) ? (ap_int<64>)-1 : (ap_int<64>)0;
-    }
+// 约定与 Python export.py 的 integer_postprocess 一致，alpha 不占参数 BIN 字段。
+constexpr int LEAKY_ALPHA_MULTIPLIER = 1717986918;
+constexpr int LEAKY_ALPHA_SHIFT = 34;
 
-    // shift 已由 exporter 保证非负；截成6 bit只用于硬件移位器控制，不会
-    // 改变 0..63 范围内的数值。这里没有 rounding offset。
-    const ap_uint<6> shift_amount = (ap_uint<6>)shift;
-    return value >> shift_amount;
+struct ChannelParams {
+    acc_t bias;
+    ap_int<32> multiplier_positive;
+    ap_int<32> multiplier_negative;
+    ap_int<32> shift;
+};
+
+ap_int<32> leaky_negative_multiplier(ap_int<32> multiplier) {
+#pragma HLS INLINE
+    const ap_int<64> product = multiplier * ap_int<32>(LEAKY_ALPHA_MULTIPLIER);
+    // 只在准备非负系数时 half-up；最终逐元素右移没有这个舍入项。
+    const ap_int<64> rounded = product + (1LL << (LEAKY_ALPHA_SHIFT - 1));
+    return ap_int<32>(rounded >> LEAKY_ALPHA_SHIFT);
 }
 
-ap_int<32> checked_bias_add(acc_t accumulator, ap_int<32> bias) {
+ap_int<64> arithmetic_right_shift(ap_int<64> value, ap_int<32> shift) {
 #pragma HLS INLINE
-    const ap_int<33> biased_wide = (ap_int<33>)accumulator +
-                                   (ap_int<33>)bias;
+    // 先处理大 shift，再缩窄控制位，避免例如 S=64 回绕成 0。
+    if (shift >= 64) return value < 0 ? ap_int<64>(-1) : ap_int<64>(0);
+    return value >> ap_uint<6>(shift);
+}
+
+acc_t checked_bias_add(acc_t accumulator, acc_t bias) {
+#pragma HLS INLINE
+    const ap_int<33> wide = ap_int<33>(accumulator) + ap_int<33>(bias);
 #ifndef __SYNTHESIS__
-    // 网络参数契约要求 bias add 的结果仍可表示为 INT32。硬件不在这里做
-    // 饱和；若违反契约，转换为 INT32 前必须在 C-sim 立即暴露。
-    assert(biased_wide >= (ap_int<33>)-2147483648LL);
-    assert(biased_wide <= (ap_int<33>)2147483647LL);
+    // Exporter/Golden 要求相加结果可表示为 INT32，不在这里做中间饱和。
+    assert(wide >= ap_int<33>(-2147483648LL));
+    assert(wide <= ap_int<33>(2147483647LL));
 #endif
-    return (ap_int<32>)biased_wide;
+    return acc_t(wide);
 }
 
 }  // namespace
 
 activation_t conv_postprocess_requantize(acc_t accumulator,
-                                    ap_int<32> bias,
-                                    ap_int<32> multiplier,
-                                    ap_int<32> shift) {
+                                        acc_t bias,
+                                        ap_int<32> multiplier_positive,
+                                        ap_int<32> multiplier_negative,
+                                        ap_int<32> shift) {
 #pragma HLS INLINE
 #ifndef __SYNTHESIS__
-    assert(multiplier >= 0);
-    assert(shift >= 0);
+    assert(multiplier_positive >= 0 && multiplier_negative >= 0 && shift >= 0);
 #endif
-    const ap_int<32> biased = checked_bias_add(accumulator, bias);
-    const ap_int<32> relu_value = (biased > 0) ? biased : (ap_int<32>)0;
-    // ap_int<32> x ap_int<32> 的乘法表达式结果为 ap_int<64>。不要先把
-    // 操作数扩展到64 bit，否则会推导为不必要的64x64乘法器。
-    const ap_int<64> product = relu_value * multiplier;
+    const acc_t biased = checked_bias_add(accumulator, bias);
+    // 必须按加 bias 后的符号选系数，且在乘法前选，避免正负支各生成一个乘法器。
+    const ap_int<32> multiplier = biased < 0 ? multiplier_negative : multiplier_positive;
+    const ap_int<64> product = biased * multiplier;  // signed 32×32，保留完整乘积。
     const ap_int<64> scaled = arithmetic_right_shift(product, shift);
-
-    // ReLU 和 non-negative multiplier 保证 scaled 不小于0。仅保留上限
-    // 饱和，严格匹配当前量化网络的 INT8 activation 规则。
-    return (scaled > 127) ? (activation_t)127 : (activation_t)scaled;
+    if (scaled > 127) return activation_t(127);
+    if (scaled < -128) return activation_t(-128);
+    return activation_t(scaled);
 }
 
-void conv_postprocess(hls::stream<acc_tile_t>& input_stream,
-                 hls::stream<postprocess_param_pack_t>& param_stream,
-                 hls::stream<activation_tile_t>& output_stream,
-                 layer_mode_t layer_mode) {
-    const ConvGeometry geometry = conv_geometry(layer_mode);
+void conv_postprocess(hls::stream<yolo_acc_tile_t>& input_stream,
+                      hls::stream<postprocess_param_pack_t>& param_stream,
+                      hls::stream<yolo_activation_tile_t>& output_stream,
+                      const ConvGeometry& geometry) {
+    const int block_capacity = geometry.resident_cout_tiles;  // 最多 8 个 4-Cout Tile。
+    const int layer_cout_tiles = geometry.cout_tiles;
     const int spatial_tiles = geometry.spatial_tiles;
-    const int cout_tiles = geometry.cout_tiles;
-
-    // 参数仅在本层第一个 spatial tile 从 stream 装载。两个维度 complete
-    // partition 后为寄存器阵列，后续 Tile 每拍可同时取得4条 Cout Lane。
-    ap_int<32> bias_cache[SYSTOLIC_MAX_COUT_TILES][SYSTOLIC_COUT_PAR];
-    ap_int<32> multiplier_cache[SYSTOLIC_MAX_COUT_TILES]
-                                [SYSTOLIC_COUT_PAR];
-    ap_int<32> shift_cache[SYSTOLIC_MAX_COUT_TILES][SYSTOLIC_COUT_PAR];
-#pragma HLS ARRAY_PARTITION variable=bias_cache complete dim=0
-#pragma HLS ARRAY_PARTITION variable=multiplier_cache complete dim=0
-#pragma HLS ARRAY_PARTITION variable=shift_cache complete dim=0
+    ChannelParams param_cache[YOLO_TINY_MAX_RESIDENT_COUT_TILES][SYSTOLIC_COUT_PAR];
+#pragma HLS ARRAY_PARTITION variable=param_cache complete dim=2
 
 #ifndef __SYNTHESIS__
-    int input_read_count = 0;
-    int param_read_count = 0;
-    int output_write_count = 0;
+    assert(block_capacity > 0 && block_capacity <= YOLO_TINY_MAX_RESIDENT_COUT_TILES);
+    int param_reads = 0;
+    int acc_reads = 0;
+    int result_writes = 0;
 #endif
 
-    for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
-        const bool first_spatial_tile = (spatial_tile == 0);
-        for (int cout_tile = 0; cout_tile < cout_tiles; ++cout_tile) {
-            const acc_tile_t input = input_stream.read();
+    // 一次调用消费完整一层。用与 Systolic 相同的块尺寸、空间计数划分流，
+    // 无需 Top 每块重调本模块，也不需要在每个 Tile 携带坐标或块编号。
+    for (int first_cout_tile = 0; first_cout_tile < layer_cout_tiles;
+         first_cout_tile += block_capacity) {
+        const int block_tiles = config_min(block_capacity, layer_cout_tiles - first_cout_tile);
+
+        // 首版只准备当前块，不覆盖仍在使用的缓存，也不预取下一块。
+        for (int local_tile = 0; local_tile < block_tiles; ++local_tile) {
+            const postprocess_param_pack_t pack = param_stream.read();
+            const int first_channel = (first_cout_tile + local_tile) * SYSTOLIC_COUT_PAR;
 #ifndef __SYNTHESIS__
-            ++input_read_count;
+            ++param_reads;
 #endif
-
-            // 首个 spatial tile 顺序读取每个 Cout tile 的参数，并同时写入
-            // 寄存器缓存；后续 tile 不再消耗参数流。
-            if (first_spatial_tile) {
-                const postprocess_param_pack_t stream_param =
-                    param_stream.read();
-#ifndef __SYNTHESIS__
-                ++param_read_count;
-#endif
-                for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR;
-                     ++cout_lane) {
-#pragma HLS UNROLL
-#ifndef __SYNTHESIS__
-                    assert(stream_param.multiplier[cout_lane] >= 0);
-                    assert(stream_param.shift[cout_lane] >= 0);
-#endif
-                    bias_cache[cout_tile][cout_lane] =
-                        stream_param.bias[cout_lane];
-                    multiplier_cache[cout_tile][cout_lane] =
-                        stream_param.multiplier[cout_lane];
-                    shift_cache[cout_tile][cout_lane] =
-                        stream_param.shift[cout_lane];
-                }
-            }
-
-            activation_tile_t output;
-#pragma HLS ARRAY_PARTITION variable=output.value complete dim=0
-            output.spatial_valid = input.spatial_valid;
-
-            // 每拍完成一个 spatial lane 的4条 Cout lane。cout lane 完全展开，
-            // 对应4套并行 INT32xINT32 requant datapath；乘法器由 HLS 根据
-            // 目标器件优先映射 DSP，避免绑定到特定工具版本的实现 pragma。
-            for (int spatial_lane = 0;
-                 spatial_lane < SYSTOLIC_SPATIAL_PAR; ++spatial_lane) {
+            for (int lane = 0; lane < SYSTOLIC_COUT_PAR; ++lane) {
 #pragma HLS PIPELINE II=1
-                for (int cout_lane = 0; cout_lane < SYSTOLIC_COUT_PAR;
-                     ++cout_lane) {
+                // 准备阶段按 lane 串行，以复用一条常量乘移路径。Prediction
+                // 不计算 Leaky 系数：正负支都缓存原始 M，元素路径无需再判断层模式。
+                ChannelParams params{0, 0, 0, 0};
+                if (first_channel + lane < geometry.cout) {
+                    params.bias = pack.bias[lane];
+                    params.multiplier_positive = pack.multiplier[lane];
+                    params.shift = pack.shift[lane];
+#ifndef __SYNTHESIS__
+                    assert(params.multiplier_positive >= 0 && params.shift >= 0);
+#endif
+                    params.multiplier_negative = geometry.use_leaky_relu
+                        ? leaky_negative_multiplier(params.multiplier_positive)
+                        : params.multiplier_positive;
+                }
+                param_cache[local_tile][lane] = params;
+            }
+        }
+
+        for (int spatial_tile = 0; spatial_tile < spatial_tiles; ++spatial_tile) {
+            for (int local_tile = 0; local_tile < block_tiles; ++local_tile) {
+                const yolo_acc_tile_t input = input_stream.read();
+                yolo_activation_tile_t output;
+#pragma HLS ARRAY_PARTITION variable=output.value complete dim=0
+                output.spatial_valid = input.spatial_valid;
+                output.cout_valid = input.cout_valid;
+#ifndef __SYNTHESIS__
+                ++acc_reads;
+#endif
+
+                // 每个 Tile 读取一次缓存，四个空间 lane 共用这组参数。
+                ChannelParams tile_params[SYSTOLIC_COUT_PAR];
+#pragma HLS ARRAY_PARTITION variable=tile_params complete
+                for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
 #pragma HLS UNROLL
-                    if (input.spatial_valid[spatial_lane]) {
-                        output.value[spatial_lane][cout_lane] =
-                            conv_postprocess_requantize(
-                                input.value[spatial_lane][cout_lane],
-                                bias_cache[cout_tile][cout_lane],
-                                multiplier_cache[cout_tile][cout_lane],
-                                shift_cache[cout_tile][cout_lane]);
-                    } else {
-                        // invalid lane 不能经过 bias 或 ReLU。
-                        output.value[spatial_lane][cout_lane] = 0;
+                    tile_params[j] = input.cout_valid[j] ? param_cache[local_tile][j]
+                                                         : ChannelParams{0, 0, 0, 0};
+                }
+
+                // 一步处理一个空间 lane 的四个 Cout，排满流水后的目标 II=1。
+                for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
+#pragma HLS PIPELINE II=1
+                    for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
+#pragma HLS UNROLL
+                        if (input.spatial_valid[i] && input.cout_valid[j]) {
+                            const ChannelParams& params = tile_params[j];
+                            output.value[i][j] = conv_postprocess_requantize(
+                                input.value[i][j], params.bias, params.multiplier_positive,
+                                params.multiplier_negative, params.shift);
+                        } else {
+                            // 不让 bias 把无效 lane 的零变成有效的非零输出。
+                            output.value[i][j] = 0;
+                        }
                     }
                 }
-            }
-
-            output_stream.write(output);
+                output_stream.write(output);
 #ifndef __SYNTHESIS__
-            ++output_write_count;
+                ++result_writes;
 #endif
+            }
         }
+        // 本块最后一个结果提交到流后，下一轮才会读新参数并覆盖缓存。
     }
 
 #ifndef __SYNTHESIS__
-    assert(input_read_count == spatial_tiles * cout_tiles);
-    assert(param_read_count == cout_tiles);
-    assert(output_write_count == spatial_tiles * cout_tiles);
+    assert(param_reads == layer_cout_tiles);
+    assert(acc_reads == spatial_tiles * layer_cout_tiles);
+    assert(result_writes == acc_reads);
 #endif
 }

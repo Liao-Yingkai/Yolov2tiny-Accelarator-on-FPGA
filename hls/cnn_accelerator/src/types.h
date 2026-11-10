@@ -92,12 +92,20 @@ struct yolo_acc_tile_t {
     ap_uint<SYSTOLIC_COUT_PAR> cout_valid;
 };
 
-// ConvPostProcess 输出保持与 acc_tile_t 相同的 spatial_tile -> cout_tile 事务
+// 旧 MNIST Pool 输入保持与 acc_tile_t 相同的 spatial_tile -> cout_tile 事务
 // 粒度，只将每个 INT32 累加结果 requantize 为 INT8 activation。尾部无效
 // spatial lane 的 value 必须为零，不能由 bias 生成伪有效数据。
 struct activation_tile_t {
     activation_t value[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
     ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
+};
+
+// YOLO PostProcess 到 Pool/Bypass：保留 Cout 块内的 y -> tile_x -> local_cout_tile
+// 顺序和两个 mask；无效 lane 为零，但不视作有效的 MaxPool 输入。
+struct yolo_activation_tile_t {
+    activation_t value[SYSTOLIC_SPATIAL_PAR][SYSTOLIC_COUT_PAR];
+    ap_uint<SYSTOLIC_SPATIAL_PAR> spatial_valid;
+    ap_uint<SYSTOLIC_COUT_PAR> cout_valid;
 };
 
 //Systolic使用的activation数据+当前pe核中的activation是否valid
