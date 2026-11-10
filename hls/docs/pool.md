@@ -59,6 +59,14 @@ Tile 没有配对的右邻，直接输出，分别仅 lane 0–1 / lane 0 有效
 row12 之后用一条值为 -128 的虚拟底行生成最后一行输出，不读输入流、不写行缓存。
 右/下补边参与合法窗口的有符号最大值，不把输入无效 lane 的零当成补边。
 
-## 当前验证状态
+## 验证
 
-本阶段仅新增静态语法检查与独立 `test_pool.cpp` 测试源码；未运行C simulation、RTL co-simulation或C synthesis。Line Buffer实际BRAM映射、输入循环II、时序、资源与反压行为均待后续Vitis HLS验证确认。
+`test_pool_pytorch.cpp` 单独调用 `maxpool`，从 PyTorch YOLO 导出的
+`trace_*_postprocess_int8_hwc_0000.bin` 读取输入，逐项核对 `trace_pool{1..6}_int8_hwc_0000.bin`。
+Bypass 对比原始输入。另用全负数的 Conv6 输入验证右/下补边，期望结果直接从 HWC
+坐标取 2×2 最大值。检查输入/输出事务数、两种 valid mask、尾部 payload 和块/层切换；
+只打印统计和有限错误，不写 CSV 或其他数据文件。原 MNIST Pool testbench 不再保留。
+
+本轮通过 G++ 功能验证（九层及全负数用例均零错误）和 Vitis HLS 2022.2
+Clang 静态检查。未执行 Vitis 综合或 RTL co-sim；BRAM 映射、实际 II、时序与
+RTL 反压尚未验证。
