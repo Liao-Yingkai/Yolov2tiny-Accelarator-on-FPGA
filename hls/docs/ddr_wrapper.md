@@ -1,5 +1,8 @@
 # DDR Loader / Writer Wrapper
 
+本页记录旧 MNIST 板级接口。当前 HLS 已切换到 [YOLO DDR Top](top.md)，
+旧驱动和结果协议不能直接使用。
+
 本版只作静态检查，未执行 testbench、C-sim、co-sim、综合或 host DUT 计算。
 未验证功能、精度、资源、RTL死锁、时序或板上行为。旧版16字节结果的历史报告不能验证本版。
 旧IP/16字节结果协议不兼容，部署必须重新导出IP、XSA/BSP及bitstream。

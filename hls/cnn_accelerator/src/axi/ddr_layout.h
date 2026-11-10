@@ -3,59 +3,64 @@
 
 #include "../config.h"
 
-// PL侧word布局；PS另行维护常量。仅使用内建整数，不依赖ap_int/hls_stream。
 namespace ddr_layout {
+
 constexpr int WORD_BITS = 64;
 constexpr int WORD_BYTES = WORD_BITS / 8;
 constexpr int PARAM_WORD_BYTES = 32 / 8;
-constexpr int IMAGE_WORDS = CNN_CONV1_INPUT_TRANSACTIONS / WORD_BYTES;
-constexpr int CONV2_WEIGHT_WORDS_PER_PACK = SYSTOLIC_COUT_PAR;
-constexpr int FC_WEIGHT_WORDS_PER_PACK = FC_COUT_PAR;
-constexpr int CONV1_WEIGHT_OFFSET = 0;
-// 权重头布局 v2：直接紧密拼接原始字节；Conv1 不保存七个无效 Cin。
-constexpr int WEIGHT_LAYOUT_VERSION = 2;
-constexpr int CONV1_WEIGHT_WORDS = CNN_CONV1_COUT * SYSTOLIC_KERNEL_TOKENS * CNN_CONV1_CIN / WORD_BYTES;
-constexpr int CONV2_WEIGHT_OFFSET = CONV1_WEIGHT_OFFSET + CONV1_WEIGHT_WORDS;
-constexpr int CONV2_WEIGHT_WORDS = CNN_CONV2_WEIGHT_TRANSACTIONS * CONV2_WEIGHT_WORDS_PER_PACK;
-constexpr int FC_WEIGHT_OFFSET = CONV2_WEIGHT_OFFSET + CONV2_WEIGHT_WORDS;
-constexpr int FC_WEIGHT_PACKS = FC_OUT_TILES * FC_INPUT_PACKS;
-constexpr int FC_WEIGHT_WORDS = FC_WEIGHT_PACKS * FC_WEIGHT_WORDS_PER_PACK;
-constexpr int WEIGHT_WORDS = FC_WEIGHT_OFFSET + FC_WEIGHT_WORDS;
 constexpr int PARAM_FIELDS = 3;
-// 逻辑 stream pack 的大小，不表示 DDR 中连续的参数块。
-constexpr int CONV_PARAM_WORDS_PER_PACK = PARAM_FIELDS * SYSTOLIC_COUT_PAR;
-constexpr int FC_PARAM_WORDS_PER_PACK = PARAM_FIELDS * FC_COUT_PAR;
-constexpr int CONV1_PARAM_FIELD_STRIDE = CNN_CONV1_COUT;
-constexpr int CONV2_PARAM_FIELD_STRIDE = CNN_CONV2_COUT;
-constexpr int FC_PARAM_FIELD_STRIDE = FC_OUTPUTS;
-constexpr int CONV1_PARAM_OFFSET = 0;
-constexpr int CONV1_PARAM_WORDS = CNN_CONV1_PARAM_TRANSACTIONS * CONV_PARAM_WORDS_PER_PACK;
-constexpr int CONV2_PARAM_OFFSET = CONV1_PARAM_OFFSET + CONV1_PARAM_WORDS;
-constexpr int CONV2_PARAM_WORDS = CNN_CONV2_PARAM_TRANSACTIONS * CONV_PARAM_WORDS_PER_PACK;
-constexpr int FC_PARAM_OFFSET = CONV2_PARAM_OFFSET + CONV2_PARAM_WORDS;
-constexpr int FC_PARAM_WORDS = FC_OUT_TILES * FC_PARAM_WORDS_PER_PACK;
-constexpr int PARAM_WORDS = FC_PARAM_OFFSET + FC_PARAM_WORDS;
-constexpr int RESULT_PROBABILITY_BYTES = 2;
-constexpr int RESULT_CLASS_BYTE_OFFSET = FC_OUTPUTS * RESULT_PROBABILITY_BYTES;
-constexpr int CLASS_WORD_OFFSET = RESULT_CLASS_BYTE_OFFSET / WORD_BYTES;
-constexpr int CLASS_BIT_OFFSET = (RESULT_CLASS_BYTE_OFFSET % WORD_BYTES) * 8;
-constexpr int RESULT_BYTES = RESULT_CLASS_BYTE_OFFSET + 4;
-constexpr int RESULT_WORDS = (RESULT_BYTES + WORD_BYTES - 1) / WORD_BYTES;
-constexpr int IMAGE_BYTES = IMAGE_WORDS * WORD_BYTES;
+constexpr int WEIGHT_WORDS_PER_PACK = CONV_COUT_PAR;  // 每个 Cout lane 占一个 64-bit 字。
+constexpr int FEATURE_BANK_COUNT = 2;
+constexpr int FEATURE_ALIGNMENT_BYTES = 64;
+
+constexpr int feature_input_bytes(const ConvGeometry& geometry) {
+    return geometry.h * geometry.w * geometry.cin;  // RGB 首图在 DDR 中仍是紧凑的 3 通道。
+}
+
+constexpr int weight_layer_words(const ConvGeometry& geometry) {
+    return geometry.weight_transactions * WEIGHT_WORDS_PER_PACK;
+}
+
+constexpr int param_layer_words(const ConvGeometry& geometry) {
+    return PARAM_FIELDS * geometry.cout;  // [全部 bias][全部 multiplier][全部 shift]。
+}
+
+// 按固定层表累加。前 layer_count 层的长度也就是下一层的段偏移。
+constexpr int weight_prefix_words(int layer_count) {
+    return layer_count == 0 ? 0 :
+        weight_prefix_words(layer_count - 1) + weight_layer_words(YOLO_TINY_GEOMETRIES[layer_count - 1]);
+}
+
+constexpr int param_prefix_words(int layer_count) {
+    return layer_count == 0 ? 0 :
+        param_prefix_words(layer_count - 1) + param_layer_words(YOLO_TINY_GEOMETRIES[layer_count - 1]);
+}
+
+constexpr int IMAGE_BYTES = feature_input_bytes(yolov2_tiny_geometry(YoloTinyLayer::Conv1));
+constexpr int IMAGE_WORDS = IMAGE_BYTES / WORD_BYTES;
+constexpr int FEATURE_BANK_BYTES = FEATURE_ALIGNMENT_BYTES * ceil_div(
+    config_max(IMAGE_BYTES, WORD_BYTES * yolo_max_field(&ConvGeometry::output_transactions)),
+    FEATURE_ALIGNMENT_BYTES);
+constexpr int FEATURE_BANK_WORDS = FEATURE_BANK_BYTES / WORD_BYTES;
+constexpr int FEATURE_WORDS = FEATURE_BANK_COUNT * FEATURE_BANK_WORDS;
+constexpr int FEATURE_BYTES = FEATURE_WORDS * WORD_BYTES;
+constexpr int WEIGHT_WORDS = weight_prefix_words(YOLO_TINY_LAYER_COUNT);
 constexpr int WEIGHT_BYTES = WEIGHT_WORDS * WORD_BYTES;
+constexpr int PARAM_WORDS = param_prefix_words(YOLO_TINY_LAYER_COUNT);
 constexpr int PARAM_BYTES = PARAM_WORDS * PARAM_WORD_BYTES;
-static_assert(ACTIVATION_BITS == 8 && WEIGHT_BITS == 8 && ACCUMULATOR_BITS == 32,
-              "DDR format requires signed INT8 and INT32");
-static_assert(CNN_CONV1_INPUT_TRANSACTIONS % WORD_BYTES == 0 && CNN_CONV1_CIN == 1,
-              "Image must fill raster words with one logical channel");
-static_assert(SYSTOLIC_CIN_PAR == WORD_BYTES && FC_CIN_PAR == WORD_BYTES,
-              "One weight word must hold one complete Cin lane");
-static_assert(FC_OUTPUTS == 10 && RESULT_WORDS == 3 &&
-              RESULT_BYTES == 24 && CLASS_WORD_OFFSET == 2 && CLASS_BIT_OFFSET == 32,
-              "Result: ten uint16 probabilities and uint32 class");
-static_assert(IMAGE_WORDS == 98 && CONV1_WEIGHT_WORDS == 9 &&
-              CONV2_WEIGHT_OFFSET == 9 && FC_WEIGHT_OFFSET == 153 &&
-              WEIGHT_WORDS == 1133 && PARAM_WORDS == 102,
-              "DDR wrapper is fixed to the selected MNIST network");
+constexpr int RESULT_WORDS = yolov2_tiny_geometry(YoloTinyLayer::Prediction).output_transactions;
+// 从 A 读入，奇数个层依次交换角色，最终结果在 B。
+constexpr int RESULT_WORD_OFFSET = (YOLO_TINY_LAYER_COUNT % FEATURE_BANK_COUNT) * FEATURE_BANK_WORDS;
+constexpr int RESULT_BYTES = RESULT_WORDS * WORD_BYTES;
+
+static_assert(FEATURE_PACK_CHANNELS * ACTIVATION_BITS == WORD_BITS &&
+              CONV_CIN_PAR * WEIGHT_BITS == WORD_BITS,
+              "One 64-bit word must contain one feature pack or one Cout lane of a weight pack");
+static_assert(IMAGE_BYTES % WORD_BYTES == 0 && FEATURE_BANK_BYTES % WORD_BYTES == 0,
+              "RGB input and Feature bank boundaries must be aligned to 64-bit words");
+static_assert(RESULT_WORD_OFFSET == FEATURE_BANK_WORDS,
+              "The fixed nine-layer accelerator must write its final output to bank B");
+
 }  // namespace ddr_layout
-#endif
+
+#endif  // CNN_ACCELERATOR_DDR_LAYOUT_H_

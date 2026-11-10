@@ -1,6 +1,7 @@
 # YOLOv2-tiny 重构方案草案
 
-记录日期：2026-11-01，更新日期：2026-11-10。状态：分模块重构中；DDR 搬运与层间调度已有首版规格，整条 YOLO 流水尚未完成集成或验证。
+记录日期：2026-11-01，更新日期：2026-11-10。状态：首版 YOLO DDR Top 已接入，
+整条流水的 AXI 顺序、反压及板级性能仍待验证。
 
 本文作为后续从 MNIST 扩展到 YOLOv2-tiny VOC 的设计输入，整理最近讨论的结论，并区分已确定方向、优先评估方案和待定事项。它不表示当前 HLS 已支持 YOLO，也不直接授权修改所有工程。
 
@@ -338,11 +339,11 @@ output = signed INT8 clamp(scaled, -128, 127)
 2. 扩展 Im2Row 与 Systolic：多Cin Group、3×3/1×1、尾通道和尾空间Lane；同步独立testbench。
 3. 完成 YOLO exporter / 整数Golden，再实现PostProcess及其逐元素数值验证。
 4. 按原值行缓存方案实现Pool，重点验证stride=1、跨Tile、右/下Padding及状态切换。
-5. Loader 和 Writer 已独立实现；接入统一层控制后验证 DDR 双缓冲与单套硬件复用。
+5. Loader 和 Writer 已接入 [DDR Top](top.md)；验证 DDR A/B 层间交接和单套硬件复用。
 6. 先单层，再连续多层，最后做系统性能和上板验证；Vivado/Vitis更新另行安排。
 
 测试至少覆盖Cin=3/16/1024、1×1长归约、Cout=125尾部、W=13末Tile、多Cout驻留块与连续调用。Pool应使用原始2×2四元素公式作为独立reference，不能让reference重复DUT缓存实现。
 
 每个模块建立stream读写数量守恒；按获准阶段分别进行静态检查、C-sim、综合和co-sim。综合检查BRAM实际映射、端口冲突、归约II、阵列实例数；co-sim检查反压、FIFO深度、边界排空和层切换。不能把语法通过当成功能、资源或时序已经验证。
 
-当前 Pool 与 DDR I/O 已独立实现，Core/Top 尚未接入。上述 Im2Row 综合结果来自此前的独立工程。
+当前 Top 直接组织层内、块内流水，不再保留独立 Core。上述 Im2Row 综合结果来自此前的独立工程。

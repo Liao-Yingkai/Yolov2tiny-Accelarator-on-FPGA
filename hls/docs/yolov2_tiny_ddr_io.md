@@ -1,9 +1,8 @@
 # YOLOv2-tiny Loader、Writer 与层间 DDR 缓冲
 
-三个 Loader 和 Writer 已在 `cnn_accelerator/src/axi/ddr_io.*` 独立实现。
-它们按张量或模型段基址访问 DDR，不负责计算层间基址。下面的 Top 调度、A/B
-交换和 AXI 屏障是后续集成规格，尚未接入 Core/Top；旧 MNIST Wrapper 接口
-不兼容新版 DDR I/O。
+三个 Loader 和 Writer 已接入 [YOLO DDR Top](top.md)，按张量或模型段基址
+访问 DDR。Top 负责层级调度和 A/B 交换；源码顺序与 AXI 实际完成时序须分别验证。
+旧 MNIST Wrapper 接口不兼容新版 DDR I/O。
 
 ## 1. 层与 Cout 块的控制
 
@@ -114,7 +113,8 @@ Writer 每层消费 `output_h × ceil(output_w/4) × ceil(Cout/4)` 个 Tile，
 
 ## 5. 层间 DDR 两区与写回屏障
 
-A/B 是同一 DDR 上互不重叠的两段地址，不是片上双缓冲。PS 把初始 RGB 放 A，
+A/B 是同一个 Feature DDR 分配中互不重叠的两段地址，不是片上双缓冲。
+PS 把初始 RGB 放 A，
 Conv1 读 A 写 B，Conv2 读 B 写 A，依此交替。**一层内所有 Cout 块使用同一
 对源/目标区域**。即使已写出一部分结果，也不能覆盖当前层会重新读取的源区。
 

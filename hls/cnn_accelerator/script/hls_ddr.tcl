@@ -4,25 +4,30 @@ set accelerator_dir [file dirname $script_dir]
 set src_dir [file join $accelerator_dir src]
 set repo_dir [file normalize [file join $accelerator_dir .. ..]]
 set build_dir [file join $repo_dir build hls]
+set run_synthesis [expr {[info exists ::env(YOLO_HLS_STAGE)] && $::env(YOLO_HLS_STAGE) eq "csynth"}]
+set cpp_flags {-std=c++14}
+if {!$run_synthesis} {
+    # 九层仿真中 ap_int 运算量较大，-O3 只用于软件仿真，不改变综合选项。
+    append cpp_flags " -O3"
+}
 file mkdir $build_dir
 cd $build_dir
-open_project cnn_ddr_csim
+open_project cnn_yolo_ddr
 set_top cnn_accelerator_ddr
-add_files -cflags {-std=c++14} [file join $src_dir core/cnn_core.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir im2row/im2row.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir systolic/systolic.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir systolic/systolic_OS.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir postprocess/conv_postprocess.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir pool/pool.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir fc/fc.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir postprocess/fc_postprocess.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir axi/ddr_io.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir top/cnn_accel_ddr.cpp]
-add_files -cflags {-std=c++14} [file join $src_dir postprocess/softmax.cpp]
-add_files -cflags {-std=c++14} -tb [file join $accelerator_dir testbench test_cnn_accel_ddr.cpp]
+add_files -cflags $cpp_flags [file join $src_dir im2row/im2row.cpp]
+add_files -cflags $cpp_flags [file join $src_dir systolic/systolic_OS.cpp]
+add_files -cflags $cpp_flags [file join $src_dir postprocess/conv_postprocess.cpp]
+add_files -cflags $cpp_flags [file join $src_dir pool/pool.cpp]
+add_files -cflags $cpp_flags [file join $src_dir axi/ddr_io.cpp]
+add_files -cflags $cpp_flags [file join $src_dir top/cnn_accel_ddr.cpp]
+add_files -cflags $cpp_flags -tb [file join $accelerator_dir testbench test_cnn_accel_ddr.cpp]
 open_solution solution1 -flow_target vivado
 set_part {xc7z020-clg400-2}
 create_clock -period 10 -name default
-csim_design
-# 如需综合、协同仿真或导出，请自行追加命令，或在图形界面中设置。
+# 默认只做优化编译的 C 仿真；可通过环境变量单独执行综合。
+if {$run_synthesis} {
+    csynth_design
+} else {
+    csim_design -O -clean
+}
 exit

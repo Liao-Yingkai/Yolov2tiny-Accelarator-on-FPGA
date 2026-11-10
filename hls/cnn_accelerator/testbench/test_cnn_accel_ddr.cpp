@@ -1,233 +1,122 @@
-#include <stdint.h>
 #include "../src/top/cnn_accel_ddr.h"
-#include <cerrno>
-#include <sys/stat.h>
+
+#include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <cmath>
-#include "model_softmax_params.h"
+#include <string>
+#include <vector>
 
-/*
- * DDR wrapper 独立功能对照：image/weights/result 为64-bit word，params为
- * signed32-bit word。低 byte 对应较早 INT8；模型布局为 Conv1 -> Conv2 -> FC，
- * 每层参数为完整 bias -> multiplier -> shift 数组，按输出通道递增。
- * 四区有效 word 数为98/1133/102/3；结果24字节含10 uint16概率及uint32类别。
- * 三图固定地址连续调用，模型仅打包一次。
- * reference 来自三个 trace 的10个 signed logits，仅在TB内部用于稳定double
- * Softmax及scalar first-max，实际DDR不再输出logits。输出 CSV 保存 sample/output/expected/actual/match，输入 CSV 保存
- * sample/pixel/value，可逐字节核对 PS 的紧密 raster 打包。守卫与快照检查越界
- * 写和只读区变化，但普通 C Simulation 不验证有限 FIFO、AXI 或缓存一致性。
- */
-namespace trace_data_0000 {
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0000.h"
-}
-namespace trace_data_0001 {
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0001.h"
-}
-namespace trace_data_0002 {
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/trace/trace_data_0002.h"
-}
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv1_bias.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv1_quant.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv1_shift.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv1_weight.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv2_bias.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv2_quant.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv2_shift.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/conv2_weight.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_bias.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_quant.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_shift.h"
-#include "/home/liaoyingkai/python_project/minist_train_fpga/CNN_FPGA/generated/headers/fc_weight.h"
-
+// 单图端到端验证：PS 等价操作只负责复制 BIN，不在 TB 中补 RGB 尾槽。
+// 模型区按层拼接，Feature A/B 在同一片连续模拟 DDR 中。仅打印结果，不导出文件。
 namespace {
-// 浮点参考允差，仅供TB使用，不是已测得精度。
-constexpr int PROBABILITY_ERROR_TOLERANCE = 10;
-static_assert(MODEL_SOFTMAX_SCALE_FRAC_BITS == SOFTMAX_SCALE_FRAC_BITS,
-              "model and hardware scale format must agree");
-static_assert(CONV1_WEIGHT_LAYOUT_VERSION == 2 && CONV2_WEIGHT_LAYOUT_VERSION == 2 &&
-              FC_WEIGHT_LAYOUT_VERSION == 2, "requires blocked weight headers v2");
-// 守卫紧邻有效区；输入和模型快照逐 word 比较，错误不依赖 assert/NDEBUG。
-template <typename T, int N> struct guarded_buffer {
-    T storage[N + 2];
-    T* data() {
-        return storage + 1;
+
+using word_t = ap_uint<64>;
+constexpr int BYTES_PER_WORD = 8;
+constexpr int BYTES_PER_PARAM = 4;
+constexpr int MAX_PRINTED_ERRORS = 10;
+const char* const layer_names[] = {"conv1", "conv2", "conv3", "conv4", "conv5",
+                                   "conv6", "conv7", "conv8", "prediction"};
+static_assert(sizeof(layer_names) / sizeof(layer_names[0]) == YOLO_TINY_LAYER_COUNT,
+              "模型文件必须与固定层表匹配");
+
+bool read_bin(const std::string& path, std::size_t length, std::vector<std::uint8_t>& bytes) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file || file.tellg() != static_cast<std::streamoff>(length)) {
+        std::cerr << "BIN 不存在或长度错误: " << path << " 期望字节数=" << length << '\n';
+        return false;
     }
-    void initialize(T guard) {
-        storage[0] = guard;
-        storage[N + 1] = guard;
-        for (int i = 0; i < N; ++i) {
-            data()[i] = 0;
-        }
-    }
-    bool guards_ok(T guard) const {
-        return storage[0] == guard && storage[N + 1] == guard;
-    }
-};
-template <typename T, int N>
-bool unchanged(guarded_buffer<T, N>& buffer, const T (&copy)[N]) {
-    for (int i = 0; i < N; ++i) {
-        if (buffer.data()[i] != copy[i]) {
-            return false;
-        }
+    file.seekg(0);
+    bytes.resize(length);
+    if (!file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(length))) {
+        std::cerr << "BIN 读取失败: " << path << '\n';
+        return false;
     }
     return true;
 }
-void pack_conv_params(bool second, ap_int<32>* params) {
-    const int outputs = second ? CNN_CONV2_COUT : CNN_CONV1_COUT;
-    const int param_offset = second ? ddr_layout::CONV2_PARAM_OFFSET : ddr_layout::CONV1_PARAM_OFFSET;
-    // 软件直接拷贝三个完整 header 数组，不复用 DUT 的 pack/field/lane 地址公式。
-    for (int output = 0; output < outputs; ++output) {
-        params[param_offset + output] = second ? conv2_bias[output] : conv1_bias[output];
-        params[param_offset + outputs + output] = second ? conv2_multiplier[output] : conv1_multiplier[output];
-        params[param_offset + 2 * outputs + output] = second ? conv2_shift[output] : conv1_shift[output];
+
+// 仅恢复 little-endian BIN 位序，不重排通道或权重；也适用于 signed INT32 参数。
+template <int WordBytes, typename Word>
+void copy_words(const std::vector<std::uint8_t>& bytes, Word* output) {
+    for (std::size_t i = 0; i < bytes.size() / WordBytes; ++i) {
+        Word word = 0;
+        for (int byte = 0; byte < WordBytes; ++byte)
+            word.range(8 * byte + 7, 8 * byte) = bytes[i * WordBytes + byte];
+        output[i] = word;
     }
 }
-void pack_model(ap_uint<64>* weights, ap_int<32>* params) {
-    pack_conv_params(false, params);
-    pack_conv_params(true, params);
-    // v2 头已经是硬件消费顺序。仅逐字节连续拼接，不补通道、不重排。
-    const int8_t* sources[] = {conv1_weight, conv2_weight, fc_weight};
-    const int sizes[] = {sizeof(conv1_weight), sizeof(conv2_weight), sizeof(fc_weight)};
-    int byte_offset = 0;
-    for (int layer = 0; layer < 3; ++layer) {
-        for (int byte = 0; byte < sizes[layer]; ++byte, ++byte_offset) {
-            weights[byte_offset / 8].range((byte_offset % 8) * 8 + 7, (byte_offset % 8) * 8) =
-                (ap_uint<8>)sources[layer][byte];
-        }
+
+bool load_model(const std::string& root, std::vector<word_t>& weights,
+                std::vector<ap_int<32>>& params) {
+    std::size_t weight_offset = 0, param_offset = 0;
+    std::vector<std::uint8_t> bytes;
+    for (int layer = 0; layer < YOLO_TINY_LAYER_COUNT; ++layer) {
+        const ConvGeometry& g = YOLO_TINY_GEOMETRIES[layer];
+        const std::string prefix = root + "/bins/" + layer_names[layer];
+        const int weight_words = g.weight_transactions * CONV_COUT_PAR;
+        if (!read_bin(prefix + "_weight.bin", weight_words * BYTES_PER_WORD, bytes)) return false;
+        copy_words<BYTES_PER_WORD>(bytes, weights.data() + weight_offset);
+        weight_offset += weight_words;
+        if (!read_bin(prefix + "_bias.bin", g.cout * BYTES_PER_PARAM, bytes)) return false;
+        copy_words<BYTES_PER_PARAM>(bytes, params.data() + param_offset);
+        param_offset += g.cout;
+        // quant 文件本来就是 [全部 M][全部 S]，紧随该层 bias 段。
+        if (!read_bin(prefix + "_quant.bin", 2 * g.cout * BYTES_PER_PARAM, bytes)) return false;
+        copy_words<BYTES_PER_PARAM>(bytes, params.data() + param_offset);
+        param_offset += 2 * g.cout;
     }
-    for (int output = 0; output < FC_OUTPUTS; ++output) {
-        params[ddr_layout::FC_PARAM_OFFSET + output] = fc_bias[output];
-        params[ddr_layout::FC_PARAM_OFFSET + FC_OUTPUTS + output] = fc_multiplier[output];
-        params[ddr_layout::FC_PARAM_OFFSET + 2 * FC_OUTPUTS + output] = fc_shift[output];
-    }
+    return weight_offset == weights.size() && param_offset == params.size();
 }
-#define TRACE_SHAPE(ns) \
-static_assert(sizeof(ns::trace_input_int8_hwc) / sizeof(ns::trace_input_int8_hwc[0]) == CNN_CONV1_INPUT_TRANSACTIONS, "trace image shape"); \
-static_assert(sizeof(ns::trace_fc_requant_int8) / sizeof(ns::trace_fc_requant_int8[0]) == FC_OUTPUTS, "trace logits shape")
-TRACE_SHAPE(trace_data_0000);
-TRACE_SHAPE(trace_data_0001);
-TRACE_SHAPE(trace_data_0002);
-#undef TRACE_SHAPE
-#define MODEL_SHAPE(array, count) static_assert(sizeof(array) / sizeof(array[0]) == count, "model shape")
-MODEL_SHAPE(conv1_weight, SYSTOLIC_KERNEL_TOKENS * CNN_CONV1_CIN * CNN_CONV1_COUT);
-MODEL_SHAPE(conv2_weight, SYSTOLIC_KERNEL_TOKENS * CNN_CONV2_CIN * CNN_CONV2_COUT);
-MODEL_SHAPE(fc_weight, FC_INPUT_DIM * FC_OUTPUTS);
-MODEL_SHAPE(conv1_bias, CNN_CONV1_COUT);
-MODEL_SHAPE(conv1_multiplier, CNN_CONV1_COUT);
-MODEL_SHAPE(conv1_shift, CNN_CONV1_COUT);
-MODEL_SHAPE(conv2_bias, CNN_CONV2_COUT);
-MODEL_SHAPE(conv2_multiplier, CNN_CONV2_COUT);
-MODEL_SHAPE(conv2_shift, CNN_CONV2_COUT);
-MODEL_SHAPE(fc_bias, FC_OUTPUTS);
-MODEL_SHAPE(fc_multiplier, FC_OUTPUTS);
-MODEL_SHAPE(fc_shift, FC_OUTPUTS);
-#undef MODEL_SHAPE
+
 }  // namespace
 
 int main() {
-    const int8_t* inputs[] = {trace_data_0000::trace_input_int8_hwc, trace_data_0001::trace_input_int8_hwc, trace_data_0002::trace_input_int8_hwc};
-    const int8_t* expected[] = {trace_data_0000::trace_fc_requant_int8, trace_data_0001::trace_fc_requant_int8, trace_data_0002::trace_fc_requant_int8};
-    const ap_uint<64> guard64 = 0xA55AC33C96F00F69ULL;
-    const ap_int<32> guard32 = 0x5A69C33C;
-    guarded_buffer<ap_uint<64>, ddr_layout::IMAGE_WORDS> image;
-    guarded_buffer<ap_uint<64>, ddr_layout::WEIGHT_WORDS> weights;
-    guarded_buffer<ap_int<32>, ddr_layout::PARAM_WORDS> params;
-    guarded_buffer<ap_uint<64>, ddr_layout::RESULT_WORDS> result;
-    image.initialize(guard64);
-    weights.initialize(guard64);
-    params.initialize(guard32);
-    result.initialize(guard64);
-    // 模型仅准备一次，三次调用保留同一组基地址，只覆盖图像数据。
-    pack_model(weights.data(), params.data());
-    ap_uint<64> weight_copy[ddr_layout::WEIGHT_WORDS];
-    ap_int<32> param_copy[ddr_layout::PARAM_WORDS];
-    for (int i = 0; i < ddr_layout::WEIGHT_WORDS; ++i) {
-        weight_copy[i] = weights.data()[i];
-    }
-    for (int i = 0; i < ddr_layout::PARAM_WORDS; ++i) {
-        param_copy[i] = params.data()[i];
-    }
-    const char* dirs[] = {"simulation_data", "simulation_data/pytorch", "simulation_data/pytorch/ddr_wrapper"};
-    for (int i = 0; i < 3; ++i) {
-        if (mkdir(dirs[i], 0777) != 0 && errno != EEXIST) {
-            std::cerr << "无法创建 CSV 目录\n";
-            return 1;
-        }
-    }
-    std::ofstream csv("simulation_data/pytorch/ddr_wrapper/output.csv");
-    std::ofstream input_csv("simulation_data/pytorch/ddr_wrapper/input.csv");
-    if (!csv || !input_csv) {
-        std::cerr << "无法打开 CSV\n";
-        return 1;
-    }
-    csv << "sample,output,expected,actual,match\n";
-    input_csv << "sample,pixel,value\n";
+    const char* configured_path = std::getenv("YOLO_DATA_DIR");
+    const std::string root = configured_path && *configured_path ? configured_path :
+        "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated";
+    const auto& prediction = YOLO_TINY_GEOMETRIES[YOLO_TINY_LAYER_COUNT - 1];
+    const int physical_channels = prediction.output_channel_groups * FEATURE_PACK_CHANNELS;
+    std::vector<std::uint8_t> rgb, golden;
+    if (!read_bin(root + "/trace/trace_input_int8_hwc_0000.bin",
+                  ddr_layout::IMAGE_WORDS * BYTES_PER_WORD, rgb) ||
+        !read_bin(root + "/trace/trace_prediction_postprocess_int8_hwc_0000.bin",
+                  prediction.output_h * prediction.output_w * prediction.cout, golden)) return 1;
+
+    std::vector<word_t> weights(ddr_layout::WEIGHT_WORDS);
+    std::vector<ap_int<32>> params(ddr_layout::PARAM_WORDS);
+    if (!load_model(root, weights, params)) return 1;
+
+    const word_t sentinel = 0xA5A5A5A5A5A5A5A5ULL;
+    std::vector<word_t> feature(ddr_layout::FEATURE_WORDS + 2, sentinel);
+    word_t* const arena = feature.data() + 1;
+    copy_words<BYTES_PER_WORD>(rgb, arena);  // A 区只复制紧凑 RGB 的原始字节。
+    std::cout << "YOLOv2-tiny: 开始九层推理" << std::endl;
+    cnn_accelerator_ddr(arena, weights.data(), params.data());
+
+    // 最终 B 区采用物理 128 通道步长，golden 每位置仅有 125 通道。
+    // 按坐标索引二者，额外核对末三个槽位为零，不能用紧凑步长读 DDR。
     int errors = 0;
-    for (int sample = 0; sample < 3; ++sample) {
-        const int errors_before = errors;
-        ap_uint<64> image_copy[ddr_layout::IMAGE_WORDS];
-        for (int word = 0; word < ddr_layout::IMAGE_WORDS; ++word) {
-            ap_uint<64> value = 0;
-            for (int byte = 0; byte < ddr_layout::WORD_BYTES; ++byte) {
-                value.range(byte * 8 + 7, byte * 8) = (ap_uint<8>)inputs[sample][word * ddr_layout::WORD_BYTES + byte];
-                input_csv << sample << ',' << word * ddr_layout::WORD_BYTES + byte << ','
-                          << static_cast<int>(inputs[sample][word * ddr_layout::WORD_BYTES + byte]) << '\n';
+    const word_t* const output = arena + ddr_layout::RESULT_WORD_OFFSET;
+    for (int y = 0; y < prediction.output_h; ++y)
+        for (int x = 0; x < prediction.output_w; ++x)
+            for (int c = 0; c < physical_channels; ++c) {
+                const int pixel = y * prediction.output_w + x;
+                const int bit = (c % BYTES_PER_WORD) * 8;
+                const ap_int<8> actual = output[pixel * prediction.output_channel_groups +
+                                               c / BYTES_PER_WORD].range(bit + 7, bit);
+                const ap_int<8> expected = c < prediction.cout
+                    ? ap_int<8>(golden[pixel * prediction.cout + c]) : ap_int<8>(0);
+                if (actual != expected && ++errors <= MAX_PRINTED_ERRORS)
+                    std::cerr << "结果不匹配 y=" << y << " x=" << x << " c=" << c
+                              << " 期望=" << expected.to_int() << " 实际=" << actual.to_int() << '\n';
             }
-            image.data()[word] = value;
-            image_copy[word] = value;
-        }
-        // 非零旧值检测writer是否覆盖完整24字节结果。
-        for (int i = 0; i < ddr_layout::RESULT_WORDS; ++i) {
-            result.data()[i] = guard64;
-        }
-        cnn_accelerator_ddr(image.data(), weights.data(), params.data(), result.data(), MODEL_SOFTMAX_SCALE_Q20);
-        int first_max = 0;
-        for (int i = 1; i < FC_OUTPUTS; ++i)
-            if (expected[sample][i] > expected[sample][first_max]) first_max = i;
-        double denominator = 0;
-        for (int i = 0; i < FC_OUTPUTS; ++i)
-            denominator += std::exp((int(expected[sample][i]) - int(expected[sample][first_max])) * MODEL_FC_OUTPUT_SCALE);
-        int probability_sum = 0;
-        for (int i = 0; i < FC_OUTPUTS; ++i) {
-            const double wanted = SOFTMAX_PROBABILITY_SCALE * std::exp((int(expected[sample][i]) - int(expected[sample][first_max])) * MODEL_FC_OUTPUT_SCALE) / denominator;
-            const unsigned actual = result.data()[i / 4].range((i % 4) * 16 + 15, (i % 4) * 16).to_uint();
-            probability_sum += actual;
-            const bool match = actual <= SOFTMAX_PROBABILITY_SCALE && std::fabs(wanted - actual) <= PROBABILITY_ERROR_TOLERANCE;
-            csv << sample << ',' << i << ',' << wanted << ',' << actual << ',' << match << '\n';
-            if (!match) {
-                if (errors - errors_before < 4) {
-                    std::cerr << "sample " << sample << " probability " << i << "：期望 " << wanted << "，实际 " << actual << '\n';
-                }
-                ++errors;
-            }
-        }
-        const unsigned actual_class = result.data()[ddr_layout::CLASS_WORD_OFFSET].range(ddr_layout::CLASS_BIT_OFFSET + 31, ddr_layout::CLASS_BIT_OFFSET).to_uint();
-        csv << sample << ",pred_class," << first_max << ',' << actual_class << ',' << (actual_class == (unsigned)first_max) << '\n';
-        if (actual_class != (unsigned)first_max) {
-            std::cerr << "sample " << sample << " word2 高32位类别：期望 " << first_max << "，实际 " << actual_class << '\n';
-            ++errors;
-        }
-        if (std::abs(probability_sum - SOFTMAX_PROBABILITY_SCALE) > 5) {
-            std::cerr << "sample " << sample << " 概率和偏差超出5单位\n";
-            ++errors;
-        }
-        if (!image.guards_ok(guard64) || !weights.guards_ok(guard64) || !params.guards_ok(guard32) || !result.guards_ok(guard64)) {
-            std::cerr << "sample " << sample << " buffer 守卫被修改\n";
-            ++errors;
-        }
-        if (!unchanged(image, image_copy) || !unchanged(weights, weight_copy) || !unchanged(params, param_copy)) {
-            std::cerr << "sample " << sample << " 只读 DDR 区发生变化\n";
-            ++errors;
-        }
-        std::cout << "sample " << sample << (errors == errors_before ? " PASS" : " FAIL") << '\n';
-    }
-    csv.flush();
-    input_csv.flush();
-    if (!csv.good() || !input_csv.good()) {
+    if (feature.front() != sentinel || feature.back() != sentinel) {
+        std::cerr << "Feature DDR 区外写入\n";
         ++errors;
     }
-    std::cout << "DDR wrapper：三图、30概率与类别检查，错误数 " << errors << '\n';
-    return errors == 0 ? 0 : 1;
+    std::cout << "Prediction 有效元素=" << golden.size()
+              << " 物理尾槽=" << ddr_layout::RESULT_WORDS * BYTES_PER_WORD - golden.size()
+              << " 错误数=" << errors << ' ' << (errors ? "FAIL" : "PASS") << '\n';
+    return errors ? 1 : 0;
 }
 
