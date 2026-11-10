@@ -61,7 +61,7 @@
 
 ### Valid 与结果交付
 
-- **Cin 尾通道**是输入数值契约，不是空间 mask：PyTorch 权重 BIN 已对无效 Cin 填零；Feature 当前由 Im2Row 清零，集成时改由 Feature Loader 负责。YOLO Systolic 直接使用固定 Dot8，不重复清零。Weight Loader 只恢复文件字节。
+- **Cin 尾通道**是输入数值契约，不是空间 mask：PyTorch 权重 BIN 已对无效 Cin 填零；Feature 的无效 Cin 由 Feature Loader 清零。Im2Row 和 YOLO Systolic 不重复清零 Cin 尾组。Weight Loader 只恢复文件字节。
 - **`spatial_valid`** 从 Im2Row 继承，适用于当前 Spatial Tile 的全部本地 Cout Tile。不存在的空间位置不更新累加器；卷积 Padding 的零值不使真实空间位置失效。
 - **`cout_valid`** 是 4-bit 的计算 Tile mask。在每个本地 Cout Tile 开始时，以 `global_tile=first_cout_tile+local_cout_tile` 判断是否为整层最后一个 Tile；若是则取 `geometry.last_cout_valid_mask`，否则为 `1111`。注入时令权重 lane 的传播 valid 等于 `注入有效归约 token && cout_valid[lane]`，随权重一起错拍、向下传播。排空只停止注入新的有效 token，不丢弃已在传播中的数据。PE 保留激活、权重与空间有效条件；无效 Cout 不更新累加器，输出为零。不删减 token 或结果事务，也不因此减少物理乘法器数。
 - Prediction 的最后一块仍有 8 个物理计算 Tile、29 个逻辑 Cout；仅整层最后一个计算 Tile 的 `cout_valid=0001`，只对应 C124。不能将这个 4-lane mask 与 Writer 的 8 通道末组（5 个有效通道）混用。

@@ -8,7 +8,8 @@
 // 输出顺序：y -> tile_x -> kernel_pos -> cin_group，恰好
 // H*ceil(W/4)*Kh*Kw*G个4空间×8通道Pack。Tile不能跨图像行。
 //
-// 不存在的空间Lane与通道尾部清零；卷积Padding为零但不清除spatial_valid。
+// 输入的通道尾槽由生产端置零。Im2Row 只处理空间边界：不存在的空间 Lane
+// 输出为零，卷积 Padding 为零但不清除真实输出位置的 spatial_valid。
 // stream阻塞时保留完整事务与目的标签，RAM返回和直接输入由调度器对齐。
 //
 // 调用方只提供固定层表配置，不逐字段检查或构造兜底配置。

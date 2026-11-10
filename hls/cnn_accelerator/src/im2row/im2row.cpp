@@ -17,17 +17,6 @@ using output_count_t = ap_uint<bits_for_max(yolo_max_field(&ConvGeometry::im2row
 constexpr int STRIP_PONG_SHIFT = bits_for_max(IM2ROW_MAX_GROUPS - 1);  // 槽号左移位数：低位保留给Cin组。
 static_assert((IM2ROW_MAX_GROUPS & (IM2ROW_MAX_GROUPS - 1)) == 0,
               "Strip pong concatenation requires a power-of-two group capacity");
-word_t normalized_word(const channel_pack_t& source, int cin_group, int cin) {
-#pragma HLS INLINE
-    channel_pack_t normalized;
-    for (int cin_lane = 0; cin_lane < FEATURE_PACK_CHANNELS; ++cin_lane) {
-#pragma HLS UNROLL
-        normalized.channel[cin_lane] = cin_group * FEATURE_PACK_CHANNELS + cin_lane < cin
-            ? source.channel[cin_lane] : activation_t(0);
-    }
-    return pack_activation_lane(normalized);
-}
-
 // UNROLL固定空间Bank选择，onehot掩码避免优先级选择链；
 // 只有槽号/Cin组进入RAM地址，不把通道组展开成寄存器阵列。
 void output_words(const word_t strip_read_data[3][6], ap_uint<4> kernel_pos, word_t window_words[4]) {
@@ -77,6 +66,7 @@ void commit_strip_writes(word_t window_strip[3][6][IM2ROW_STRIP_BANK_DEPTH],
 void im2row(hls::stream<channel_pack_t>& input_stream,
             hls::stream<activation_pack_t>& output_stream,
             const ConvGeometry& geometry) {
+    // 输入尾组已由 Loader 补零。这里只按 group 调度，不再逐通道判断 Cin。
     // 调用方只提供固定层表配置；不逐字段检查或构造兜底配置。
     // 两行循环×四列Bank，地址=(x/4)*G+cin_group，总数据容量32KiB。
     // Strip物理18Bank，地址=current_strip_slot*128+cin_group，总数据容量36KiB。
@@ -115,7 +105,7 @@ void im2row(hls::stream<channel_pack_t>& input_stream,
 #pragma HLS PIPELINE II=1
             // 此位置输入直接参与输出。
             const ap_uint<2> last_gather_lane = tile_x == last_tile_x ? tail_last_gather_lane : ap_uint<2>(3);
-            const word_t input_lane_word = normalized_word(input_stream.read(), cin_group, geometry.cin);
+            const word_t input_lane_word = pack_activation_lane(input_stream.read());
 #ifndef __SYNTHESIS__
             ++reads;
 #endif
@@ -169,7 +159,7 @@ void im2row(hls::stream<channel_pack_t>& input_stream,
         // 单输入事务循环：不让flatten用W*G重建边界乘法。
         while (preload_x < image_width) {
 #pragma HLS PIPELINE II=1
-            const word_t word = normalized_word(input_stream.read(), preload_group, geometry.cin);
+            const word_t word = pack_activation_lane(input_stream.read());
             const line_address_t preload_address = preload_block + preload_group;  // 四列块基地址加当前Cin组。
             for (int column_bank = 0; column_bank < 4; ++column_bank) {
 #pragma HLS UNROLL
@@ -282,7 +272,7 @@ void im2row(hls::stream<channel_pack_t>& input_stream,
             // bottom_input_end同为13，不再读新输入，列11/12已通过重叠保留。
             word_t input_word = 0;
             if (load_bottom) {
-                input_word = normalized_word(input_stream.read(), bottom_input_group, geometry.cin);
+                input_word = pack_activation_lane(input_stream.read());
                 // 覆盖前旧Top已进入current Strip：前两列来自上一Tile重叠，
                 // 其余列来自上一Tile的q4预取，绝不回读已覆盖的旧Top。
                 // 新Bottom源列所在四列块的基地址，加独立输入Cin组。

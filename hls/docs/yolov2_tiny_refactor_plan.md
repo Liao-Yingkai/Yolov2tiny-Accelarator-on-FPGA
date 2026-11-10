@@ -174,8 +174,8 @@ kh → kw → cin_group
 - 3×3：stride=1，四侧 Padding=1，卷积填充值为量化零点 0。
 - 1×1：stride=1，无 Padding，不走 3×3 滑窗读取；仍需收集 4 个空间位置并按 Group 输出。
 - 每行单独切 Spatial Tile；例如 W=13 的末 Tile 仅一个 Lane 有效。
-- 当前源码在 Im2Row 入口清零 Cin 尾组；集成时由 Feature Loader 按
-  `group*8+lane<Cin` 处理，Im2Row 只接收规范化后的固定 8-lane Pack。
+- Feature Loader 按 `group*8+lane<Cin` 补齐 Cin 尾组，Im2Row 只接收
+  规范化后的固定 8-lane Pack。
 - Padding 不使输出空间 Lane 无效；不存在的空间 Lane 则 `spatial_valid=0`。
 
 ### 6.2 已实现的存储方向：保留空间结构，将 Group 存入 BRAM 深度
@@ -211,7 +211,7 @@ Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先�
 - 保留错拍、Valid 传播、初始化和排空机制。`K+6`仅为4×4阵列的逻辑步数模型，不等于实测 Tile 间隔。
 - 分开处理传播 Token Valid、Spatial Valid、Cout尾部有效性和Cin尾组有效性。
 - Prediction 的125通道最后一个4-Cout Tile只有一个有效通道；若按8通道打包，最后一组则有5个有效通道，不能混淆两种尾部。
-- 权重 Cin 尾组由导出器补零，Feature Cin 尾组集成时由 Feature Loader 补零；
+- 权重 Cin 尾组由导出器补零，Feature Cin 尾组由 Feature Loader 补零；
   `cout_valid` 按全局计算 Tile 生成，在权重注入端合入传播 valid，并随结果交给下游。
 
 ### 7.2 一次性PostProcess与QAT边界调整
@@ -338,11 +338,11 @@ output = signed INT8 clamp(scaled, -128, 127)
 2. 扩展 Im2Row 与 Systolic：多Cin Group、3×3/1×1、尾通道和尾空间Lane；同步独立testbench。
 3. 完成 YOLO exporter / 整数Golden，再实现PostProcess及其逐元素数值验证。
 4. 按原值行缓存方案实现Pool，重点验证stride=1、跨Tile、右/下Padding及状态切换。
-5. 实现Loader、Formatter、Writer和统一层控制，验证DDR双缓冲与单套硬件复用。
+5. Loader 和 Writer 已独立实现；接入统一层控制后验证 DDR 双缓冲与单套硬件复用。
 6. 先单层，再连续多层，最后做系统性能和上板验证；Vivado/Vitis更新另行安排。
 
 测试至少覆盖Cin=3/16/1024、1×1长归约、Cout=125尾部、W=13末Tile、多Cout驻留块与连续调用。Pool应使用原始2×2四元素公式作为独立reference，不能让reference重复DUT缓存实现。
 
 每个模块建立stream读写数量守恒；按获准阶段分别进行静态检查、C-sim、综合和co-sim。综合检查BRAM实际映射、端口冲突、归约II、阵列实例数；co-sim检查反压、FIFO深度、边界排空和层切换。不能把语法通过当成功能、资源或时序已经验证。
 
-当前 Pool 已独立实现，Core 与 Writer 尚未接入。上述 Im2Row 综合结果来自此前的独立工程。
+当前 Pool 与 DDR I/O 已独立实现，Core/Top 尚未接入。上述 Im2Row 综合结果来自此前的独立工程。

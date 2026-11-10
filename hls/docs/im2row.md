@@ -80,9 +80,8 @@ input_id = ((y × W) + x) × G + group
 pack.channel[c] 对应逻辑通道 group×8+c
 ```
 
-当前源码在消费输入时对 `group×8+c>=Cin` 的物理通道清零。按
-[DDR 搬运规格](yolov2_tiny_ddr_io.md)，
-集成时由 Feature Loader 从紧凑 RGB 拆包并补齐无效 Cin，Im2Row 不再重复清零。
+按 [DDR 搬运规格](yolov2_tiny_ddr_io.md)，Feature Loader 从紧凑 RGB 拆包并
+补齐 `group×8+c>=Cin` 的无效 Cin；Im2Row 不再清零通道尾槽。
 Im2Row 仍每笔接收固定 8-lane Pack，使用 `cin_groups` 控制事务数量；
 `spatial_valid` 仅标记空间位置，不新增通道 mask。Loader 不发送空间 Padding。
 

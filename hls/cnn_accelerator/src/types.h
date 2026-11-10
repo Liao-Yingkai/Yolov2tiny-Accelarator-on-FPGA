@@ -50,7 +50,7 @@ struct inference_result_t {
 };
 
 // 一个空间位置上的连续8通道组；不承诺包含完整逻辑 pixel 的全部通道。
-// Im2Row 的 channel c 对应逻辑通道 group*8+c，尾通道规范化为零。
+// channel c 对应逻辑通道 group*8+c；输入生产端将逻辑 Cin 之外的尾槽置零。
 struct channel_pack_t {
     activation_t channel[FEATURE_PACK_CHANNELS];
 };

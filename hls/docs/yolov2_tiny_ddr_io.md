@@ -1,7 +1,9 @@
 # YOLOv2-tiny Loader、Writer 与层间 DDR 缓冲
 
-这是首版集成规格，不是现有 RTL 的行为说明。保留单套 4×4 OS 卷积流水和最多
-32 Cout 驻留；本阶段只确定数据格式、模块职责和调度边界，不改源码。
+三个 Loader 和 Writer 已在 `cnn_accelerator/src/axi/ddr_io.*` 独立实现。
+它们按张量或模型段基址访问 DDR，不负责计算层间基址。下面的 Top 调度、A/B
+交换和 AXI 屏障是后续集成规格，尚未接入 Core/Top；旧 MNIST Wrapper 接口
+不兼容新版 DDR I/O。
 
 ## 1. 层与 Cout 块的控制
 
@@ -45,8 +47,8 @@ Cin 的槽位写零。DDR 输入的有效通道字节偏移为 `(y*W+x)*Cin+c`�
 - **8 通道对齐的中间层**：连续读取 64-bit 字，每字直接解成一个 Pack。
   字内第 `lane` 个 INT8 使用 bits `[8*lane+7:8*lane]`，保持原补码。
 
-尾零只在发往 Im2Row 的流上生成，不写回 DDR。Im2Row 集成时移除当前
-`normalized_word()` 的 Cin 清零职责，改为接收已规范化的 Pack；仍用
+尾零只在发往 Im2Row 的流上生成，不写回 DDR。Im2Row 已移除
+`normalized_word()`，直接接收已规范化的 Pack；仍用
 `cin_groups` 控制读数和窗口 Token 数，不新增 `cin_valid`。3×3 空间补边
 以及行尾 `spatial_valid` 仍由 Im2Row 处理；Padding 不使真实输出位置失效。
 
@@ -126,6 +128,11 @@ Pool1 的 `208×208×16`。建议两区基址按 64 B 对齐；权重、参数�
 写请求发出，都不能单独作为层间屏障。首版不用跨层预读或原地覆盖。
 
 ## 6. 实施与验收
+
+独立实现已通过 G++ 功能检查和 Vitis HLS 2022.2 Clang 静态检查。
+九层均检查了 Loader 的顺序与尾槽、Writer 的 NHWC 地址和范围外哨兵；
+首层另用 PyTorch BIN 验证紧凑 RGB 经 Feature Loader、Im2Row 后的逐元素结果。
+检查不导出 CSV，未运行综合或 RTL co-sim。
 
 1. 先独立验证三个 Loader 和 Writer：RGB 跨字拆包与尾零、参数末组不越界、
    多 Cout 块写同一像素、池化后行尾和 Prediction 末字。与逻辑 HWC golden

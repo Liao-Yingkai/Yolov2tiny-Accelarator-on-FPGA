@@ -1,201 +1,221 @@
 #include "ddr_io.h"
+
+#include "../channel_pack.h"
+
 #ifndef __SYNTHESIS__
 #include <cassert>
 #endif
 
 namespace ddr_io {
-// 辅助函数仅内联到所属加载器；卷积共用一套按字节消费的固定网络加载逻辑。
 namespace {
-void load_conv_weights(const ap_uint<64>* weights,
-                        hls::stream<weight_pack_t>& conv1,
-                        hls::stream<weight_pack_t>& conv2,
-                        layer_mode_t layer_mode) {
+
+constexpr int DDR_WORD_BITS = 64;
+constexpr int RGB_CHANNELS = 3;
+constexpr int RGB_PIXEL_BITS = RGB_CHANNELS * ACTIVATION_BITS;
+constexpr int RGB_CHUNK_PIXELS = DDR_WORD_BITS / ACTIVATION_BITS;
+constexpr int RGB_CHUNK_WORDS = RGB_CHANNELS;
+constexpr int RGB_CHUNK_BITS = RGB_CHUNK_WORDS * DDR_WORD_BITS;
+constexpr int HALF_WORD_BITS = CONV_COUT_PAR * ACTIVATION_BITS;
+constexpr int COUT_TILES_PER_WORD = FEATURE_PACK_CHANNELS / CONV_COUT_PAR;
+constexpr int MAX_BLOCK_GROUPS = YOLO_TINY_COUT_CACHE_TILES / COUT_TILES_PER_WORD;
+constexpr int PARAM_FIELDS = 3;
+
+static_assert(FEATURE_PACK_CHANNELS * ACTIVATION_BITS == DDR_WORD_BITS &&
+                  CONV_CIN_PAR * WEIGHT_BITS == DDR_WORD_BITS &&
+                  COUT_TILES_PER_WORD == 2 && 2 * HALF_WORD_BITS == DDR_WORD_BITS,
+              "DDR word must contain one 8-channel pack or two 4-Cout halves");
+static_assert(RGB_CHUNK_PIXELS * RGB_PIXEL_BITS == RGB_CHUNK_BITS,
+              "Each RGB chunk must end on both pixel and DDR word boundaries");
+
+ap_uint<HALF_WORD_BITS> pack_output_half(const yolo_activation_tile_t& tile,
+                                         int spatial_lane) {
 #pragma HLS INLINE
-    const bool is_conv2 = (layer_mode == LAYER2_MODE);
-    const int count = is_conv2 ? CNN_CONV2_WEIGHT_TRANSACTIONS : CNN_CONV1_WEIGHT_TRANSACTIONS;
-    int word_address = is_conv2 ? ddr_layout::CONV2_WEIGHT_OFFSET : ddr_layout::CONV1_WEIGHT_OFFSET;
-    ap_uint<64> cached = 0;
-    ap_uint<3> byte_offset = 0;
-#ifndef __SYNTHESIS__
-    int reads = 0, writes = 0;
-#endif
-    // 游标和 word 缓存在整层内连续，不在 pack/Cout tile 边界重置。
-    // Conv1 每 lane 消费1字节，pack8/9共享word；Conv2每lane消费完整8字节。
-conv_pack_loop:
-    for (int pack = 0; pack < count; ++pack) {
-        weight_pack_t value;
-#pragma HLS ARRAY_PARTITION variable=value.lane complete
-conv_lane_loop:
-        for (int lane = 0; lane < SYSTOLIC_COUT_PAR; ++lane) {
-#pragma HLS PIPELINE II=1
-            if (byte_offset == 0) {
-                cached = weights[word_address++];
-#ifndef __SYNTHESIS__
-                ++reads;
-#endif
-            }
-            // 每个字段都来自已读word，完整初始化。Conv1的c1..7只是
-            // 确定don't-care，不补零；有效Cin由Systolic选择性点积保证。
-            for (int c = 0; c < SYSTOLIC_CIN_PAR; ++c) {
+    ap_uint<HALF_WORD_BITS> half = 0;
+    for (int cout_lane = 0; cout_lane < CONV_COUT_PAR; ++cout_lane) {
 #pragma HLS UNROLL
-                value.lane[lane].channel[c] = (ap_int<8>)cached.range(c * 8 + 7, c * 8);
-            }
-            if (!is_conv2) {
-                const int bit = byte_offset.to_int() * 8;
-                value.lane[lane].channel[0] = (ap_int<8>)cached.range(bit + 7, bit);
-                byte_offset = byte_offset + 1; // 3bit自然绕回0，下次才读新word。
-            }
+        if (tile.cout_valid[cout_lane]) {
+            half.range((cout_lane + 1) * ACTIVATION_BITS - 1, cout_lane * ACTIVATION_BITS) =
+                tile.value[spatial_lane][cout_lane].range(ACTIVATION_BITS - 1, 0);
         }
-        if (is_conv2) conv2.write(value);
-        else conv1.write(value);
-#ifndef __SYNTHESIS__
-        ++writes;
-#endif
     }
-#ifndef __SYNTHESIS__
-    assert(reads == (is_conv2 ? ddr_layout::CONV2_WEIGHT_WORDS : ddr_layout::CONV1_WEIGHT_WORDS));
-    assert(writes == count);
-    assert(byte_offset == 0);
-#endif
+    return half;
 }
 
-template <typename Pack, int Lanes>
-void load_params(const ap_int<32>* params, int offset, int count,
-                 hls::stream<Pack>& output) {
-#pragma HLS INLINE
-#ifndef __SYNTHESIS__
-    int reads = 0, writes = 0;
-#endif
-    for (int pack = 0; pack < count; ++pack) {
-        Pack value;
-#pragma HLS ARRAY_PARTITION variable=value.bias complete
-#pragma HLS ARRAY_PARTITION variable=value.multiplier complete
-#pragma HLS ARRAY_PARTITION variable=value.shift complete
-        // DDR 每层按完整 bias/multiplier/shift 数组排列；仅缓存当前 pack。
-        for (int field = 0; field < ddr_layout::PARAM_FIELDS; ++field) {
-            for (int lane = 0; lane < Lanes; ++lane) {
-#pragma HLS PIPELINE II=1
-                const ap_int<32> word = params[offset + field * (count * Lanes) + pack * Lanes + lane];
-                if (field == 0) value.bias[lane] = word;
-                else if (field == 1) value.multiplier[lane] = word;
-                else value.shift[lane] = word;
-#ifndef __SYNTHESIS__
-                ++reads;
-#endif
-            }
-        }
-        output.write(value);
-#ifndef __SYNTHESIS__
-        ++writes;
-#endif
-    }
-#ifndef __SYNTHESIS__
-    assert(reads == count * ddr_layout::PARAM_FIELDS * Lanes && writes == count);
-#endif
-}
-}  // 匿名命名空间
+}  // namespace
 
-void image_loader(const ap_uint<64>* image, hls::stream<pixel_t>& output) {
+void feature_loader(const ap_uint<64>* feature,
+                    hls::stream<channel_pack_t>& output,
+                    const ConvGeometry& geometry) {
 #pragma HLS INLINE off
+    if (geometry.cin == RGB_CHANNELS) {
+        // 紧凑 RGB 无 DDR 尾槽：连续 3 字包含 8 个像素，像素可能跨 DDR 字。
 #ifndef __SYNTHESIS__
-    int reads = 0, writes = 0;
+        assert(geometry.w % RGB_CHUNK_PIXELS == 0 && geometry.cin_groups == 1);
 #endif
-    for (int word = 0; word < ddr_layout::IMAGE_WORDS; ++word) {
-        const ap_uint<64> packed = image[word];
-#ifndef __SYNTHESIS__
-        ++reads;
-#endif
-        // 一个 DDR word 只读一次，随后用固定小计数逐拍送出八个像素。
-        for (int byte = 0; byte < ddr_layout::WORD_BYTES; ++byte) {
+        const int chunk_count = geometry.input_transactions / RGB_CHUNK_PIXELS;
+        int word_address = 0;
+        for (int chunk = 0; chunk < chunk_count; ++chunk) {
+            ap_uint<DDR_WORD_BITS> words[RGB_CHUNK_WORDS];
+#pragma HLS ARRAY_PARTITION variable=words complete
+            for (int i = 0; i < RGB_CHUNK_WORDS; ++i) {
 #pragma HLS PIPELINE II=1
-            pixel_t pixel;
-#pragma HLS ARRAY_PARTITION variable=pixel.channel complete
-            for (int c = 0; c < IM2ROW_MAX_CHANNELS; ++c) {
-#pragma HLS UNROLL
-                // 当前 word 的字节作为确定 don't-care，不额外读或补零。
-                // Im2Row 保持既有 Conv1 通道规范化，丢弃 channel1..7。
-                pixel.channel[c] = (ap_int<8>)packed.range(c * 8 + 7, c * 8);
+                words[i] = feature[word_address++];
             }
-            pixel.channel[0] = (ap_int<8>)packed.range(byte * 8 + 7, byte * 8);
-            output.write(pixel);
+
+            // 最早字节在低位。固定步长移位，不让跨字的 RGB 像素丢失。
+            ap_uint<RGB_CHUNK_BITS> pixels;
+            for (int i = 0; i < RGB_CHUNK_WORDS; ++i) {
+#pragma HLS UNROLL
+                pixels.range((i + 1) * DDR_WORD_BITS - 1, i * DDR_WORD_BITS) = words[i];
+            }
+            for (int i = 0; i < RGB_CHUNK_PIXELS; ++i) {
+#pragma HLS PIPELINE II=1
+                packed_activation_lane_t packed = 0;  // 只在发流时补齐 C3..C7。
+                packed.range(RGB_PIXEL_BITS - 1, 0) = pixels.range(RGB_PIXEL_BITS - 1, 0);
+                output.write(unpack_activation_lane(packed));
+                pixels >>= RGB_PIXEL_BITS;
+            }
+        }
+    } else {
+        // 其余固定网络层的 Cin 已整除 8，DDR 字与输入 Pack 一一对应。
 #ifndef __SYNTHESIS__
-            ++writes;
+        assert(geometry.cin == geometry.cin_groups * FEATURE_PACK_CHANNELS);
 #endif
+        for (int word = 0; word < geometry.input_transactions; ++word) {
+#pragma HLS PIPELINE II=1
+            output.write(unpack_activation_lane(feature[word]));
         }
     }
-#ifndef __SYNTHESIS__
-    assert(reads == ddr_layout::IMAGE_WORDS);
-    assert(writes == CNN_CONV1_INPUT_TRANSACTIONS);
-#endif
 }
 
 void weight_loader(const ap_uint<64>* weights,
-                   hls::stream<weight_pack_t>& conv1,
-                   hls::stream<weight_pack_t>& conv2,
-                   hls::stream<fc_weight_pack_t>& fc) {
+                   hls::stream<weight_pack_t>& output,
+                   const ConvGeometry& geometry) {
 #pragma HLS INLINE off
-    // 非展开、非流水的两阶段控制，只有一个helper源码调用点。
-    // 统一lane循环后Conv1每pack消费4个lane周期，不再使用原并行快路径。
-conv_layer_loop:
-    for (int layer = 0; layer < 2; ++layer) {
-        const layer_mode_t mode = (layer == 0) ? LAYER1_MODE : LAYER2_MODE;
-        load_conv_weights(weights, conv1, conv2, mode);
-    }
-#ifndef __SYNTHESIS__
-    int reads = 0, writes = 0;
-#endif
-    for (int pack = 0; pack < ddr_layout::FC_WEIGHT_PACKS; ++pack) {
-        fc_weight_pack_t value;
-#pragma HLS ARRAY_PARTITION variable=value.value complete dim=0
-        for (int lane = 0; lane < FC_COUT_PAR; ++lane) {
+    weight_pack_t pack;
+#pragma HLS ARRAY_PARTITION variable=pack.lane complete
+    const int word_count = geometry.weight_transactions * CONV_COUT_PAR;
+    // 已导出的顺序就是 Systolic 的消费顺序；每四字组包，跨 Cout 块不重置游标。
+    for (int word = 0; word < word_count; ++word) {
 #pragma HLS PIPELINE II=1
-            const ap_uint<64> word = weights[ddr_layout::FC_WEIGHT_OFFSET + pack * FC_COUT_PAR + lane];
-            for (int c = 0; c < FC_CIN_PAR; ++c) {
-#pragma HLS UNROLL
-                value.value[lane][c] = (ap_int<8>)word.range(c * 8 + 7, c * 8);
-            }
-#ifndef __SYNTHESIS__
-            ++reads;
-#endif
+        const int cout_lane = word % CONV_COUT_PAR;
+        pack.lane[cout_lane] = unpack_weight_lane(weights[word]);
+        if (cout_lane == CONV_COUT_PAR - 1) {
+            output.write(pack);  // 消费端装完当前块后，依靠阻塞写传递反压。
         }
-        fc.write(value);
-#ifndef __SYNTHESIS__
-        ++writes;
-#endif
     }
-#ifndef __SYNTHESIS__
-    assert(reads == ddr_layout::FC_WEIGHT_WORDS && writes == ddr_layout::FC_WEIGHT_PACKS);
-#endif
 }
 
 void param_loader(const ap_int<32>* params,
-                  hls::stream<postprocess_param_pack_t>& conv1,
-                  hls::stream<postprocess_param_pack_t>& conv2,
-                  hls::stream<fc_param_pack_t>& fc) {
+                  hls::stream<postprocess_param_pack_t>& output,
+                  const ConvGeometry& geometry) {
 #pragma HLS INLINE off
-    load_params<postprocess_param_pack_t, SYSTOLIC_COUT_PAR>(params, ddr_layout::CONV1_PARAM_OFFSET, CNN_CONV1_PARAM_TRANSACTIONS, conv1);
-    load_params<postprocess_param_pack_t, SYSTOLIC_COUT_PAR>(params, ddr_layout::CONV2_PARAM_OFFSET, CNN_CONV2_PARAM_TRANSACTIONS, conv2);
-    load_params<fc_param_pack_t, FC_COUT_PAR>(params, ddr_layout::FC_PARAM_OFFSET, FC_OUT_TILES, fc);
+    const int cout = geometry.cout;
+    for (int tile = 0; tile < geometry.cout_tiles; ++tile) {
+        postprocess_param_pack_t pack;
+#pragma HLS ARRAY_PARTITION variable=pack.bias complete
+#pragma HLS ARRAY_PARTITION variable=pack.multiplier complete
+#pragma HLS ARRAY_PARTITION variable=pack.shift complete
+
+        // 按字段取当前 Tile 的四个值。单个内层迭代最多读一次 AXI。
+        for (int field = 0; field < PARAM_FIELDS; ++field) {
+            const int field_base = field * cout;
+            for (int lane = 0; lane < CONV_COUT_PAR; ++lane) {
+#pragma HLS PIPELINE II=1
+                const int oc = tile * CONV_COUT_PAR + lane;
+                ap_int<32> value = 0;
+                if (oc < cout) {
+                    value = params[field_base + oc];  // 先判界，末 Tile 不读无效通道。
+                }
+                if (field == 0) {
+                    pack.bias[lane] = value;
+                } else if (field == 1) {
+                    pack.multiplier[lane] = value;
+                } else {
+                    pack.shift[lane] = value;
+                }
+            }
+        }
+        output.write(pack);
+    }
 }
 
-void result_writer(hls::stream<inference_result_t>& input, ap_uint<64>* result) {
+void feature_writer(hls::stream<yolo_activation_tile_t>& input,
+                    ap_uint<64>* feature,
+                    const ConvGeometry& geometry) {
 #pragma HLS INLINE off
-    const inference_result_t value = input.read();
-    ap_uint<64> words[ddr_layout::RESULT_WORDS];
-#pragma HLS ARRAY_PARTITION variable=words complete
-    for (int i = 0; i < ddr_layout::RESULT_WORDS; ++i) {
+    const int height = geometry.output_h;
+    const int width = geometry.output_w;
+    const int tile_count_x = ceil_div(width, CONV_SPATIAL_PAR);
+    const int output_groups = geometry.output_channel_groups;
+    const int row_words = width * output_groups;
+    ap_uint<DDR_WORD_BITS> scratch[CONV_SPATIAL_PAR][MAX_BLOCK_GROUPS];
+#pragma HLS ARRAY_PARTITION variable=scratch complete dim=0
+#ifndef __SYNTHESIS__
+    int reads = 0;
+    int writes = 0;
+#endif
+
+    int first_group = 0;
+    for (int block = 0; block < geometry.cache_blocks; ++block) {
+        const int block_tiles = block == geometry.cache_blocks - 1
+            ? geometry.last_cache_tiles : geometry.resident_cout_tiles;
+#ifndef __SYNTHESIS__
+        assert(block_tiles > 0 && block_tiles % COUT_TILES_PER_WORD == 0);
+#endif
+        const int block_groups = block_tiles / COUT_TILES_PER_WORD;
+        int row_base = first_group;
+        for (int y = 0; y < height; ++y, row_base += row_words) {
+            int tile_base = row_base;
+            for (int tile_x = 0; tile_x < tile_count_x;
+                 ++tile_x, tile_base += CONV_SPATIAL_PAR * output_groups) {
+                ap_uint<CONV_SPATIAL_PAR> spatial_valid = 0;
+                // 同一空间 Tile 每次收两个 4-Cout 事务，合成四个像素各自的 8-Cout 字。
+                for (int group = 0; group < block_groups; ++group) {
+                    const yolo_activation_tile_t low = input.read();
+                    const yolo_activation_tile_t high = input.read();
+                    if (group == 0) {
+                        spatial_valid = low.spatial_valid;
+                    }
+#ifndef __SYNTHESIS__
+                    assert(low.spatial_valid == spatial_valid && high.spatial_valid == spatial_valid);
+                    const int valid_lanes = config_min(CONV_SPATIAL_PAR,
+                                                       width - tile_x * CONV_SPATIAL_PAR);
+                    assert(spatial_valid == (1u << valid_lanes) - 1u);
+                    reads += COUT_TILES_PER_WORD;
+#endif
+                    for (int lane = 0; lane < CONV_SPATIAL_PAR; ++lane) {
 #pragma HLS UNROLL
-        words[i] = 0;
-    }
-    for (int i = 0; i < FC_OUTPUTS; ++i) {
-#pragma HLS UNROLL
-        // 每word四个uint16，较早channel占低位。
-        words[i / 4].range((i % 4) * 16 + 15, (i % 4) * 16) = value.probability[i];
-    }
-    words[ddr_layout::CLASS_WORD_OFFSET].range(ddr_layout::CLASS_BIT_OFFSET + 31, ddr_layout::CLASS_BIT_OFFSET) = (ap_uint<32>)value.class_index;
-    for (int i = 0; i < ddr_layout::RESULT_WORDS; ++i) {
+                        ap_uint<DDR_WORD_BITS> word;
+                        word.range(HALF_WORD_BITS - 1, 0) = pack_output_half(low, lane);
+                        word.range(DDR_WORD_BITS - 1, HALF_WORD_BITS) = pack_output_half(high, lane);
+                        scratch[lane][group] = word;
+                    }
+                }
+
+                // 当前块内，一个像素的各组地址相邻；像素之间按完整 Cout 步长跳转。
+                // 写完才收下一空间 Tile；scratch 只属于本 Writer，不需要 ping-pong。
+                int pixel_base = tile_base;
+                for (int lane = 0; lane < CONV_SPATIAL_PAR; ++lane, pixel_base += output_groups) {
+                    if (spatial_valid[lane]) {
+                        for (int group = 0; group < block_groups; ++group) {
 #pragma HLS PIPELINE II=1
-        result[i] = words[i];
+                            feature[pixel_base + group] = scratch[lane][group];
+#ifndef __SYNTHESIS__
+                            ++writes;
+#endif
+                        }
+                    }
+                }
+            }
+        }
+        first_group += block_groups;
     }
+#ifndef __SYNTHESIS__
+    assert(first_group == output_groups);
+    assert(reads == height * tile_count_x * geometry.cout_tiles);
+    assert(writes == geometry.output_transactions);
+#endif
 }
-}  // 命名空间 ddr_io
+
+}  // namespace ddr_io
