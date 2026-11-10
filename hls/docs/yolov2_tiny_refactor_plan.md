@@ -86,6 +86,8 @@ layer
 
 Cin Group 之间不清零、不单独输出、不单独执行 Bias/Requant。完整归约结束后，才排空阵列并输出当前结果 Tile。回放期间不读取新 Activation，依靠 stream 反压，不新增 pause/stop 接口。
 
+块是流顺序，不要求所有模块按块调用。Systolic OS 的现有入口按块运行，上游层级调度连续供给各块；PostProcess 一次调用处理整层，在内部按相同计数切块。整网集成不能在当前块结束时等待整层 PostProcess 返回，否则下一块无法供给。层间仍保留整层 DDR 写回 barrier。
+
 ## 4. 首版32个Cout缓存及BRAM预算
 
 首版各层统一按最多32个Cout驻留设计，包括Conv8，即最多8个4-Cout计算Tile。PE计算并行度仍为4，不扩展成32列阵列。后续依据整条流水综合后的BRAM占用再调整驻留数量；这不是已验证可装入目标器件的资源结论。
@@ -208,6 +210,8 @@ Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先�
 - Cin 无效 lane 由导出文件和 Im2Row 补零；`cout_valid` 按全局计算 Tile 生成，在权重注入端合入传播 valid，并随结果交给下游。Loader 只恢复文件字节，不承担补零或二次重排。
 
 ### 7.2 一次性PostProcess与QAT边界调整
+
+PostProcess 调用与参数切块见 [YOLOv2-tiny ConvPostProcess 方案](conv_postprocess.md#6-yolov2-tiny-重构方案)。首版单份 32-Cout 参数缓存，每块先加载再计算，走完全部空间位置后读取下一块。参数预取作为后续优化单独实现，不改变数值或 stream 契约。
 
 已决定取消Conv1～Conv8卷积输出、激活之前的activation FakeQuant。PyTorch后续需改为：
 

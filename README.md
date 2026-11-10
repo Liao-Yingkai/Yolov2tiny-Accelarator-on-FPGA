@@ -357,6 +357,8 @@ Conv1/Conv2 在唯一调用点顺序使用同一 `load_conv_weights()`，按 Pac
 
 ## 模块级验证
 
+YOLO testbench 从 PostProcess 起只读导出 BIN，并在终端输出统计和有限错误详情，不再导出 CSV 或其他数据文件。Im2Row、Systolic 中现有的 CSV 导出待后续移除。PostProcess 使用 [`test_conv_postprocess_pytorch.cpp`](hls/cnn_accelerator/testbench/test_conv_postprocess_pytorch.cpp)，Top 为 `conv_postprocess`；数据和运行方式见 [验证说明](hls/docs/conv_postprocess.md#4-验证)。
+
 `hls/cnn_accelerator/testbench/` 保留两组独立的模块 testbench：原有 `test_*.cpp`
 使用确定性程序数据，新增 `test_*_pytorch.cpp` 直接读取 Python exporter 和
 `dump_trace.py` 的 golden 数据。模块 testbench 输入直接来自 PyTorch 的对应上游边界，
