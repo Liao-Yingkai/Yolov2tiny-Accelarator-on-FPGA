@@ -65,7 +65,7 @@ row12 之后用一条值为 -128 的虚拟底行生成最后一行输出，不�
 `trace_*_postprocess_int8_hwc_0000.bin` 读取输入，逐项核对 `trace_pool{1..6}_int8_hwc_0000.bin`。
 Bypass 对比原始输入。另用全负数的 Conv6 输入验证右/下补边，期望结果直接从 HWC
 坐标取 2×2 最大值。检查输入/输出事务数、两种 valid mask、尾部 payload 和块/层切换；
-只打印统计和有限错误，不写 CSV 或其他数据文件。原 MNIST Pool testbench 不再保留。
+只打印统计和有限错误，不写 CSV 或其他数据文件。
 
 本轮通过 G++ 功能验证（九层及全负数用例均零错误）和 Vitis HLS 2022.2
 Clang 静态检查。未执行 Vitis 综合或 RTL co-sim；BRAM 映射、实际 II、时序与

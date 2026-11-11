@@ -2,7 +2,6 @@
 
 三个 Loader 和 Writer 已接入 [YOLO DDR Top](top.md)，按张量或模型段基址
 访问 DDR。Top 负责层级调度和 A/B 交换；源码顺序与 AXI 实际完成时序须分别验证。
-旧 MNIST Wrapper 接口不兼容新版 DDR I/O。
 
 ## 1. 层与 Cout 块的控制
 

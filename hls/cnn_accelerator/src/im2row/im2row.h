@@ -14,7 +14,7 @@
 //
 // 调用方只提供固定层表配置，不逐字段检查或构造兜底配置。
 // 非综合构建仅保留输入/输出事务守恒断言。
-// 不提供旧bool接口；Core/Top暂不迁移，待所有模块重构完成后统一接入新接口。
+// Top 对每个 Cout 驻留块重新调用本模块，从预填充开始完整扫描一次输入。
 void im2row(hls::stream<channel_pack_t>& input_stream,
             hls::stream<activation_pack_t>& output_stream,
             const ConvGeometry& geometry);

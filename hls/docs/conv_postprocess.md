@@ -1,6 +1,6 @@
 # YOLOv2-tiny ConvPostProcess 设计
 
-将 Systolic 的 INT32 累加结果转换为 Pool/Bypass 使用的 INT8 Tile。当前已实现，尚未接入整网。
+将 Systolic 的 INT32 累加结果转换为 Pool/Bypass 使用的 INT8 Tile，已接入 [YOLO DDR Top](top.md)。
 
 ```cpp
 void conv_postprocess(hls::stream<yolo_acc_tile_t>& input_stream,

@@ -1,9 +1,8 @@
 #ifndef CNN_ACCELERATOR_CONFIG_H_
 #define CNN_ACCELERATOR_CONFIG_H_
 
-// YOLO固定层表与尚未迁移的MNIST模块共用的配置文件。这里只定义形状、
-// 并行度、缓存容量和事务数量；数据类型与stream事务结构位于types.h。
-// YOLO按层枚举选配置；旧layer_mode_t接口仅留给尚未迁移的MNIST模块。
+// YOLOv2-tiny VOC 的固定层表、并行度、缓存容量和事务数量。
+// 数据类型与 stream 事务结构位于 types.h，调用方通过 ConvGeometry 选择层配置。
 
 // 量化标量位宽。
 constexpr int ACTIVATION_BITS = 8;
@@ -16,7 +15,6 @@ constexpr int CONV_SPATIAL_PAR = 4;
 constexpr int CONV_CIN_PAR = 8;
 constexpr int CONV_COUT_PAR = 4;
 constexpr int FEATURE_PACK_CHANNELS = 8;
-constexpr int FC_CIN_PAR = 8;
 constexpr int ceil_div(int n, int d) { return (n + d - 1) / d; }
 constexpr int config_max(int a, int b) { return a > b ? a : b; }
 constexpr int config_min(int a, int b) { return a < b ? a : b; }
@@ -27,22 +25,12 @@ constexpr int bits_for_max(int value) {
     return value < 2 ? 1 : 1 + bits_for_max(value >> 1);
 }
 
-// Legacy MNIST参数：仅供尚未迁移的模块使用，下面的YOLO层表不引用它们。
-constexpr int CNN_CONV1_H = 28;
-constexpr int CNN_CONV1_W = 28;
-constexpr int CNN_CONV1_CIN = 1;
-constexpr int CNN_CONV1_COUT = 8;
-constexpr int CNN_CONV2_H = 14;
-constexpr int CNN_CONV2_W = 14;
-constexpr int CNN_CONV2_CIN = 8;
-constexpr int CNN_CONV2_COUT = 16;
-
 constexpr int IM2ROW_KERNEL = 3;
 constexpr int IM2ROW_PADDING = 1;
 constexpr int IM2ROW_STRIDE = 1;
 constexpr int IM2ROW_P = CONV_SPATIAL_PAR;
 constexpr int IM2ROW_FIRST_TILE_INPUT_COLUMNS = IM2ROW_P + IM2ROW_PADDING;  // 3x3首Tile固定读取的真实输入列数。
-// 共用调用级几何结构；旧conv_geometry(bool)仅供尚未迁移的MNIST模块使用。
+// 调用级几何结构：从下方唯一层表取得，配置在一次模块调用期间保持不变。
 struct ConvGeometry {
     int h;  // 输入与stride-1卷积输出的行数，不含Pool。
     int w;  // 输入与stride-1卷积输出的列数，不含Pool。
@@ -146,7 +134,7 @@ constexpr int yolo_max_resident_weights(int count = YOLO_TINY_LAYER_COUNT) {
             YOLO_TINY_GEOMETRIES[count - 1].reduction_steps,
         yolo_max_resident_weights(count - 1));
 }
-// YOLO Systolic 缓存容量；不替换尚未迁移的 MNIST 缓存常量。
+// Systolic 的归约回放与权重驻留缓存容量，由固定层表的最坏情况派生。
 constexpr int YOLO_TINY_ACTIVATION_REPLAY_CAPACITY = yolo_max_field(&ConvGeometry::reduction_steps);
 constexpr int YOLO_TINY_WEIGHT_BUFFER_DEPTH = yolo_max_resident_weights();
 constexpr int YOLO_TINY_WEIGHT_ADDRESS_BITS = bits_for_max(YOLO_TINY_WEIGHT_BUFFER_DEPTH);
@@ -180,20 +168,14 @@ static_assert(IM2ROW_MAX_H == 416 && IM2ROW_MAX_W == 416 &&
               IM2ROW_MAX_CIN == 1024 && IM2ROW_MAX_GROUPS == 128 &&
               IM2ROW_LINE_BANK_DEPTH == 512 && IM2ROW_STRIP_BANK_DEPTH == 256,
               "YOLO Im2Row容量必须与冻结层表一致");
-// 兼容旧源码与 testbench：这是物理 channel pack 宽度，不是逻辑最大 Cin。
-constexpr int IM2ROW_MAX_CHANNELS = FEATURE_PACK_CHANNELS;
 constexpr int IM2ROW_MAX_BLOCKS_PER_ROW =
     (IM2ROW_MAX_W + IM2ROW_P - 1) / IM2ROW_P;
 constexpr int IM2ROW_STRIP_WIDTH = IM2ROW_P + IM2ROW_KERNEL - 1;
 
-// Broadcast 与 Output-stationary Systolic 共用的阵列规模。
+// Output-stationary Systolic 阵列规模。
 constexpr int SYSTOLIC_SPATIAL_PAR = CONV_SPATIAL_PAR;
 constexpr int SYSTOLIC_CIN_PAR = CONV_CIN_PAR;
 constexpr int SYSTOLIC_COUT_PAR = CONV_COUT_PAR;
-constexpr int SYSTOLIC_KERNEL_TOKENS = IM2ROW_KERNEL * IM2ROW_KERNEL;
-constexpr int SYSTOLIC_ACTIVATION_LANE_BITS =
-    SYSTOLIC_CIN_PAR * ACTIVATION_BITS;
-constexpr int SYSTOLIC_WEIGHT_LANE_BITS = SYSTOLIC_CIN_PAR * WEIGHT_BITS;
 constexpr int SYSTOLIC_SUM2_BITS = PRODUCT_BITS + 1;
 constexpr int SYSTOLIC_SUM4_BITS = PRODUCT_BITS + 2;
 constexpr int SYSTOLIC_DOT_BITS = PRODUCT_BITS + 3;
@@ -202,178 +184,16 @@ constexpr int SYSTOLIC_DOT_BITS = PRODUCT_BITS + 3;
 constexpr int SYSTOLIC_WAVEFRONT_DRAIN_STEPS =
     (SYSTOLIC_COUT_PAR - 1) + (SYSTOLIC_SPATIAL_PAR - 1);
 
-// 每层卷积由固定几何参数派生的stream事务形状。
-constexpr int CNN_CONV1_TILES_PER_ROW =
-    (CNN_CONV1_W + SYSTOLIC_SPATIAL_PAR - 1) / SYSTOLIC_SPATIAL_PAR;
-constexpr int CNN_CONV2_TILES_PER_ROW =
-    (CNN_CONV2_W + SYSTOLIC_SPATIAL_PAR - 1) / SYSTOLIC_SPATIAL_PAR;
-constexpr int CNN_CONV1_SPATIAL_TILES =
-    CNN_CONV1_H * CNN_CONV1_TILES_PER_ROW;
-constexpr int CNN_CONV2_SPATIAL_TILES =
-    CNN_CONV2_H * CNN_CONV2_TILES_PER_ROW;
-constexpr int CNN_CONV1_COUT_TILES = CNN_CONV1_COUT / SYSTOLIC_COUT_PAR;
-constexpr int CNN_CONV2_COUT_TILES = CNN_CONV2_COUT / SYSTOLIC_COUT_PAR;
-constexpr int CNN_CONV1_INPUT_TRANSACTIONS = CNN_CONV1_H * CNN_CONV1_W;
-constexpr int CNN_CONV2_INPUT_TRANSACTIONS = CNN_CONV2_H * CNN_CONV2_W;
-constexpr int CNN_CONV1_IM2ROW_TOKENS =
-    CNN_CONV1_SPATIAL_TILES * SYSTOLIC_KERNEL_TOKENS;
-constexpr int CNN_CONV2_IM2ROW_TOKENS =
-    CNN_CONV2_SPATIAL_TILES * SYSTOLIC_KERNEL_TOKENS;
-constexpr int CNN_CONV1_WEIGHT_TRANSACTIONS =
-    CNN_CONV1_COUT_TILES * SYSTOLIC_KERNEL_TOKENS;
-constexpr int CNN_CONV2_WEIGHT_TRANSACTIONS =
-    CNN_CONV2_COUT_TILES * SYSTOLIC_KERNEL_TOKENS;
-constexpr int CNN_CONV1_PARAM_TRANSACTIONS = CNN_CONV1_COUT_TILES;
-constexpr int CNN_CONV2_PARAM_TRANSACTIONS = CNN_CONV2_COUT_TILES;
-constexpr int CNN_CONV1_LAST_TILE_X = CNN_CONV1_TILES_PER_ROW - 1;
-constexpr int CNN_CONV2_LAST_TILE_X = CNN_CONV2_TILES_PER_ROW - 1;
-constexpr int CNN_CONV1_PRELAST_TILE_X = CNN_CONV1_LAST_TILE_X - 1;
-constexpr int CNN_CONV2_PRELAST_TILE_X = CNN_CONV2_LAST_TILE_X - 1;
-constexpr unsigned int CNN_FULL_SPATIAL_VALID_MASK =
-    (1u << SYSTOLIC_SPATIAL_PAR) - 1u;
-// ((W - 1) % P) + 1 在W恰好整除P时也会给出P个有效lane，避免tail mask
-// 退化为零；对当前Conv1为4，对Conv2为2。
-constexpr int CNN_CONV1_TAIL_LANES =
-    ((CNN_CONV1_W - 1) % SYSTOLIC_SPATIAL_PAR) + 1;
-constexpr int CNN_CONV2_TAIL_LANES =
-    ((CNN_CONV2_W - 1) % SYSTOLIC_SPATIAL_PAR) + 1;
-constexpr unsigned int CNN_CONV1_TAIL_SPATIAL_VALID_MASK =
-    (1u << CNN_CONV1_TAIL_LANES) - 1u;
-constexpr unsigned int CNN_CONV2_TAIL_SPATIAL_VALID_MASK =
-    (1u << CNN_CONV2_TAIL_LANES) - 1u;
-constexpr int CNN_CONV1_LAST_BOTTOM_LOADS =
-    CNN_CONV1_W - (CNN_CONV1_LAST_TILE_X * IM2ROW_P + 1);
-constexpr int CNN_CONV2_LAST_BOTTOM_LOADS =
-    CNN_CONV2_W - (CNN_CONV2_LAST_TILE_X * IM2ROW_P + 1);
-constexpr unsigned int CNN_CONV1_PRELAST_NEW_COLUMN_VALID_MASK =
-    (1u << CNN_CONV1_LAST_BOTTOM_LOADS) - 1u;
-constexpr unsigned int CNN_CONV2_PRELAST_NEW_COLUMN_VALID_MASK =
-    (1u << CNN_CONV2_LAST_BOTTOM_LOADS) - 1u;
-constexpr int CNN_CONV1_CIN_GROUPS = ceil_div(CNN_CONV1_CIN, CONV_CIN_PAR);
-constexpr int CNN_CONV2_CIN_GROUPS = ceil_div(CNN_CONV2_CIN, CONV_CIN_PAR);
-constexpr int CNN_CONV1_REDUCTION_STEPS = SYSTOLIC_KERNEL_TOKENS * CNN_CONV1_CIN_GROUPS;
-constexpr int CNN_CONV2_REDUCTION_STEPS = SYSTOLIC_KERNEL_TOKENS * CNN_CONV2_CIN_GROUPS;
-constexpr int SYSTOLIC_ACTIVATION_REPLAY_CAPACITY =
-    config_max(CNN_CONV1_REDUCTION_STEPS, CNN_CONV2_REDUCTION_STEPS);
-constexpr int SYSTOLIC_MAX_COUT_TILES =
-    config_max(CNN_CONV1_COUT_TILES, CNN_CONV2_COUT_TILES);
-constexpr int SYSTOLIC_WEIGHT_BUFFER_DEPTH =
-    config_max(CNN_CONV1_WEIGHT_TRANSACTIONS, CNN_CONV2_WEIGHT_TRANSACTIONS);
-constexpr int SYSTOLIC_WEIGHT_ADDRESS_BITS = bits_for_max(SYSTOLIC_WEIGHT_BUFFER_DEPTH);
-
-// Legacy MNIST 池化输出几何：供尚未迁移的 Core、FC 使用。
-constexpr int POOL_STRIDE = 2;
-constexpr int CNN_POOL1_H = CNN_CONV1_H / POOL_STRIDE;
-constexpr int CNN_POOL1_W = CNN_CONV1_W / POOL_STRIDE;
-constexpr int CNN_POOL1_C = CNN_CONV1_COUT;
-constexpr int CNN_POOL2_H = CNN_CONV2_H / POOL_STRIDE;
-constexpr int CNN_POOL2_W = CNN_CONV2_W / POOL_STRIDE;
-constexpr int CNN_POOL2_C = CNN_CONV2_COUT;
-constexpr int CNN_POOL1_CHANNEL_PACKS = CNN_POOL1_C / IM2ROW_MAX_CHANNELS;
-constexpr int CNN_POOL2_CHANNEL_PACKS = CNN_POOL2_C / IM2ROW_MAX_CHANNELS;
-constexpr int CNN_POOL1_OUTPUT_TRANSACTIONS =
-    CNN_POOL1_H * CNN_POOL1_W * CNN_POOL1_CHANNEL_PACKS;
-constexpr int CNN_POOL2_OUTPUT_TRANSACTIONS =
-    CNN_POOL2_H * CNN_POOL2_W * CNN_POOL2_CHANNEL_PACKS;
-
-// 固定FC 784 -> 10；输入为紧密的Pool2 NHWC stream。
-constexpr int FC_COUT_PAR = 5;
-constexpr int FC_OUTPUTS = 10;
-constexpr int SOFTMAX_SCALE_FRAC_BITS = 20;
-constexpr int SOFTMAX_PROBABILITY_SCALE = 10000;
-constexpr int SOFTMAX_EXP_BITS = 21;
-constexpr int SOFTMAX_SUM_BITS = 24;
-constexpr int FC_INPUT_DIM = CNN_POOL2_H * CNN_POOL2_W * CNN_POOL2_C;
-constexpr int FC_INPUT_PACKS = FC_INPUT_DIM / FC_CIN_PAR;
-constexpr int FC_OUT_TILES = FC_OUTPUTS / FC_COUT_PAR;
-constexpr int FC_ACTIVATION_BUFFER_DEPTH = FC_INPUT_PACKS;
-constexpr int FC_ACTIVATION_WORD_BITS = FC_CIN_PAR * ACTIVATION_BITS;
-constexpr int FC_SUM2_BITS = PRODUCT_BITS + 1;
-constexpr int FC_SUM4_BITS = PRODUCT_BITS + 2;
-constexpr int FC_DOT_BITS = PRODUCT_BITS + 3;
-
-// Top 固定执行 Conv1 与 Conv2 两个顺序阶段。层内 hls::stream 均显式采用
-// 同一初始FIFO深度；Pool1阶段间FIFO必须容纳完整的Pool1输出。
-constexpr int TOP_PHASE_COUNT = 2;
-constexpr int TOP_STREAM_DEPTH = 2;
-constexpr int TOP_POOL1_FEATURE_FIFO_DEPTH =
-    CNN_POOL1_OUTPUT_TRANSACTIONS;
-
-// 调用级模式，不是per-token字段。卷积模块把LAYER2_MODE解释为Conv2，
-// MaxPool把它解释为Pool2。
-using layer_mode_t = bool;
-constexpr layer_mode_t LAYER1_MODE = false;
-constexpr layer_mode_t LAYER2_MODE = true;
-
-
-// Legacy：旧消费者的字段和值不变，新增YOLO字段显式置零，标记尚未迁移；
-// 该构造器的返回值不满足新Im2Row的YOLO调用契约。
-inline ConvGeometry conv_geometry(layer_mode_t mode) {
-#pragma HLS INLINE
-    return mode == LAYER2_MODE
-        ? ConvGeometry{CNN_CONV2_H, CNN_CONV2_W, CNN_CONV2_CIN, CNN_CONV2_COUT,
-            CNN_CONV2_TILES_PER_ROW, CNN_CONV2_SPATIAL_TILES, CNN_CONV2_COUT_TILES,
-            CNN_CONV2_REDUCTION_STEPS, CNN_CONV2_IM2ROW_TOKENS, CNN_CONV2_WEIGHT_TRANSACTIONS,
-            CNN_CONV2_LAST_TILE_X, CNN_CONV2_PRELAST_TILE_X, CNN_CONV2_LAST_BOTTOM_LOADS,
-            CNN_CONV2_TAIL_SPATIAL_VALID_MASK, CNN_CONV2_PRELAST_NEW_COLUMN_VALID_MASK,
-            0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0}
-        : ConvGeometry{CNN_CONV1_H, CNN_CONV1_W, CNN_CONV1_CIN, CNN_CONV1_COUT,
-            CNN_CONV1_TILES_PER_ROW, CNN_CONV1_SPATIAL_TILES, CNN_CONV1_COUT_TILES,
-            CNN_CONV1_REDUCTION_STEPS, CNN_CONV1_IM2ROW_TOKENS, CNN_CONV1_WEIGHT_TRANSACTIONS,
-            CNN_CONV1_LAST_TILE_X, CNN_CONV1_PRELAST_TILE_X, CNN_CONV1_LAST_BOTTOM_LOADS,
-            CNN_CONV1_TAIL_SPATIAL_VALID_MASK, CNN_CONV1_PRELAST_NEW_COLUMN_VALID_MASK,
-            0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0};
-}
 // 调用方必须使用合法层枚举；不为表外枚举生成兜底配置。
 constexpr ConvGeometry yolov2_tiny_geometry(YoloTinyLayer layer) {
     return YOLO_TINY_GEOMETRIES[static_cast<int>(layer)];
 }
-static_assert(CNN_CONV1_CIN_GROUPS == 1 && CNN_CONV2_CIN_GROUPS == 1,
-              "Legacy MNIST consumers still implement one Cin group");
 static_assert(IM2ROW_KERNEL == 3 && IM2ROW_PADDING == 1 && IM2ROW_STRIDE == 1,
               "Fixed nine-case Im2Row scheduler requires 3x3 same convolution");
 static_assert(CONV_SPATIAL_PAR == 4 && CONV_COUT_PAR == 4,
               "Fixed bank selectors and OS skew require 4x4");
-static_assert(CONV_CIN_PAR == 8 && FC_CIN_PAR == 8 &&
+static_assert(CONV_CIN_PAR == 8 &&
               FEATURE_PACK_CHANNELS == CONV_CIN_PAR,
               "Fixed dot8 and feature packs require eight channels");
-
-static_assert(CNN_CONV1_COUT % SYSTOLIC_COUT_PAR == 0,
-              "Conv1 Cout must fill systolic output tiles");
-static_assert(CNN_CONV2_COUT % SYSTOLIC_COUT_PAR == 0,
-              "Conv2 Cout must fill systolic output tiles");
-static_assert(CNN_CONV1_H % POOL_STRIDE == 0 &&
-              CNN_CONV1_W % POOL_STRIDE == 0 &&
-              CNN_CONV2_H % POOL_STRIDE == 0 &&
-              CNN_CONV2_W % POOL_STRIDE == 0,
-              "Pool input dimensions must be divisible by stride");
-static_assert(CNN_POOL1_C % IM2ROW_MAX_CHANNELS == 0 &&
-              CNN_POOL2_C % IM2ROW_MAX_CHANNELS == 0,
-              "Pool output channels must fill channel packs");
-static_assert(CNN_CONV1_TAIL_LANES >= 1 &&
-              CNN_CONV1_TAIL_LANES <= SYSTOLIC_SPATIAL_PAR &&
-              CNN_CONV2_TAIL_LANES >= 1 &&
-              CNN_CONV2_TAIL_LANES <= SYSTOLIC_SPATIAL_PAR,
-              "Tail lane count must fit spatial parallelism");
-static_assert(FC_OUTPUTS % FC_COUT_PAR == 0,
-              "FC outputs must fill FC output tiles");
-static_assert(FC_INPUT_DIM == FC_INPUT_PACKS * FC_CIN_PAR,
-              "Pool2 flatten must fill FC input packs");
-static_assert(CNN_POOL2_H * CNN_POOL2_W * CNN_POOL2_C == FC_INPUT_DIM,
-              "Pool2 flatten must equal FC input dimension");
-static_assert(SYSTOLIC_WEIGHT_BUFFER_DEPTH >=
-              CNN_CONV1_COUT_TILES * SYSTOLIC_KERNEL_TOKENS &&
-              SYSTOLIC_WEIGHT_BUFFER_DEPTH >=
-              CNN_CONV2_COUT_TILES * SYSTOLIC_KERNEL_TOKENS,
-              "Weight buffer must hold either convolution layer");
-static_assert(TOP_PHASE_COUNT == 2,
-              "Top must execute exactly the two fixed convolution phases");
-static_assert(TOP_STREAM_DEPTH >= 2,
-              "Top FIFO depth must preserve the selected initial setting");
-static_assert(TOP_POOL1_FEATURE_FIFO_DEPTH == CNN_POOL1_OUTPUT_TRANSACTIONS &&
-              TOP_POOL1_FEATURE_FIFO_DEPTH == CNN_CONV2_INPUT_TRANSACTIONS,
-              "Pool1 FIFO must exactly bridge Pool1 output and Conv2 input");
 
 #endif  // CNN_ACCELERATOR_CONFIG_H_

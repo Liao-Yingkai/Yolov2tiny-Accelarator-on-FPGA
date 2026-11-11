@@ -1,9 +1,9 @@
-# YOLOv2-tiny 重构方案草案
+# YOLOv2-tiny 设计记录与待优化事项
 
 记录日期：2026-11-01，更新日期：2026-11-10。状态：首版 YOLO DDR Top 已接入，
 整条流水的 AXI 顺序、反压及板级性能仍待验证。
 
-本文作为后续从 MNIST 扩展到 YOLOv2-tiny VOC 的设计输入，整理最近讨论的结论，并区分已确定方向、优先评估方案和待定事项。它不表示当前 HLS 已支持 YOLO，也不直接授权修改所有工程。
+本文记录当前 YOLOv2-tiny VOC 的接口、数值契约和存储调度，并保留后续性能优化及验证事项。九层 DDR Top 已实现；已完成检查、综合结果与尚未覆盖的 RTL/板级边界见 [Top](top.md)。
 
 ## 1. 重构边界与目标网络
 
@@ -25,7 +25,7 @@
 | Conv8 | 13×13×1024 | 3×3 / 1 / 1 | 1024 | 无 | 13×13×1024 |
 | Prediction | 13×13×1024 | 1×1 / 0 / 1 | 125 | 无 | 13×13×125 |
 
-前八层为 BN 折叠后的 Conv 与 LeakyReLU，当前软件斜率为 0.1；Prediction 无 BN、无激活。YOLO 主数据通路不实例化 MNIST 的 FC、FCPost 和十分类 Softmax。检测解码与 NMS 的实现位置留待后续确定，不把 MNIST 概率接口直接套到检测头。
+前八层为 BN 折叠后的 Conv 与 LeakyReLU，当前软件斜率为 0.1；Prediction 无 BN、无激活。HLS 输出原始 Prediction Tensor，检测解码与 NMS 的实现位置留待后续确定。
 
 本轮不扩展任意卷积 stride、任意 kernel 或任意网络图，仅覆盖上述网络所需操作。
 
@@ -65,7 +65,7 @@ DDR 输入 Feature Map
 - 一层的每个 Cout 缓存块处理完成后，加载下一缓存块并重新扫描输入 Feature Map；重新扫描包含 Im2Row 的预装和启动开销。
 - 每层完成并确认 DDR 输出写入结束后，再切换下一层；所有层复用同一个计算调用路径，避免按层复制 DATAFLOW 网络。
 - Conv 与后续 Pool 流式融合，不必先写回池化前完整 Feature Map。无 Pool 的层采用 Bypass。
-- 层间 Feature Map 使用 DDR 两个互不重叠的区域交替读写，不继续用 MNIST 的整层 BRAM FIFO 保存层间结果。
+- 层间 Feature Map 使用 DDR 两个互不重叠的区域交替读写，不使用整层 BRAM FIFO 保存层间结果。
 - 近期继续采用 `m_axi + s_axilite`，模块内部使用 `hls::stream`。外置 AXI DMA、独立 RTL 交付及平台依赖问题暂缓，不以“m_axi 不能导出 RTL”为设计前提。
 
 层内按最多32个Cout一个缓存块调度，控制与 DDR 契约见
@@ -160,7 +160,7 @@ BIN 布局。模型 BIN 与 metadata 约定由 PyTorch 工程的 `YOLOV2_TINY/RE
 
 ## 6. Im2Row：多 Group 的 BRAM 窗口方案
 
-详细接口、BRAM组织、调度和验证边界见[YOLOv2-tiny Im2Row设计](im2row.md)。2026-11-02已实现本YOLO层表及ConvGeometry接口，独立HLS综合达到II=1；功能仿真、RTL反压及与其他模块的集成尚未验证。不保留旧二层bool接口。
+详细接口、BRAM组织、调度和验证边界见[YOLOv2-tiny Im2Row设计](im2row.md)。2026-11-02独立HLS综合达到II=1；后续已接入九层Top，整网功能与综合记录见 [Top](top.md)，RTL反压尚未验证。
 
 ### 6.1 输出顺序和边界
 
@@ -217,9 +217,9 @@ Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先�
 
 ### 7.2 一次性PostProcess与QAT边界调整
 
-PostProcess 调用与参数切块见 [YOLOv2-tiny ConvPostProcess 方案](conv_postprocess.md#6-yolov2-tiny-重构方案)。首版单份 32-Cout 参数缓存，每块先加载再计算，走完全部空间位置后读取下一块。参数预取作为后续优化单独实现，不改变数值或 stream 契约。
+PostProcess 调用与参数切块见 [YOLOv2-tiny ConvPostProcess 设计](conv_postprocess.md)。首版单份 32-Cout 参数缓存，每块先加载再计算，走完全部空间位置后读取下一块。参数预取作为后续优化单独实现，不改变数值或 stream 契约。
 
-已决定取消Conv1～Conv8卷积输出、激活之前的activation FakeQuant。PyTorch后续需改为：
+Conv1～Conv8采用卷积输出、激活之前不设置activation FakeQuant的数值契约；配套PyTorch量化结构应为：
 
 ```text
 输入FakeQuant
@@ -232,7 +232,7 @@ Conv1～Conv8只在LeakyReLU之后形成INT8输出边界；Pool不增加量化�
 
 这是对QAT结构的主动修改，不是仅将旧模型的两个scale代数合并。旧QAT的中间舍入/饱和不可逆，新方案不能宣称逐位等价；需用新结构重新QAT微调并验证精度。保留FP32 checkpoint初始化路径，旧双边界QAT checkpoint不能静默当成新方案使用。
 
-HLS MAC与PostProcess仍分离。令`a=accumulator+bias`，每个输出通道仅导出一组`M, S`，沿用MNIST的INT32 bias及Q31/frexp multiplier、总右移shift表示：
+HLS MAC与PostProcess仍分离。令`a=accumulator+bias`，每个输出通道仅导出一组`M, S`，使用INT32 bias及Q31/frexp multiplier、总右移shift表示：
 
 ```text
 r[c] = input_scale * weight_scale[c] / output_scale
@@ -259,7 +259,7 @@ scaled = product arithmetic-right-shift S
 output = signed INT8 clamp(scaled, -128, 127)
 ```
 
-逐元素右移沿用当前整数硬件的直接截断，不加rounding offset，负值按算术右移向负无穷取整。中途不先将a截成INT8，不先对负INT8乘alpha再截断；bias相加须满足INT32范围契约，乘法保留INT64。Prediction禁用LeakyReLU，所有符号都使用M_positive，不执行ReLU或十分类Softmax。
+逐元素右移沿用当前整数硬件的直接截断，不加rounding offset，负值按算术右移向负无穷取整。中途不先将a截成INT8，不先对负INT8乘alpha再截断；bias相加须满足INT32范围契约，乘法保留INT64。Prediction禁用激活函数，所有符号都使用M_positive。
 
 整数Golden必须使用相同的alpha常量、负系数派生及最终截断规则。其与PyTorch FakeQuant最近偶数舍入、FP32 bias和系数近似之间的差异需单独评估，不能宣称调整后QAT与整数推理天然逐位一致。无效spatial/Cout Lane不参与bias与requant，结果为零。
 
@@ -325,7 +325,7 @@ output = signed INT8 clamp(scaled, -128, 127)
 | 1×1路径 | 四空间位置收集、Group读取与无Padding路径 |
 | YOLO整数数值 | 已决定移除激活前FakeQuant、采用一次性PostProcess；固定alpha常量及负分支系数派生，需新QAT微调、整数Golden及误差验证 |
 | Pool输出契约 | 已确定紧密的池化后 4×4 Tile；Writer 按输出坐标组装 8 通道并写 DDR |
-| 调用配置 | 已在同一ConvGeometry九层表补齐Pool/Bypass、输出、激活及32-Cout缓存字段并编译期校验；本次仅静态检查，字段消费者及调用方仍待迁移 |
+| 调用配置 | 同一ConvGeometry九层表包含Pool/Bypass、输出、激活及32-Cout缓存字段，并由各模块与Top共用 |
 | 性能目标 | 目标分辨率、频率、fps及有效DDR带宽预算 |
 
 缓存数量首版按32个Cout设计，仍受后续综合预算约束。分块 DDR 布局保留为性能备选；
@@ -335,15 +335,14 @@ output = signed INT8 clamp(scaled, -128, 127)
 
 ## 10. 后续实施与验证顺序
 
-1. 先确定存储预算、调度顺序、DDR布局和模块事务契约，再开始逐模块实现。
-2. 扩展 Im2Row 与 Systolic：多Cin Group、3×3/1×1、尾通道和尾空间Lane；同步独立testbench。
-3. 完成 YOLO exporter / 整数Golden，再实现PostProcess及其逐元素数值验证。
-4. 按原值行缓存方案实现Pool，重点验证stride=1、跨Tile、右/下Padding及状态切换。
-5. Loader 和 Writer 已接入 [DDR Top](top.md)；验证 DDR A/B 层间交接和单套硬件复用。
-6. 先单层，再连续多层，最后做系统性能和上板验证；Vivado/Vitis更新另行安排。
+1. 已实现固定层表、多Cin Group、3×3/1×1、尾通道/尾空间Lane，以及对应独立testbench。
+2. PostProcess和原值行缓存Pool已实现；独立功能记录见各模块文档，模型精度及QAT误差仍需单独评估。
+3. Loader、Writer及九层计算已接入 [DDR Top](top.md)；已有整网C仿真与HLS综合记录，尚须RTL验证DDR A/B层间交接和浅FIFO反压。
+4. 综合和RTL复核实际存储预算、实例复用、AXI顺序及吞吐，测量整网基线后评估权重/参数加载重叠。
+5. 系统性能和上板验证、Vivado/Vitis更新另行安排。
 
 测试至少覆盖Cin=3/16/1024、1×1长归约、Cout=125尾部、W=13末Tile、多Cout驻留块与连续调用。Pool应使用原始2×2四元素公式作为独立reference，不能让reference重复DUT缓存实现。
 
 每个模块建立stream读写数量守恒；按获准阶段分别进行静态检查、C-sim、综合和co-sim。综合检查BRAM实际映射、端口冲突、归约II、阵列实例数；co-sim检查反压、FIFO深度、边界排空和层切换。不能把语法通过当成功能、资源或时序已经验证。
 
-当前 Top 直接组织层内、块内流水，不再保留独立 Core。上述 Im2Row 综合结果来自此前的独立工程。
+当前 Top 直接组织层内、块内流水。上述 Im2Row 综合结果来自此前的独立工程。

@@ -1,6 +1,6 @@
 # 传统 Output-Stationary 脉动阵列
 
-本文件对应 `cnn_accelerator/src/systolic/systolic_OS.cpp`。`systolic_OS` 只保留 YOLO 按块实现，已独立实现并通过静态语法检查，尚未接入整网或做功能仿真。旧 MNIST OS 不再保留；仍未迁移的 MNIST 调用点使用已有的[广播式接口](systolic.md)。
+本文件对应 `cnn_accelerator/src/systolic/systolic_OS.cpp`，记录 YOLO 按块实现。模块已接入 [YOLO DDR Top](top.md)；整网功能检查与综合记录见该页，RTL 反压和板级性能仍待验证。
 
 ## YOLOv2-tiny 重构计划
 
@@ -12,13 +12,13 @@
 ### 阵列与归约
 
 - 保留 `4 spatial × 4 Cout` OS 阵列、PE 内 Dot8、平衡加法树和 INT32 累加。满载时一个逻辑推进步执行 128 路 INT8 乘法。32 Cout 是存储容量，不是 PE 列数。Activation 向右传播、Weight 向下传播，两侧 lane 按 `0/1/2/3` 步错拍；PE(i,j) 在 `token+i+j` 步取得同一 token 的两个操作数。
-- 以 `ConvGeometry` 替代 MNIST 的 `layer_mode`。令 `G=ceil(Cin/8)`、`R=geometry.reduction_steps=Kh*Kw*G`，token 顺序为 `kh → kw → cin_group`，即 `token=(kh*Kw+kw)*G+cin_group`。Activation 与 Weight 的第 `token` 个 Pack 必须对应同一归约位置。
+- 使用 `ConvGeometry` 配置。令 `G=ceil(Cin/8)`、`R=geometry.reduction_steps=Kh*Kw*G`，token 顺序为 `kh → kw → cin_group`，即 `token=(kh*Kw+kw)*G+cin_group`。Activation 与 Weight 的第 `token` 个 Pack 必须对应同一归约位置。
 - 每个 `spatial_tile × local_cout_tile` 开始时初始化累加器、错拍及传播状态；连续注入 R 个有效归约 token，再注入 6 步无效 token 排空。Group 或 kernel 位置切换不清零、不输出。排空后只输出一次完整 INT32 Tile。`R+6` 是逻辑步数，不含缓存首读、初始化、接口握手或调度开销。
 - 3×3 与 1×1 共用同一条 MAC 路径。Conv1、Conv2、Conv8 的 R 分别为 9、18、1152；Prediction 为 1×1、Cin=1024，R 为 128。Padding 和 1×1 的空间组装由 Im2Row 完成。最大逻辑归约 `3*3*1024` 个乘积，绝对值保守上界 `9216*128²` 在 INT32 范围内。
 
 ### 调用粒度、循环和流守恒
 
-唯一 OS 入口为 `systolic_OS(activation_stream, weight_stream, output_stream, geometry, first_cout_tile, block_cout_tiles)`，输出流使用 `yolo_acc_tile_t`。不提供 `layer_mode` 重载；旧广播式入口与 `acc_tile_t` 不变。
+唯一 OS 入口为 `systolic_OS(activation_stream, weight_stream, output_stream, geometry, first_cout_tile, block_cout_tiles)`，输出流使用 `yolo_acc_tile_t`。
 
 一次调用以 `ConvGeometry`、起始全局 4-Cout Tile 编号 `first_cout_tile` 和本块实际计算 Tile 数 `B` 为固定配置。`B` 最大为 8；Conv1 只需 4 个 Tile，不人为装满缓存。外层控制器负责遍历 Cout 块，每块重新供给一次完整 Feature Map，Im2Row 输出一次完整空间扫描。Systolic 内部不读 DDR，也不触发重扫。
 
@@ -57,7 +57,7 @@
 
 当前实现保留逻辑地址 `0…9215`，用地址 bit 13 选择存储段：`0…8191` 取低 13 位访问主段；`8192…9215` 取低 10 位访问尾段 `0…1023`。装载和回放使用同一映射。分段与 `local_cout_tile` 边界无关，跨段不增加 token、跳过地址或改变顺序。
 
-按每路 `8192×64` 约 16 个 RAMB36、`1024×64` 约 2 个 RAMB36 估算，四路权重目标约 **72 个 RAMB36**。Replay 源码保持不变；若四路 Replay 都回到 BRAM，Systolic 目标约 **88 个 RAMB36 等效容量**。以上是设计预算，拆分后只做了静态检查，尚未重新综合。复核时需确认主/尾段实际映射、Replay 不落 LUTRAM、跨段读返回对齐以及归约 II/时序。
+按每路 `8192×64` 约 16 个 RAMB36、`1024×64` 约 2 个 RAMB36 估算，四路权重目标约 **72 个 RAMB36**。Replay 源码保持不变；若四路 Replay 都回到 BRAM，Systolic 目标约 **88 个 RAMB36 等效容量**。以上是独立实现阶段的设计预算，该阶段拆分后仅做静态检查；后续整网 HLS 综合记录见 [Top](top.md)。仍需在实现中确认主/尾段实际映射、Replay 不落 LUTRAM、跨段读返回对齐以及归约 II/时序。
 
 ### Valid 与结果交付
 
@@ -72,19 +72,19 @@
 
 **保留为后续实施项，不作为首版功能验收前置条件。** 每个 Cout 块开始时的整块装载等待会跨各层累积。此前约 **20 ms** 是九层合计约 **15.12 MiB/图** 的权重，在 **100 MHz、64-bit 接口每拍持续传一字、加载完全不与计算重叠**时的理想传输估算，不是单层耗时，也不是板测值。实际开销还取决于 burst 效率、块启动和 DDR 争用。基线应分层记录权重装载周期、计算周期、阵列等权重/Activation 及下游反压，再比较整图延迟。
 
-1. **优先恢复首 Spatial Tile 边算边填。** 参考现有 MNIST OS：首遍的权重 Pack 旁路进入阵列，同时写入原 Weight Buffer，随后空间位置只读缓存。该方案不增加第二份块缓存，也不要求 Weight Buffer 同拍读写。必须验证权重和 Activation 两路在任意先后到达、暂停或反压时仍按 token 对齐，不漏读、不重复写、不提前推进。加载慢于阵列时，首遍仍会等待，只能隐藏可重叠的部分。
+1. **优先评估首 Spatial Tile 边算边填。** 首遍的权重 Pack 旁路进入阵列，同时写入 Weight Buffer，随后空间位置只读缓存。该方案不增加第二份块缓存，也不要求 Weight Buffer 同拍读写。必须验证权重和 Activation 两路在任意先后到达、暂停或反压时仍按 token 对齐，不漏读、不重复写、不提前推进。加载慢于阵列时，首遍仍会等待，只能隐藏可重叠的部分。
 2. **再评估跨块预取。** 若上一项后仍有显著启动开销，再研究当前块计算时预取下一块。完整双缓冲在 Conv8 最坏情况下仅权重就需 576 KiB 逻辑容量，不作为 Z-7020 默认方案。分段预取或用完即覆盖必须证明旧地址已不再被使用，并测量 DDR 读写竞争；需要额外资源与调度评估。
 
 ### 实现与验收顺序
 
-1. 独立重构 OS（已实现）：接入块配置、可变 R、单缓存预加载、Replay 和两种结果 mask。Im2Row 与 Python BIN 格式不变。旧调用点移除 OS 切换分支，不迁移其数据流或测试数据。已通过 G++ 和 Vitis HLS 2022.2 Clang 的 C++14 静态语法检查；未运行 testbench 或综合。
+1. 独立重构 OS（已实现）：接入块配置、可变 R、单缓存预加载、Replay 和两种结果 mask。Im2Row 与 Python BIN 格式不变。独立实现阶段通过 G++ 和 Vitis HLS 2022.2 Clang 的 C++14 静态语法检查；该阶段未运行 testbench 或综合。后续整网集成记录见 [Top](top.md)。
 2. 已编写真实 BIN 对照 testbench，见下节。定向非零无效 lane 的屏蔽测试留待补充，不篡改真实 trace，也不把该测试误当成允许违反 Cin 补零契约。
 3. 以 `xc7z020-clg400-2`、10 ns 为评估基线，综合确认单套 `4×4×8` 数据通路、四 Bank 读带宽、实际 BRAM 余量、归约 II 和时序；RTL co-sim 验证输入气泡、输出反压、BRAM 返回与波前排空。32 Cout 为首版目标，不是整机资源已通过的结论。若放不下，优先评估仅 Conv8 降为 16、其余层仍最多 32，保持导出格式不变。
-4. 接入后续 PostProcess、Pool、Loader/Writer 后测量整网基线，再按上节实现加载重叠。Feature DDR 布局、FIFO 深度、板级带宽和最终 fps 指标不阻塞 Systolic 首版独立实现。
+4. PostProcess、Pool、Loader/Writer 已接入 Top；后续测量整网基线，再按上节评估加载重叠、FIFO 深度、板级带宽和最终 fps。
 
 ### 真实 BIN 对照 testbench
 
-HLS 工程的 Top 设为 `systolic_OS`，设计文件使用 `systolic_OS.cpp`，testbench 仅加入 [`test_systolic_pytorch.cpp`](../cnn_accelerator/testbench/test_systolic_pytorch.cpp)。旧 `test_systolic.cpp` 仍是 MNIST 广播式测试，不用于此 Top。
+HLS 工程的 Top 设为 `systolic_OS`，设计文件使用 `systolic_OS.cpp`，testbench 仅加入 [`test_systolic_pytorch.cpp`](../cnn_accelerator/testbench/test_systolic_pytorch.cpp)。
 
 路径和样本后缀集中在 testbench 顶部，默认读取 `YOLOV2_TINY/generated/` 的样本 `0000`。每层使用以下三份文件，必须来自同一套导出参数：
 

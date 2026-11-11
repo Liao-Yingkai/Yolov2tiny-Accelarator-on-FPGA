@@ -2,7 +2,7 @@
 
 更新日期：2026-11-08。状态：固定YOLO配置补全与表内专门化已实现；新增读取真实YOLO BIN的Im2Row testbench，本次仅做导出数据核对及静态检查。2026-11-02的II=1、52个BRAM_18K等综合结果属于修改前版本，不覆盖后续新增字段或条件简化。新版testbench尚未运行C simulation或RTL co-simulation，不能据此声称DUT功能或RTL反压验证通过。
 
-本文描述 YOLOv2-tiny VOC 的接口、存储契约和源码实现，不保留旧网络的设计章节。当前测试更新不修改Im2Row、Core或其他计算模块；不以静态检查代替仿真、综合或RTL反压验证。总体背景见[YOLOv2-tiny重构方案](yolov2_tiny_refactor_plan.md)。
+本文描述 YOLOv2-tiny VOC 的接口、存储契约和源码实现。独立模块阶段的检查与综合记录保留如下；后续整网集成结果见 [DDR Top](top.md)，不以静态检查代替仿真、综合或RTL反压验证。总体背景见[YOLOv2-tiny设计记录](yolov2_tiny_refactor_plan.md)。
 
 ## 1. 已确定的范围
 
@@ -41,7 +41,7 @@ void im2row(
     const ConvGeometry& geometry);
 ```
 
-头文件已采用此接口；`pixel_t`保留为`channel_pack_t`的别名，不改变物理数据内容。旧Core/Top尚未迁移，本轮不修改。
+头文件采用此接口，输入数据类型为 `channel_pack_t`；Top 在每个 Cout 缓存块调用一次 Im2Row。
 
 `ConvGeometry`提供H、W、逻辑Cin、kernel模式，以及校验一致的G、每行Tile数、K、调用输入/输出事务数和边界参数。派生值来自固定层表或公共构造逻辑，不同时手写互相矛盾的kernel、Padding和输出尺寸。它可以是全卷积流水共用的配置；其中Cout不参与Im2Row的循环和事务计数。
 
@@ -54,7 +54,7 @@ void im2row(
 - `use_leaky_relu`仅前八层为真，Prediction为假；这里只保存模式，不实现后处理数值。
 - `resident_cout_tiles=min(8,cout_tiles)`、`cache_blocks=ceil(cout_tiles/8)`、`last_cache_tiles`和整层末4-Cout Tile的`last_cout_valid_mask`。Conv1驻留4个Tile；Prediction末缓存块仍有8个Tile、29个逻辑Cout，末计算Tile仅Lane0有效。后续消费者须用全局Cout Tile编号判断有效性，不能把29误当Tile数。
 
-除Im2Row使用预计算shift外，本轮不实现这些阶段/缓存字段的消费者。YOLO专用容量从各层实际工作集取最大值：`YOLO_TINY_WEIGHT_BUFFER_DEPTH=max(resident_cout_tiles*R)=9216`，`YOLO_TINY_ACTIVATION_REPLAY_CAPACITY=max(R)=1152`；不修改旧Systolic、Pool等尚未迁移消费者的常量。旧`conv_geometry(bool)`保留原字段值，新字段置零，仅作legacy兼容，不能用于新Im2Row。
+YOLO专用容量从各层实际工作集取最大值：`YOLO_TINY_WEIGHT_BUFFER_DEPTH=max(resident_cout_tiles*R)=9216`，`YOLO_TINY_ACTIVATION_REPLAY_CAPACITY=max(R)=1152`。Systolic、PostProcess、Pool 和 Top 使用同一固定层表的阶段与缓存字段。
 
 调用方必须传入表内配置：不再逐字段运行时匹配层表，不再为非法枚举返回空geometry。C++11兼容的编译期断言证明固定表前提；生产config仅保留Prediction专门化和容量等少量断言，逐层幂2 G、所有W≥5、唯一1×1、全部35字段、Pool尺寸及相邻层匹配等详尽校验放在build的静态检查TU，不建立运行时或生产递归校验框架。非综合构建仍保留真实读写事务守恒断言。
 
@@ -361,14 +361,14 @@ Systolic在Replay其他Cout计算Tile时不需要新Activation，Im2Row可以利
 2. 18-Bank、Ping-Pong合并地址的一读一写组织在本轮HLS中达到所有流水循环II=1，未增加LUTRAM或复制存储；真实握手下的端口时序仍须RTL co-sim验证。
 3. 3×3主循环HLS II=1已确认；G=1、行尾、最后Group及反压下的实际启动/Tile间隔仍须仿真测量，不能仅由II推断。
 4. 1×1已采用前三位置缓存、最后位置直接输出；不保证与输入气泡隔离的整段G连续输出，后者需要额外预取保证。
-5. ConvGeometry统一构造及固定表前提的编译期校验已实现；新测试和Top的同步迁移仍需独立完成，配置结构方向本身已确定。
+5. ConvGeometry统一构造及固定表前提的编译期校验已实现；当前测试与Top均使用固定YOLO配置，整网验证边界见 [Top](top.md)。
 
 首版 DDR 布局和重扫边界见 [DDR 搬运规格](yolov2_tiny_ddr_io.md)。Top 在每个
 Cout 块重新调用 Im2Row；Im2Row 自身不依赖 DDR 地址或 Cout 数量。
 
 ## 13. 后续验证与本次范围
 
-先完成每Bank逐拍读请求、返回和写入排表，再编码。不要以 `DEPENDENCE false` 隐藏真实依赖，不将G维完全展开，也不新增完整Im2Row矩阵或整张Padding缓存。
+后续修改须先完成每Bank逐拍读请求、返回和写入排表。不要以 `DEPENDENCE false` 隐藏真实依赖，不将G维完全展开，也不新增完整Im2Row矩阵或整张Padding缓存。
 
 按后续获准阶段进行：
 
@@ -377,7 +377,7 @@ Cout 块重新调用 Im2Row；Im2Row 自身不依赖 DDR 地址或 Cout 数量�
 - 综合：真实RAM映射、Bank端口、BRAM/LUT/FF、输出循环II、单套物理实例。
 - co-sim：输入气泡、输出反压、预取返回跨角色切换、最后Group/行/调用排空；同时测量启动、Tile间隔与层内平均速率。
 
-testbench使用简单确定性数据和源坐标reference，保留详细中文注释、CSV与必要终端统计，不让reference复刻Strip调度。
+定向测试可使用简单确定性数据和源坐标reference，不让reference复刻Strip调度。当前真实BIN testbench见第14节。
 
 ### 13.1 本轮源码优化及待复核项
 
@@ -416,9 +416,9 @@ testbench使用简单确定性数据和源坐标reference，保留详细中文�
 
 ## 14. 真实PyTorch导出数据testbench
 
-当前YOLO测试入口为`cnn_accelerator/testbench/test_im2row_pytorch.cpp`。HLS工程设置`im2row`为唯一Top，设计文件只需`src/im2row/im2row.cpp`及其头文件，testbench只加入这个文件，不加入其他含`main()`的测试。旧`test_im2row.cpp`仍为未迁移的MNIST程序数据测试，不能直接用于当前接口。
+当前YOLO测试入口为`cnn_accelerator/testbench/test_im2row_pytorch.cpp`。HLS工程设置`im2row`为唯一Top，设计文件只需`src/im2row/im2row.cpp`及其头文件，testbench只加入这个文件，不加入其他含`main()`的测试。
 
-本测试读取`/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/trace/`中的真实样本`0000`，不再include旧MNIST trace头文件。迁移机器或切换导出目录时修改testbench顶部路径；切换样本时修改样本后缀。先在Python工程运行`export.py`和`dump_trace.py`，同一份trace必须配套生成时的权重及量化参数；本测试本身不重新生成或修改它们。
+本测试读取`/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/trace/`中的真实样本`0000`。迁移机器或切换导出目录时修改testbench顶部路径；切换样本时修改样本后缀。先在Python工程运行`export.py`和`dump_trace.py`，同一份trace必须配套生成时的权重及量化参数；本测试本身不重新生成或修改它们。
 
 Python的`dump_trace.py`以导出的整数权重和参数进行数学参考计算，使用标准PyTorch unfold生成窗口；后续层输入来自整数参考，不是QAT浮点激活。2026-11-08已核对导出脚本、文档及现有样本：九层权重BIN与逻辑NPY一致，bias/M/S的BIN与相应NPY一致；所有Im2Row BIN和unfold BIN均与独立源坐标参考逐元素一致。这是数据契约检查，不是HLS DUT仿真结果。
 

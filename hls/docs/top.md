@@ -1,8 +1,8 @@
 # YOLOv2-tiny DDR Top
 
 顶层入口为 `cnn_accelerator_ddr(feature, weights, params)`，一次调用完成
-416×416 紧凑 RGB 输入的九层推理。无独立 stream Core 入口，也不调用 FC、
-Softmax 或检测解码。计算与搬运仍是独立模块，DDR 数据格式见
+416×416 紧凑 RGB 输入的九层推理，输出原始 Prediction Tensor，不执行检测解码。
+计算与搬运是独立模块，DDR 数据格式见
 [Loader、Writer 与层间 DDR 缓冲](yolov2_tiny_ddr_io.md)。
 
 ## 接口与模型区
@@ -66,7 +66,7 @@ Vitis HLS，避免工具启动日志进入源码树。
 `test_cnn_accel_ddr.cpp` 读取样本 0000 的 RGB、模型 BIN 和 Prediction
 golden。可通过 `YOLO_DATA_DIR` 指定包含 `bins/`、`trace/` 的导出目录。
 测试逐元素核对 B 区结果和尾槽，并检查缓冲区外的哨兵，只打印摘要与有限
-错误详情，不生成 CSV。此接口不兼容旧 MNIST Top、驱动或 Vivado IP。
+错误详情，不生成 CSV。
 
 首版 G++ 功能检查和 Vitis HLS 2022.2 C 仿真均通过：样本 0000 的
 21,125 个有效输出和 507 个物理尾槽零错误，A/B 之外的哨兵未改变。
