@@ -21,18 +21,90 @@ port (
     ap_ready : OUT STD_LOGIC;
     start_out : OUT STD_LOGIC;
     start_write : OUT STD_LOGIC;
-    result : IN STD_LOGIC_VECTOR (63 downto 0);
-    result_c_din : OUT STD_LOGIC_VECTOR (63 downto 0);
-    result_c_num_data_valid : IN STD_LOGIC_VECTOR (3 downto 0);
-    result_c_fifo_cap : IN STD_LOGIC_VECTOR (3 downto 0);
-    result_c_full_n : IN STD_LOGIC;
-    result_c_write : OUT STD_LOGIC;
-    softmax_scale_q20 : IN STD_LOGIC_VECTOR (31 downto 0);
-    softmax_scale_q20_c_din : OUT STD_LOGIC_VECTOR (31 downto 0);
-    softmax_scale_q20_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
-    softmax_scale_q20_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
-    softmax_scale_q20_c_full_n : IN STD_LOGIC;
-    softmax_scale_q20_c_write : OUT STD_LOGIC );
+    p_read : IN STD_LOGIC_VECTOR (8 downto 0);
+    geometry_h_c_din : OUT STD_LOGIC_VECTOR (8 downto 0);
+    geometry_h_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_h_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_h_c_full_n : IN STD_LOGIC;
+    geometry_h_c_write : OUT STD_LOGIC;
+    p_read1 : IN STD_LOGIC_VECTOR (8 downto 0);
+    geometry_w_c_din : OUT STD_LOGIC_VECTOR (8 downto 0);
+    geometry_w_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_w_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_w_c_full_n : IN STD_LOGIC;
+    geometry_w_c_write : OUT STD_LOGIC;
+    p_read2 : IN STD_LOGIC_VECTOR (15 downto 0);
+    geometry_spatial_tiles_c_din : OUT STD_LOGIC_VECTOR (15 downto 0);
+    geometry_spatial_tiles_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_spatial_tiles_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_spatial_tiles_c_full_n : IN STD_LOGIC;
+    geometry_spatial_tiles_c_write : OUT STD_LOGIC;
+    p_read3 : IN STD_LOGIC_VECTOR (8 downto 0);
+    geometry_cout_tiles_c_din : OUT STD_LOGIC_VECTOR (8 downto 0);
+    geometry_cout_tiles_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_cout_tiles_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_cout_tiles_c_full_n : IN STD_LOGIC;
+    geometry_cout_tiles_c_write : OUT STD_LOGIC;
+    p_read4 : IN STD_LOGIC_VECTOR (10 downto 0);
+    geometry_reduction_steps_c_din : OUT STD_LOGIC_VECTOR (10 downto 0);
+    geometry_reduction_steps_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_reduction_steps_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_reduction_steps_c_full_n : IN STD_LOGIC;
+    geometry_reduction_steps_c_write : OUT STD_LOGIC;
+    p_read5 : IN STD_LOGIC_VECTOR (18 downto 0);
+    geometry_im2row_tokens_c_din : OUT STD_LOGIC_VECTOR (18 downto 0);
+    geometry_im2row_tokens_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_im2row_tokens_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_im2row_tokens_c_full_n : IN STD_LOGIC;
+    geometry_im2row_tokens_c_write : OUT STD_LOGIC;
+    p_read6 : IN STD_LOGIC_VECTOR (6 downto 0);
+    geometry_last_tile_x_c_din : OUT STD_LOGIC_VECTOR (6 downto 0);
+    geometry_last_tile_x_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_last_tile_x_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_last_tile_x_c_full_n : IN STD_LOGIC;
+    geometry_last_tile_x_c_write : OUT STD_LOGIC;
+    p_read7 : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_tail_spatial_valid_mask_c_din : OUT STD_LOGIC_VECTOR (2 downto 0);
+    geometry_tail_spatial_valid_mask_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_tail_spatial_valid_mask_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_tail_spatial_valid_mask_c_full_n : IN STD_LOGIC;
+    geometry_tail_spatial_valid_mask_c_write : OUT STD_LOGIC;
+    p_read8 : IN STD_LOGIC_VECTOR (1 downto 0);
+    geometry_kernel_c_din : OUT STD_LOGIC_VECTOR (1 downto 0);
+    geometry_kernel_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_kernel_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_kernel_c_full_n : IN STD_LOGIC;
+    geometry_kernel_c_write : OUT STD_LOGIC;
+    p_read9 : IN STD_LOGIC_VECTOR (7 downto 0);
+    geometry_cin_groups_c_din : OUT STD_LOGIC_VECTOR (7 downto 0);
+    geometry_cin_groups_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_cin_groups_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_cin_groups_c_full_n : IN STD_LOGIC;
+    geometry_cin_groups_c_write : OUT STD_LOGIC;
+    p_read10 : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_cin_group_shift_c_din : OUT STD_LOGIC_VECTOR (2 downto 0);
+    geometry_cin_group_shift_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_cin_group_shift_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_cin_group_shift_c_full_n : IN STD_LOGIC;
+    geometry_cin_group_shift_c_write : OUT STD_LOGIC;
+    p_read11 : IN STD_LOGIC_VECTOR (1 downto 0);
+    geometry_last_cout_valid_mask_c_din : OUT STD_LOGIC_VECTOR (1 downto 0);
+    geometry_last_cout_valid_mask_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_last_cout_valid_mask_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    geometry_last_cout_valid_mask_c_full_n : IN STD_LOGIC;
+    geometry_last_cout_valid_mask_c_write : OUT STD_LOGIC;
+    first_cout_tile : IN STD_LOGIC_VECTOR (9 downto 0);
+    first_cout_tile_c_din : OUT STD_LOGIC_VECTOR (9 downto 0);
+    first_cout_tile_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    first_cout_tile_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    first_cout_tile_c_full_n : IN STD_LOGIC;
+    first_cout_tile_c_write : OUT STD_LOGIC;
+    block_tiles : IN STD_LOGIC_VECTOR (3 downto 0);
+    block_tiles_c_din : OUT STD_LOGIC_VECTOR (3 downto 0);
+    block_tiles_c_num_data_valid : IN STD_LOGIC_VECTOR (2 downto 0);
+    block_tiles_c_fifo_cap : IN STD_LOGIC_VECTOR (2 downto 0);
+    block_tiles_c_full_n : IN STD_LOGIC;
+    block_tiles_c_write : OUT STD_LOGIC );
 end;
 
 
@@ -53,8 +125,20 @@ attribute shreg_extract : string;
     signal ap_CS_fsm_state1 : STD_LOGIC;
     attribute fsm_encoding of ap_CS_fsm_state1 : signal is "none";
     signal internal_ap_ready : STD_LOGIC;
-    signal result_c_blk_n : STD_LOGIC;
-    signal softmax_scale_q20_c_blk_n : STD_LOGIC;
+    signal geometry_h_c_blk_n : STD_LOGIC;
+    signal geometry_w_c_blk_n : STD_LOGIC;
+    signal geometry_spatial_tiles_c_blk_n : STD_LOGIC;
+    signal geometry_cout_tiles_c_blk_n : STD_LOGIC;
+    signal geometry_reduction_steps_c_blk_n : STD_LOGIC;
+    signal geometry_im2row_tokens_c_blk_n : STD_LOGIC;
+    signal geometry_last_tile_x_c_blk_n : STD_LOGIC;
+    signal geometry_tail_spatial_valid_mask_c_blk_n : STD_LOGIC;
+    signal geometry_kernel_c_blk_n : STD_LOGIC;
+    signal geometry_cin_groups_c_blk_n : STD_LOGIC;
+    signal geometry_cin_group_shift_c_blk_n : STD_LOGIC;
+    signal geometry_last_cout_valid_mask_c_blk_n : STD_LOGIC;
+    signal first_cout_tile_c_blk_n : STD_LOGIC;
+    signal block_tiles_c_blk_n : STD_LOGIC;
     signal ap_block_state1 : BOOLEAN;
     signal ap_NS_fsm : STD_LOGIC_VECTOR (0 downto 0);
     signal ap_ST_fsm_state1_blk : STD_LOGIC;
@@ -86,7 +170,7 @@ begin
             else
                 if ((ap_continue = ap_const_logic_1)) then 
                     ap_done_reg <= ap_const_logic_0;
-                elsif ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+                elsif ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
                     ap_done_reg <= ap_const_logic_1;
                 end if; 
             end if;
@@ -110,7 +194,7 @@ begin
     end process;
 
 
-    ap_NS_fsm_assign_proc : process (real_start, ap_done_reg, ap_CS_fsm, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
+    ap_NS_fsm_assign_proc : process (real_start, ap_done_reg, ap_CS_fsm, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
     begin
         case ap_CS_fsm is
             when ap_ST_fsm_state1 => 
@@ -121,9 +205,9 @@ begin
     end process;
     ap_CS_fsm_state1 <= ap_CS_fsm(0);
 
-    ap_ST_fsm_state1_blk_assign_proc : process(real_start, ap_done_reg, result_c_full_n, softmax_scale_q20_c_full_n)
+    ap_ST_fsm_state1_blk_assign_proc : process(real_start, ap_done_reg, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
     begin
-        if (((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) then 
+        if (((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) then 
             ap_ST_fsm_state1_blk <= ap_const_logic_1;
         else 
             ap_ST_fsm_state1_blk <= ap_const_logic_0;
@@ -131,15 +215,15 @@ begin
     end process;
 
 
-    ap_block_state1_assign_proc : process(real_start, ap_done_reg, result_c_full_n, softmax_scale_q20_c_full_n)
+    ap_block_state1_assign_proc : process(real_start, ap_done_reg, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
     begin
-                ap_block_state1 <= ((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1));
+                ap_block_state1 <= ((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0));
     end process;
 
 
-    ap_done_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
+    ap_done_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
     begin
-        if ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
             ap_done <= ap_const_logic_1;
         else 
             ap_done <= ap_done_reg;
@@ -158,9 +242,303 @@ begin
 
     ap_ready <= internal_ap_ready;
 
-    internal_ap_ready_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
+    block_tiles_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, block_tiles_c_full_n)
     begin
-        if ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            block_tiles_c_blk_n <= block_tiles_c_full_n;
+        else 
+            block_tiles_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    block_tiles_c_din <= block_tiles;
+
+    block_tiles_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            block_tiles_c_write <= ap_const_logic_1;
+        else 
+            block_tiles_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    first_cout_tile_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, first_cout_tile_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            first_cout_tile_c_blk_n <= first_cout_tile_c_full_n;
+        else 
+            first_cout_tile_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    first_cout_tile_c_din <= first_cout_tile;
+
+    first_cout_tile_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            first_cout_tile_c_write <= ap_const_logic_1;
+        else 
+            first_cout_tile_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_cin_group_shift_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_cin_group_shift_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_cin_group_shift_c_blk_n <= geometry_cin_group_shift_c_full_n;
+        else 
+            geometry_cin_group_shift_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_cin_group_shift_c_din <= p_read10;
+
+    geometry_cin_group_shift_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_cin_group_shift_c_write <= ap_const_logic_1;
+        else 
+            geometry_cin_group_shift_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_cin_groups_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_cin_groups_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_cin_groups_c_blk_n <= geometry_cin_groups_c_full_n;
+        else 
+            geometry_cin_groups_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_cin_groups_c_din <= p_read9;
+
+    geometry_cin_groups_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_cin_groups_c_write <= ap_const_logic_1;
+        else 
+            geometry_cin_groups_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_cout_tiles_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_cout_tiles_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_cout_tiles_c_blk_n <= geometry_cout_tiles_c_full_n;
+        else 
+            geometry_cout_tiles_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_cout_tiles_c_din <= p_read3;
+
+    geometry_cout_tiles_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_cout_tiles_c_write <= ap_const_logic_1;
+        else 
+            geometry_cout_tiles_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_h_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_h_c_blk_n <= geometry_h_c_full_n;
+        else 
+            geometry_h_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_h_c_din <= p_read;
+
+    geometry_h_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_h_c_write <= ap_const_logic_1;
+        else 
+            geometry_h_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_im2row_tokens_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_im2row_tokens_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_im2row_tokens_c_blk_n <= geometry_im2row_tokens_c_full_n;
+        else 
+            geometry_im2row_tokens_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_im2row_tokens_c_din <= p_read5;
+
+    geometry_im2row_tokens_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_im2row_tokens_c_write <= ap_const_logic_1;
+        else 
+            geometry_im2row_tokens_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_kernel_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_kernel_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_kernel_c_blk_n <= geometry_kernel_c_full_n;
+        else 
+            geometry_kernel_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_kernel_c_din <= p_read8;
+
+    geometry_kernel_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_kernel_c_write <= ap_const_logic_1;
+        else 
+            geometry_kernel_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_last_cout_valid_mask_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_last_cout_valid_mask_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_last_cout_valid_mask_c_blk_n <= geometry_last_cout_valid_mask_c_full_n;
+        else 
+            geometry_last_cout_valid_mask_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_last_cout_valid_mask_c_din <= p_read11;
+
+    geometry_last_cout_valid_mask_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_last_cout_valid_mask_c_write <= ap_const_logic_1;
+        else 
+            geometry_last_cout_valid_mask_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_last_tile_x_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_last_tile_x_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_last_tile_x_c_blk_n <= geometry_last_tile_x_c_full_n;
+        else 
+            geometry_last_tile_x_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_last_tile_x_c_din <= p_read6;
+
+    geometry_last_tile_x_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_last_tile_x_c_write <= ap_const_logic_1;
+        else 
+            geometry_last_tile_x_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_reduction_steps_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_reduction_steps_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_reduction_steps_c_blk_n <= geometry_reduction_steps_c_full_n;
+        else 
+            geometry_reduction_steps_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_reduction_steps_c_din <= p_read4;
+
+    geometry_reduction_steps_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_reduction_steps_c_write <= ap_const_logic_1;
+        else 
+            geometry_reduction_steps_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_spatial_tiles_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_spatial_tiles_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_spatial_tiles_c_blk_n <= geometry_spatial_tiles_c_full_n;
+        else 
+            geometry_spatial_tiles_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_spatial_tiles_c_din <= p_read2;
+
+    geometry_spatial_tiles_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_spatial_tiles_c_write <= ap_const_logic_1;
+        else 
+            geometry_spatial_tiles_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_tail_spatial_valid_mask_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_tail_spatial_valid_mask_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_tail_spatial_valid_mask_c_blk_n <= geometry_tail_spatial_valid_mask_c_full_n;
+        else 
+            geometry_tail_spatial_valid_mask_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_tail_spatial_valid_mask_c_din <= p_read7;
+
+    geometry_tail_spatial_valid_mask_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_tail_spatial_valid_mask_c_write <= ap_const_logic_1;
+        else 
+            geometry_tail_spatial_valid_mask_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    geometry_w_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_w_c_full_n)
+    begin
+        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_w_c_blk_n <= geometry_w_c_full_n;
+        else 
+            geometry_w_c_blk_n <= ap_const_logic_1;
+        end if; 
+    end process;
+
+    geometry_w_c_din <= p_read1;
+
+    geometry_w_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
+            geometry_w_c_write <= ap_const_logic_1;
+        else 
+            geometry_w_c_write <= ap_const_logic_0;
+        end if; 
+    end process;
+
+
+    internal_ap_ready_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, geometry_h_c_full_n, geometry_w_c_full_n, geometry_spatial_tiles_c_full_n, geometry_cout_tiles_c_full_n, geometry_reduction_steps_c_full_n, geometry_im2row_tokens_c_full_n, geometry_last_tile_x_c_full_n, geometry_tail_spatial_valid_mask_c_full_n, geometry_kernel_c_full_n, geometry_cin_groups_c_full_n, geometry_cin_group_shift_c_full_n, geometry_last_cout_valid_mask_c_full_n, first_cout_tile_c_full_n, block_tiles_c_full_n)
+    begin
+        if ((not(((geometry_kernel_c_full_n = ap_const_logic_0) or (geometry_tail_spatial_valid_mask_c_full_n = ap_const_logic_0) or (geometry_last_tile_x_c_full_n = ap_const_logic_0) or (real_start = ap_const_logic_0) or (geometry_im2row_tokens_c_full_n = ap_const_logic_0) or (geometry_reduction_steps_c_full_n = ap_const_logic_0) or (geometry_cout_tiles_c_full_n = ap_const_logic_0) or (geometry_spatial_tiles_c_full_n = ap_const_logic_0) or (geometry_w_c_full_n = ap_const_logic_0) or (geometry_h_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1) or (block_tiles_c_full_n = ap_const_logic_0) or (first_cout_tile_c_full_n = ap_const_logic_0) or (geometry_last_cout_valid_mask_c_full_n = ap_const_logic_0) or (geometry_cin_group_shift_c_full_n = ap_const_logic_0) or (geometry_cin_groups_c_full_n = ap_const_logic_0))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
             internal_ap_ready <= ap_const_logic_1;
         else 
             internal_ap_ready <= ap_const_logic_0;
@@ -174,48 +552,6 @@ begin
             real_start <= ap_const_logic_0;
         else 
             real_start <= ap_start;
-        end if; 
-    end process;
-
-
-    result_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n)
-    begin
-        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
-            result_c_blk_n <= result_c_full_n;
-        else 
-            result_c_blk_n <= ap_const_logic_1;
-        end if; 
-    end process;
-
-    result_c_din <= result;
-
-    result_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
-    begin
-        if ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
-            result_c_write <= ap_const_logic_1;
-        else 
-            result_c_write <= ap_const_logic_0;
-        end if; 
-    end process;
-
-
-    softmax_scale_q20_c_blk_n_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, softmax_scale_q20_c_full_n)
-    begin
-        if ((not(((real_start = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
-            softmax_scale_q20_c_blk_n <= softmax_scale_q20_c_full_n;
-        else 
-            softmax_scale_q20_c_blk_n <= ap_const_logic_1;
-        end if; 
-    end process;
-
-    softmax_scale_q20_c_din <= softmax_scale_q20;
-
-    softmax_scale_q20_c_write_assign_proc : process(real_start, ap_done_reg, ap_CS_fsm_state1, result_c_full_n, softmax_scale_q20_c_full_n)
-    begin
-        if ((not(((real_start = ap_const_logic_0) or (softmax_scale_q20_c_full_n = ap_const_logic_0) or (result_c_full_n = ap_const_logic_0) or (ap_done_reg = ap_const_logic_1))) and (ap_const_logic_1 = ap_CS_fsm_state1))) then 
-            softmax_scale_q20_c_write <= ap_const_logic_1;
-        else 
-            softmax_scale_q20_c_write <= ap_const_logic_0;
         end if; 
     end process;
 

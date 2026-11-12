@@ -13,8 +13,8 @@ module cnn_accelerator_ddr_systolic_OS_activation_bank_V_RAM_1P_BRAM_1R1W (
     reset, clk);
 
 parameter DataWidth = 64;
-parameter AddressWidth = 4;
-parameter AddressRange = 9;
+parameter AddressWidth = 11;
+parameter AddressRange = 1152;
  
 input[AddressWidth-1:0] address0;
 input ce0;

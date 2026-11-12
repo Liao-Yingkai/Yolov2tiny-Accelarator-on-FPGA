@@ -12,8 +12,8 @@ entity cnn_accelerator_ddr_systolic_OS_activation_bank_V_RAM_1P_BRAM_1R1W is
     generic(
         MEM_TYPE        : string    := "block"; 
         DataWidth       : integer   := 64; 
-        AddressWidth    : integer   := 4;
-        AddressRange    : integer   := 9
+        AddressWidth    : integer   := 11;
+        AddressRange    : integer   := 1152
     ); 
     port (
         address0    : in std_logic_vector(AddressWidth-1 downto 0); 

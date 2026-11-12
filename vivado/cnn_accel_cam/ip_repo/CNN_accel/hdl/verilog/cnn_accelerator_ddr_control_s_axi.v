@@ -6,7 +6,7 @@
 `timescale 1ns/1ps
 module cnn_accelerator_ddr_control_s_axi
 #(parameter
-    C_S_AXI_ADDR_WIDTH = 7,
+    C_S_AXI_ADDR_WIDTH = 6,
     C_S_AXI_DATA_WIDTH = 32
 )(
     input  wire                          ACLK,
@@ -30,11 +30,9 @@ module cnn_accelerator_ddr_control_s_axi
     output wire                          RVALID,
     input  wire                          RREADY,
     output wire                          interrupt,
-    output wire [63:0]                   image_r,
+    output wire [63:0]                   feature,
     output wire [63:0]                   weights,
     output wire [63:0]                   params,
-    output wire [63:0]                   result,
-    output wire [31:0]                   softmax_scale_q20,
     output wire                          ap_start,
     input  wire                          ap_done,
     input  wire                          ap_ready,
@@ -60,10 +58,10 @@ module cnn_accelerator_ddr_control_s_axi
 //        bit 0 - ap_done (Read/TOW)
 //        bit 1 - ap_ready (Read/TOW)
 //        others - reserved
-// 0x10 : Data signal of image_r
-//        bit 31~0 - image_r[31:0] (Read/Write)
-// 0x14 : Data signal of image_r
-//        bit 31~0 - image_r[63:32] (Read/Write)
+// 0x10 : Data signal of feature
+//        bit 31~0 - feature[31:0] (Read/Write)
+// 0x14 : Data signal of feature
+//        bit 31~0 - feature[63:32] (Read/Write)
 // 0x18 : reserved
 // 0x1c : Data signal of weights
 //        bit 31~0 - weights[31:0] (Read/Write)
@@ -75,44 +73,31 @@ module cnn_accelerator_ddr_control_s_axi
 // 0x2c : Data signal of params
 //        bit 31~0 - params[63:32] (Read/Write)
 // 0x30 : reserved
-// 0x34 : Data signal of result
-//        bit 31~0 - result[31:0] (Read/Write)
-// 0x38 : Data signal of result
-//        bit 31~0 - result[63:32] (Read/Write)
-// 0x3c : reserved
-// 0x40 : Data signal of softmax_scale_q20
-//        bit 31~0 - softmax_scale_q20[31:0] (Read/Write)
-// 0x44 : reserved
 // (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
 //------------------------Parameter----------------------
 localparam
-    ADDR_AP_CTRL                  = 7'h00,
-    ADDR_GIE                      = 7'h04,
-    ADDR_IER                      = 7'h08,
-    ADDR_ISR                      = 7'h0c,
-    ADDR_IMAGE_R_DATA_0           = 7'h10,
-    ADDR_IMAGE_R_DATA_1           = 7'h14,
-    ADDR_IMAGE_R_CTRL             = 7'h18,
-    ADDR_WEIGHTS_DATA_0           = 7'h1c,
-    ADDR_WEIGHTS_DATA_1           = 7'h20,
-    ADDR_WEIGHTS_CTRL             = 7'h24,
-    ADDR_PARAMS_DATA_0            = 7'h28,
-    ADDR_PARAMS_DATA_1            = 7'h2c,
-    ADDR_PARAMS_CTRL              = 7'h30,
-    ADDR_RESULT_DATA_0            = 7'h34,
-    ADDR_RESULT_DATA_1            = 7'h38,
-    ADDR_RESULT_CTRL              = 7'h3c,
-    ADDR_SOFTMAX_SCALE_Q20_DATA_0 = 7'h40,
-    ADDR_SOFTMAX_SCALE_Q20_CTRL   = 7'h44,
-    WRIDLE                        = 2'd0,
-    WRDATA                        = 2'd1,
-    WRRESP                        = 2'd2,
-    WRRESET                       = 2'd3,
-    RDIDLE                        = 2'd0,
-    RDDATA                        = 2'd1,
-    RDRESET                       = 2'd2,
-    ADDR_BITS                = 7;
+    ADDR_AP_CTRL        = 6'h00,
+    ADDR_GIE            = 6'h04,
+    ADDR_IER            = 6'h08,
+    ADDR_ISR            = 6'h0c,
+    ADDR_FEATURE_DATA_0 = 6'h10,
+    ADDR_FEATURE_DATA_1 = 6'h14,
+    ADDR_FEATURE_CTRL   = 6'h18,
+    ADDR_WEIGHTS_DATA_0 = 6'h1c,
+    ADDR_WEIGHTS_DATA_1 = 6'h20,
+    ADDR_WEIGHTS_CTRL   = 6'h24,
+    ADDR_PARAMS_DATA_0  = 6'h28,
+    ADDR_PARAMS_DATA_1  = 6'h2c,
+    ADDR_PARAMS_CTRL    = 6'h30,
+    WRIDLE              = 2'd0,
+    WRDATA              = 2'd1,
+    WRRESP              = 2'd2,
+    WRRESET             = 2'd3,
+    RDIDLE              = 2'd0,
+    RDDATA              = 2'd1,
+    RDRESET             = 2'd2,
+    ADDR_BITS                = 6;
 
 //------------------------Local signal-------------------
     reg  [1:0]                    wstate = WRRESET;
@@ -141,11 +126,9 @@ localparam
     reg                           int_gie = 1'b0;
     reg  [1:0]                    int_ier = 2'b0;
     reg  [1:0]                    int_isr = 2'b0;
-    reg  [63:0]                   int_image_r = 'b0;
+    reg  [63:0]                   int_feature = 'b0;
     reg  [63:0]                   int_weights = 'b0;
     reg  [63:0]                   int_params = 'b0;
-    reg  [63:0]                   int_result = 'b0;
-    reg  [31:0]                   int_softmax_scale_q20 = 'b0;
 
 //------------------------Instantiation------------------
 
@@ -255,11 +238,11 @@ always @(posedge ACLK) begin
                 ADDR_ISR: begin
                     rdata <= int_isr;
                 end
-                ADDR_IMAGE_R_DATA_0: begin
-                    rdata <= int_image_r[31:0];
+                ADDR_FEATURE_DATA_0: begin
+                    rdata <= int_feature[31:0];
                 end
-                ADDR_IMAGE_R_DATA_1: begin
-                    rdata <= int_image_r[63:32];
+                ADDR_FEATURE_DATA_1: begin
+                    rdata <= int_feature[63:32];
                 end
                 ADDR_WEIGHTS_DATA_0: begin
                     rdata <= int_weights[31:0];
@@ -273,15 +256,6 @@ always @(posedge ACLK) begin
                 ADDR_PARAMS_DATA_1: begin
                     rdata <= int_params[63:32];
                 end
-                ADDR_RESULT_DATA_0: begin
-                    rdata <= int_result[31:0];
-                end
-                ADDR_RESULT_DATA_1: begin
-                    rdata <= int_result[63:32];
-                end
-                ADDR_SOFTMAX_SCALE_Q20_DATA_0: begin
-                    rdata <= int_softmax_scale_q20[31:0];
-                end
             endcase
         end
     end
@@ -294,11 +268,9 @@ assign ap_start          = int_ap_start;
 assign task_ap_done      = (ap_done && !auto_restart_status) || auto_restart_done;
 assign task_ap_ready     = ap_ready && !int_auto_restart;
 assign auto_restart_done = auto_restart_status && (ap_idle && !int_ap_idle);
-assign image_r           = int_image_r;
+assign feature           = int_feature;
 assign weights           = int_weights;
 assign params            = int_params;
-assign result            = int_result;
-assign softmax_scale_q20 = int_softmax_scale_q20;
 // int_interrupt
 always @(posedge ACLK) begin
     if (ARESET)
@@ -431,23 +403,23 @@ always @(posedge ACLK) begin
     end
 end
 
-// int_image_r[31:0]
+// int_feature[31:0]
 always @(posedge ACLK) begin
     if (ARESET)
-        int_image_r[31:0] <= 0;
+        int_feature[31:0] <= 0;
     else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_IMAGE_R_DATA_0)
-            int_image_r[31:0] <= (WDATA[31:0] & wmask) | (int_image_r[31:0] & ~wmask);
+        if (w_hs && waddr == ADDR_FEATURE_DATA_0)
+            int_feature[31:0] <= (WDATA[31:0] & wmask) | (int_feature[31:0] & ~wmask);
     end
 end
 
-// int_image_r[63:32]
+// int_feature[63:32]
 always @(posedge ACLK) begin
     if (ARESET)
-        int_image_r[63:32] <= 0;
+        int_feature[63:32] <= 0;
     else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_IMAGE_R_DATA_1)
-            int_image_r[63:32] <= (WDATA[31:0] & wmask) | (int_image_r[63:32] & ~wmask);
+        if (w_hs && waddr == ADDR_FEATURE_DATA_1)
+            int_feature[63:32] <= (WDATA[31:0] & wmask) | (int_feature[63:32] & ~wmask);
     end
 end
 
@@ -488,36 +460,6 @@ always @(posedge ACLK) begin
     else if (ACLK_EN) begin
         if (w_hs && waddr == ADDR_PARAMS_DATA_1)
             int_params[63:32] <= (WDATA[31:0] & wmask) | (int_params[63:32] & ~wmask);
-    end
-end
-
-// int_result[31:0]
-always @(posedge ACLK) begin
-    if (ARESET)
-        int_result[31:0] <= 0;
-    else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_RESULT_DATA_0)
-            int_result[31:0] <= (WDATA[31:0] & wmask) | (int_result[31:0] & ~wmask);
-    end
-end
-
-// int_result[63:32]
-always @(posedge ACLK) begin
-    if (ARESET)
-        int_result[63:32] <= 0;
-    else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_RESULT_DATA_1)
-            int_result[63:32] <= (WDATA[31:0] & wmask) | (int_result[63:32] & ~wmask);
-    end
-end
-
-// int_softmax_scale_q20[31:0]
-always @(posedge ACLK) begin
-    if (ARESET)
-        int_softmax_scale_q20[31:0] <= 0;
-    else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_SOFTMAX_SCALE_Q20_DATA_0)
-            int_softmax_scale_q20[31:0] <= (WDATA[31:0] & wmask) | (int_softmax_scale_q20[31:0] & ~wmask);
     end
 end
 

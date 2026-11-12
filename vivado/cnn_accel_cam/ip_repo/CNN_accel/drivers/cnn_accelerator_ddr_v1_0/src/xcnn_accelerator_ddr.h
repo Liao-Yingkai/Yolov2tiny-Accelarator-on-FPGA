@@ -88,16 +88,12 @@ u32 XCnn_accelerator_ddr_IsReady(XCnn_accelerator_ddr *InstancePtr);
 void XCnn_accelerator_ddr_EnableAutoRestart(XCnn_accelerator_ddr *InstancePtr);
 void XCnn_accelerator_ddr_DisableAutoRestart(XCnn_accelerator_ddr *InstancePtr);
 
-void XCnn_accelerator_ddr_Set_image_r(XCnn_accelerator_ddr *InstancePtr, u64 Data);
-u64 XCnn_accelerator_ddr_Get_image_r(XCnn_accelerator_ddr *InstancePtr);
+void XCnn_accelerator_ddr_Set_feature(XCnn_accelerator_ddr *InstancePtr, u64 Data);
+u64 XCnn_accelerator_ddr_Get_feature(XCnn_accelerator_ddr *InstancePtr);
 void XCnn_accelerator_ddr_Set_weights(XCnn_accelerator_ddr *InstancePtr, u64 Data);
 u64 XCnn_accelerator_ddr_Get_weights(XCnn_accelerator_ddr *InstancePtr);
 void XCnn_accelerator_ddr_Set_params(XCnn_accelerator_ddr *InstancePtr, u64 Data);
 u64 XCnn_accelerator_ddr_Get_params(XCnn_accelerator_ddr *InstancePtr);
-void XCnn_accelerator_ddr_Set_result(XCnn_accelerator_ddr *InstancePtr, u64 Data);
-u64 XCnn_accelerator_ddr_Get_result(XCnn_accelerator_ddr *InstancePtr);
-void XCnn_accelerator_ddr_Set_softmax_scale_q20(XCnn_accelerator_ddr *InstancePtr, u32 Data);
-u32 XCnn_accelerator_ddr_Get_softmax_scale_q20(XCnn_accelerator_ddr *InstancePtr);
 
 void XCnn_accelerator_ddr_InterruptGlobalEnable(XCnn_accelerator_ddr *InstancePtr);
 void XCnn_accelerator_ddr_InterruptGlobalDisable(XCnn_accelerator_ddr *InstancePtr);

@@ -12,7 +12,7 @@ module cnn_accelerator_ddr_start_for_conv_postprocess_U0
     MEM_STYLE   = "shiftReg",
     DATA_WIDTH  = 1,
     ADDR_WIDTH  = 2,
-    DEPTH       = 4)
+    DEPTH       = 3)
 (
     // system signal
     input  wire                  clk,
@@ -108,7 +108,7 @@ module cnn_accelerator_ddr_start_for_conv_postprocess_U0_ShiftReg
 #(parameter
     DATA_WIDTH  = 1,
     ADDR_WIDTH  = 2,
-    DEPTH       = 4)
+    DEPTH       = 3)
 (
     input  wire                  clk,
     input  wire                  we,

@@ -9,7 +9,7 @@ use IEEE.NUMERIC_STD.all;
 
 entity cnn_accelerator_ddr_control_s_axi is
 generic (
-    C_S_AXI_ADDR_WIDTH    : INTEGER := 7;
+    C_S_AXI_ADDR_WIDTH    : INTEGER := 6;
     C_S_AXI_DATA_WIDTH    : INTEGER := 32);
 port (
     ACLK                  :in   STD_LOGIC;
@@ -33,11 +33,9 @@ port (
     RVALID                :out  STD_LOGIC;
     RREADY                :in   STD_LOGIC;
     interrupt             :out  STD_LOGIC;
-    image_r               :out  STD_LOGIC_VECTOR(63 downto 0);
+    feature               :out  STD_LOGIC_VECTOR(63 downto 0);
     weights               :out  STD_LOGIC_VECTOR(63 downto 0);
     params                :out  STD_LOGIC_VECTOR(63 downto 0);
-    result                :out  STD_LOGIC_VECTOR(63 downto 0);
-    softmax_scale_q20     :out  STD_LOGIC_VECTOR(31 downto 0);
     ap_start              :out  STD_LOGIC;
     ap_done               :in   STD_LOGIC;
     ap_ready              :in   STD_LOGIC;
@@ -65,10 +63,10 @@ end entity cnn_accelerator_ddr_control_s_axi;
 --        bit 0 - ap_done (Read/TOW)
 --        bit 1 - ap_ready (Read/TOW)
 --        others - reserved
--- 0x10 : Data signal of image_r
---        bit 31~0 - image_r[31:0] (Read/Write)
--- 0x14 : Data signal of image_r
---        bit 31~0 - image_r[63:32] (Read/Write)
+-- 0x10 : Data signal of feature
+--        bit 31~0 - feature[31:0] (Read/Write)
+-- 0x14 : Data signal of feature
+--        bit 31~0 - feature[63:32] (Read/Write)
 -- 0x18 : reserved
 -- 0x1c : Data signal of weights
 --        bit 31~0 - weights[31:0] (Read/Write)
@@ -80,14 +78,6 @@ end entity cnn_accelerator_ddr_control_s_axi;
 -- 0x2c : Data signal of params
 --        bit 31~0 - params[63:32] (Read/Write)
 -- 0x30 : reserved
--- 0x34 : Data signal of result
---        bit 31~0 - result[31:0] (Read/Write)
--- 0x38 : Data signal of result
---        bit 31~0 - result[63:32] (Read/Write)
--- 0x3c : reserved
--- 0x40 : Data signal of softmax_scale_q20
---        bit 31~0 - softmax_scale_q20[31:0] (Read/Write)
--- 0x44 : reserved
 -- (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
 architecture behave of cnn_accelerator_ddr_control_s_axi is
@@ -95,25 +85,20 @@ architecture behave of cnn_accelerator_ddr_control_s_axi is
     signal wstate  : states := wrreset;
     signal rstate  : states := rdreset;
     signal wnext, rnext: states;
-    constant ADDR_AP_CTRL                  : INTEGER := 16#00#;
-    constant ADDR_GIE                      : INTEGER := 16#04#;
-    constant ADDR_IER                      : INTEGER := 16#08#;
-    constant ADDR_ISR                      : INTEGER := 16#0c#;
-    constant ADDR_IMAGE_R_DATA_0           : INTEGER := 16#10#;
-    constant ADDR_IMAGE_R_DATA_1           : INTEGER := 16#14#;
-    constant ADDR_IMAGE_R_CTRL             : INTEGER := 16#18#;
-    constant ADDR_WEIGHTS_DATA_0           : INTEGER := 16#1c#;
-    constant ADDR_WEIGHTS_DATA_1           : INTEGER := 16#20#;
-    constant ADDR_WEIGHTS_CTRL             : INTEGER := 16#24#;
-    constant ADDR_PARAMS_DATA_0            : INTEGER := 16#28#;
-    constant ADDR_PARAMS_DATA_1            : INTEGER := 16#2c#;
-    constant ADDR_PARAMS_CTRL              : INTEGER := 16#30#;
-    constant ADDR_RESULT_DATA_0            : INTEGER := 16#34#;
-    constant ADDR_RESULT_DATA_1            : INTEGER := 16#38#;
-    constant ADDR_RESULT_CTRL              : INTEGER := 16#3c#;
-    constant ADDR_SOFTMAX_SCALE_Q20_DATA_0 : INTEGER := 16#40#;
-    constant ADDR_SOFTMAX_SCALE_Q20_CTRL   : INTEGER := 16#44#;
-    constant ADDR_BITS         : INTEGER := 7;
+    constant ADDR_AP_CTRL        : INTEGER := 16#00#;
+    constant ADDR_GIE            : INTEGER := 16#04#;
+    constant ADDR_IER            : INTEGER := 16#08#;
+    constant ADDR_ISR            : INTEGER := 16#0c#;
+    constant ADDR_FEATURE_DATA_0 : INTEGER := 16#10#;
+    constant ADDR_FEATURE_DATA_1 : INTEGER := 16#14#;
+    constant ADDR_FEATURE_CTRL   : INTEGER := 16#18#;
+    constant ADDR_WEIGHTS_DATA_0 : INTEGER := 16#1c#;
+    constant ADDR_WEIGHTS_DATA_1 : INTEGER := 16#20#;
+    constant ADDR_WEIGHTS_CTRL   : INTEGER := 16#24#;
+    constant ADDR_PARAMS_DATA_0  : INTEGER := 16#28#;
+    constant ADDR_PARAMS_DATA_1  : INTEGER := 16#2c#;
+    constant ADDR_PARAMS_CTRL    : INTEGER := 16#30#;
+    constant ADDR_BITS         : INTEGER := 6;
 
     signal waddr               : UNSIGNED(ADDR_BITS-1 downto 0);
     signal wmask               : UNSIGNED(C_S_AXI_DATA_WIDTH-1 downto 0);
@@ -141,11 +126,9 @@ architecture behave of cnn_accelerator_ddr_control_s_axi is
     signal int_gie             : STD_LOGIC := '0';
     signal int_ier             : UNSIGNED(1 downto 0) := (others => '0');
     signal int_isr             : UNSIGNED(1 downto 0) := (others => '0');
-    signal int_image_r         : UNSIGNED(63 downto 0) := (others => '0');
+    signal int_feature         : UNSIGNED(63 downto 0) := (others => '0');
     signal int_weights         : UNSIGNED(63 downto 0) := (others => '0');
     signal int_params          : UNSIGNED(63 downto 0) := (others => '0');
-    signal int_result          : UNSIGNED(63 downto 0) := (others => '0');
-    signal int_softmax_scale_q20 : UNSIGNED(31 downto 0) := (others => '0');
 
 
 begin
@@ -274,10 +257,10 @@ begin
                         rdata_data(1 downto 0) <= int_ier;
                     when ADDR_ISR =>
                         rdata_data(1 downto 0) <= int_isr;
-                    when ADDR_IMAGE_R_DATA_0 =>
-                        rdata_data <= RESIZE(int_image_r(31 downto 0), 32);
-                    when ADDR_IMAGE_R_DATA_1 =>
-                        rdata_data <= RESIZE(int_image_r(63 downto 32), 32);
+                    when ADDR_FEATURE_DATA_0 =>
+                        rdata_data <= RESIZE(int_feature(31 downto 0), 32);
+                    when ADDR_FEATURE_DATA_1 =>
+                        rdata_data <= RESIZE(int_feature(63 downto 32), 32);
                     when ADDR_WEIGHTS_DATA_0 =>
                         rdata_data <= RESIZE(int_weights(31 downto 0), 32);
                     when ADDR_WEIGHTS_DATA_1 =>
@@ -286,12 +269,6 @@ begin
                         rdata_data <= RESIZE(int_params(31 downto 0), 32);
                     when ADDR_PARAMS_DATA_1 =>
                         rdata_data <= RESIZE(int_params(63 downto 32), 32);
-                    when ADDR_RESULT_DATA_0 =>
-                        rdata_data <= RESIZE(int_result(31 downto 0), 32);
-                    when ADDR_RESULT_DATA_1 =>
-                        rdata_data <= RESIZE(int_result(63 downto 32), 32);
-                    when ADDR_SOFTMAX_SCALE_Q20_DATA_0 =>
-                        rdata_data <= RESIZE(int_softmax_scale_q20(31 downto 0), 32);
                     when others =>
                         NULL;
                     end case;
@@ -306,11 +283,9 @@ begin
     task_ap_done         <= (ap_done and not auto_restart_status) or auto_restart_done;
     task_ap_ready        <= ap_ready and not int_auto_restart;
     auto_restart_done    <= auto_restart_status and (ap_idle and not int_ap_idle);
-    image_r              <= STD_LOGIC_VECTOR(int_image_r);
+    feature              <= STD_LOGIC_VECTOR(int_feature);
     weights              <= STD_LOGIC_VECTOR(int_weights);
     params               <= STD_LOGIC_VECTOR(int_params);
-    result               <= STD_LOGIC_VECTOR(int_result);
-    softmax_scale_q20    <= STD_LOGIC_VECTOR(int_softmax_scale_q20);
 
     process (ACLK)
     begin
@@ -486,8 +461,8 @@ begin
     begin
         if (ACLK'event and ACLK = '1') then
             if (ACLK_EN = '1') then
-                if (w_hs = '1' and waddr = ADDR_IMAGE_R_DATA_0) then
-                    int_image_r(31 downto 0) <= (UNSIGNED(WDATA(31 downto 0)) and wmask(31 downto 0)) or ((not wmask(31 downto 0)) and int_image_r(31 downto 0));
+                if (w_hs = '1' and waddr = ADDR_FEATURE_DATA_0) then
+                    int_feature(31 downto 0) <= (UNSIGNED(WDATA(31 downto 0)) and wmask(31 downto 0)) or ((not wmask(31 downto 0)) and int_feature(31 downto 0));
                 end if;
             end if;
         end if;
@@ -497,8 +472,8 @@ begin
     begin
         if (ACLK'event and ACLK = '1') then
             if (ACLK_EN = '1') then
-                if (w_hs = '1' and waddr = ADDR_IMAGE_R_DATA_1) then
-                    int_image_r(63 downto 32) <= (UNSIGNED(WDATA(31 downto 0)) and wmask(31 downto 0)) or ((not wmask(31 downto 0)) and int_image_r(63 downto 32));
+                if (w_hs = '1' and waddr = ADDR_FEATURE_DATA_1) then
+                    int_feature(63 downto 32) <= (UNSIGNED(WDATA(31 downto 0)) and wmask(31 downto 0)) or ((not wmask(31 downto 0)) and int_feature(63 downto 32));
                 end if;
             end if;
         end if;
@@ -543,39 +518,6 @@ begin
             if (ACLK_EN = '1') then
                 if (w_hs = '1' and waddr = ADDR_PARAMS_DATA_1) then
                     int_params(63 downto 32) <= (UNSIGNED(WDATA(31 downto 0)) and wmask(31 downto 0)) or ((not wmask(31 downto 0)) and int_params(63 downto 32));
-                end if;
-            end if;
-        end if;
-    end process;
-
-    process (ACLK)
-    begin
-        if (ACLK'event and ACLK = '1') then
-            if (ACLK_EN = '1') then
-                if (w_hs = '1' and waddr = ADDR_RESULT_DATA_0) then
-                    int_result(31 downto 0) <= (UNSIGNED(WDATA(31 downto 0)) and wmask(31 downto 0)) or ((not wmask(31 downto 0)) and int_result(31 downto 0));
-                end if;
-            end if;
-        end if;
-    end process;
-
-    process (ACLK)
-    begin
-        if (ACLK'event and ACLK = '1') then
-            if (ACLK_EN = '1') then
-                if (w_hs = '1' and waddr = ADDR_RESULT_DATA_1) then
-                    int_result(63 downto 32) <= (UNSIGNED(WDATA(31 downto 0)) and wmask(31 downto 0)) or ((not wmask(31 downto 0)) and int_result(63 downto 32));
-                end if;
-            end if;
-        end if;
-    end process;
-
-    process (ACLK)
-    begin
-        if (ACLK'event and ACLK = '1') then
-            if (ACLK_EN = '1') then
-                if (w_hs = '1' and waddr = ADDR_SOFTMAX_SCALE_Q20_DATA_0) then
-                    int_softmax_scale_q20(31 downto 0) <= (UNSIGNED(WDATA(31 downto 0)) and wmask(31 downto 0)) or ((not wmask(31 downto 0)) and int_softmax_scale_q20(31 downto 0));
                 end if;
             end if;
         end if;

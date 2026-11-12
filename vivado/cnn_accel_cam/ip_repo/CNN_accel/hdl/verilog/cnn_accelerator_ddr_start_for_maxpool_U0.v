@@ -11,8 +11,8 @@ module cnn_accelerator_ddr_start_for_maxpool_U0
 #(parameter
     MEM_STYLE   = "shiftReg",
     DATA_WIDTH  = 1,
-    ADDR_WIDTH  = 1,
-    DEPTH       = 2)
+    ADDR_WIDTH  = 2,
+    DEPTH       = 4)
 (
     // system signal
     input  wire                  clk,
@@ -107,8 +107,8 @@ endmodule
 module cnn_accelerator_ddr_start_for_maxpool_U0_ShiftReg
 #(parameter
     DATA_WIDTH  = 1,
-    ADDR_WIDTH  = 1,
-    DEPTH       = 2)
+    ADDR_WIDTH  = 2,
+    DEPTH       = 4)
 (
     input  wire                  clk,
     input  wire                  we,

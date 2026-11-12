@@ -23,10 +23,10 @@
 //        bit 0 - ap_done (Read/TOW)
 //        bit 1 - ap_ready (Read/TOW)
 //        others - reserved
-// 0x10 : Data signal of image_r
-//        bit 31~0 - image_r[31:0] (Read/Write)
-// 0x14 : Data signal of image_r
-//        bit 31~0 - image_r[63:32] (Read/Write)
+// 0x10 : Data signal of feature
+//        bit 31~0 - feature[31:0] (Read/Write)
+// 0x14 : Data signal of feature
+//        bit 31~0 - feature[63:32] (Read/Write)
 // 0x18 : reserved
 // 0x1c : Data signal of weights
 //        bit 31~0 - weights[31:0] (Read/Write)
@@ -38,28 +38,16 @@
 // 0x2c : Data signal of params
 //        bit 31~0 - params[63:32] (Read/Write)
 // 0x30 : reserved
-// 0x34 : Data signal of result
-//        bit 31~0 - result[31:0] (Read/Write)
-// 0x38 : Data signal of result
-//        bit 31~0 - result[63:32] (Read/Write)
-// 0x3c : reserved
-// 0x40 : Data signal of softmax_scale_q20
-//        bit 31~0 - softmax_scale_q20[31:0] (Read/Write)
-// 0x44 : reserved
 // (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_AP_CTRL                0x00
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_GIE                    0x04
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_IER                    0x08
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_ISR                    0x0c
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_IMAGE_R_DATA           0x10
-#define XCNN_ACCELERATOR_DDR_CONTROL_BITS_IMAGE_R_DATA           64
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_WEIGHTS_DATA           0x1c
-#define XCNN_ACCELERATOR_DDR_CONTROL_BITS_WEIGHTS_DATA           64
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_PARAMS_DATA            0x28
-#define XCNN_ACCELERATOR_DDR_CONTROL_BITS_PARAMS_DATA            64
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_RESULT_DATA            0x34
-#define XCNN_ACCELERATOR_DDR_CONTROL_BITS_RESULT_DATA            64
-#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_SOFTMAX_SCALE_Q20_DATA 0x40
-#define XCNN_ACCELERATOR_DDR_CONTROL_BITS_SOFTMAX_SCALE_Q20_DATA 32
+#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_AP_CTRL      0x00
+#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_GIE          0x04
+#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_IER          0x08
+#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_ISR          0x0c
+#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_FEATURE_DATA 0x10
+#define XCNN_ACCELERATOR_DDR_CONTROL_BITS_FEATURE_DATA 64
+#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_WEIGHTS_DATA 0x1c
+#define XCNN_ACCELERATOR_DDR_CONTROL_BITS_WEIGHTS_DATA 64
+#define XCNN_ACCELERATOR_DDR_CONTROL_ADDR_PARAMS_DATA  0x28
+#define XCNN_ACCELERATOR_DDR_CONTROL_BITS_PARAMS_DATA  64
 

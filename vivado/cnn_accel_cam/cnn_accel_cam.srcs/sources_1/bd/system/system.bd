@@ -43,8 +43,8 @@
           "auto_pc": ""
         }
       },
-      "cnn_accelerator_ddr_0": "",
-      "roi_border_0": ""
+      "roi_border_0": "",
+      "cnn_accelerator_ddr_0": ""
     },
     "interface_ports": {
       "DDR": {
@@ -330,7 +330,7 @@
             "value": "10.000000"
           },
           "PCW_ACT_FPGA0_PERIPHERAL_FREQMHZ": {
-            "value": "100.000000"
+            "value": "125.000000"
           },
           "PCW_ACT_FPGA1_PERIPHERAL_FREQMHZ": {
             "value": "10.000000"
@@ -420,7 +420,7 @@
             "value": "0"
           },
           "PCW_CLK0_FREQ": {
-            "value": "100000000"
+            "value": "125000000"
           },
           "PCW_CLK1_FREQ": {
             "value": "10000000"
@@ -690,7 +690,7 @@
             "value": "TRUE"
           },
           "PCW_FPGA0_PERIPHERAL_FREQMHZ": {
-            "value": "100"
+            "value": "125"
           },
           "PCW_FPGA1_PERIPHERAL_FREQMHZ": {
             "value": "150"
@@ -1760,20 +1760,23 @@
           "AXI_DRP": {
             "value": "false"
           },
+          "CLKIN1_JITTER_PS": {
+            "value": "80.0"
+          },
           "CLKOUT1_JITTER": {
-            "value": "230.405"
+            "value": "193.240"
           },
           "CLKOUT1_PHASE_ERROR": {
-            "value": "317.963"
+            "value": "116.462"
           },
           "CLKOUT1_REQUESTED_OUT_FREQ": {
             "value": "25.2"
           },
           "CLKOUT2_JITTER": {
-            "value": "184.176"
+            "value": "136.393"
           },
           "CLKOUT2_PHASE_ERROR": {
-            "value": "317.963"
+            "value": "116.462"
           },
           "CLKOUT2_REQUESTED_OUT_FREQ": {
             "value": "126"
@@ -1782,22 +1785,28 @@
             "value": "true"
           },
           "MMCM_CLKFBOUT_MULT_F": {
-            "value": "63.000"
+            "value": "16.125"
+          },
+          "MMCM_CLKIN1_PERIOD": {
+            "value": "8.000"
           },
           "MMCM_CLKOUT0_DIVIDE_F": {
-            "value": "50.000"
+            "value": "40.000"
           },
           "MMCM_CLKOUT1_DIVIDE": {
-            "value": "10"
+            "value": "8"
           },
           "MMCM_DIVCLK_DIVIDE": {
-            "value": "5"
+            "value": "2"
           },
           "NUM_OUT_CLKS": {
             "value": "2"
           },
           "PHASE_DUTY_CONFIG": {
             "value": "false"
+          },
+          "PRIM_IN_FREQ": {
+            "value": "125.000"
           },
           "PRIM_SOURCE": {
             "value": "No_buffer"
@@ -3191,26 +3200,22 @@
           }
         }
       },
+      "roi_border_0": {
+        "vlnv": "xilinx.com:hls:roi_border:1.0",
+        "xci_name": "system_roi_border_0_1",
+        "xci_path": "ip/system_roi_border_0_1/system_roi_border_0_1.xci",
+        "inst_hier_path": "roi_border_0"
+      },
       "cnn_accelerator_ddr_0": {
         "vlnv": "xilinx.com:hls:cnn_accelerator_ddr:1.0",
         "xci_name": "system_cnn_accelerator_ddr_0_0",
         "xci_path": "ip/system_cnn_accelerator_ddr_0_0/system_cnn_accelerator_ddr_0_0.xci",
         "inst_hier_path": "cnn_accelerator_ddr_0",
         "interface_ports": {
-          "m_axi_gmem_io": {
+          "m_axi_gmem_feature": {
             "vlnv": "xilinx.com:interface:aximm_rtl:1.0",
             "mode": "Master",
-            "address_space_ref": "Data_m_axi_gmem_io",
-            "base_address": {
-              "minimum": "0x00000000",
-              "maximum": "0xFFFFFFFFFFFFFFFF",
-              "width": "64"
-            }
-          },
-          "m_axi_gmem_params": {
-            "vlnv": "xilinx.com:interface:aximm_rtl:1.0",
-            "mode": "Master",
-            "address_space_ref": "Data_m_axi_gmem_params",
+            "address_space_ref": "Data_m_axi_gmem_feature",
             "base_address": {
               "minimum": "0x00000000",
               "maximum": "0xFFFFFFFFFFFFFFFF",
@@ -3226,30 +3231,34 @@
               "maximum": "0xFFFFFFFFFFFFFFFF",
               "width": "64"
             }
+          },
+          "m_axi_gmem_params": {
+            "vlnv": "xilinx.com:interface:aximm_rtl:1.0",
+            "mode": "Master",
+            "address_space_ref": "Data_m_axi_gmem_params",
+            "base_address": {
+              "minimum": "0x00000000",
+              "maximum": "0xFFFFFFFFFFFFFFFF",
+              "width": "64"
+            }
           }
         },
         "addressing": {
           "address_spaces": {
-            "Data_m_axi_gmem_io": {
-              "range": "16E",
-              "width": "64"
-            },
-            "Data_m_axi_gmem_params": {
+            "Data_m_axi_gmem_feature": {
               "range": "16E",
               "width": "64"
             },
             "Data_m_axi_gmem_weights": {
               "range": "16E",
               "width": "64"
+            },
+            "Data_m_axi_gmem_params": {
+              "range": "16E",
+              "width": "64"
             }
           }
         }
-      },
-      "roi_border_0": {
-        "vlnv": "xilinx.com:hls:roi_border:1.0",
-        "xci_name": "system_roi_border_0_1",
-        "xci_path": "ip/system_roi_border_0_1/system_roi_border_0_1.xci",
-        "inst_hier_path": "roi_border_0"
       }
     },
     "interface_nets": {
@@ -3285,7 +3294,7 @@
       },
       "cnn_accelerator_ddr_0_m_axi_gmem_io": {
         "interface_ports": [
-          "cnn_accelerator_ddr_0/m_axi_gmem_io",
+          "cnn_accelerator_ddr_0/m_axi_gmem_feature",
           "axi_mem_intercon/S02_AXI"
         ]
       },
@@ -3477,9 +3486,9 @@
           "axi_mem_intercon/S00_ACLK",
           "axi_mem_intercon/M00_ACLK",
           "axi_mem_intercon/S01_ACLK",
-          "cnn_accelerator_ddr_0/ap_clk",
           "roi_border_0/ap_clk",
-          "ps7_0_axi_periph/M03_ACLK"
+          "ps7_0_axi_periph/M03_ACLK",
+          "cnn_accelerator_ddr_0/ap_clk"
         ]
       },
       "processing_system7_0_FCLK_RESET0_N": {
@@ -3507,9 +3516,9 @@
           "axi_mem_intercon/M00_ARESETN",
           "axi_mem_intercon/S00_ARESETN",
           "axi_mem_intercon/S01_ARESETN",
-          "cnn_accelerator_ddr_0/ap_rst_n",
           "roi_border_0/ap_rst_n",
-          "ps7_0_axi_periph/M03_ARESETN"
+          "ps7_0_axi_periph/M03_ARESETN",
+          "cnn_accelerator_ddr_0/ap_rst_n"
         ]
       },
       "rst_ps7_0_100M_peripheral_reset": {
@@ -3582,16 +3591,7 @@
       },
       "/cnn_accelerator_ddr_0": {
         "address_spaces": {
-          "Data_m_axi_gmem_io": {
-            "segments": {
-              "SEG_processing_system7_0_HP0_DDR_LOWOCM": {
-                "address_block": "/processing_system7_0/S_AXI_HP0/HP0_DDR_LOWOCM",
-                "offset": "0x0000000000000000",
-                "range": "1G"
-              }
-            }
-          },
-          "Data_m_axi_gmem_params": {
+          "Data_m_axi_gmem_feature": {
             "segments": {
               "SEG_processing_system7_0_HP0_DDR_LOWOCM": {
                 "address_block": "/processing_system7_0/S_AXI_HP0/HP0_DDR_LOWOCM",
@@ -3601,6 +3601,15 @@
             }
           },
           "Data_m_axi_gmem_weights": {
+            "segments": {
+              "SEG_processing_system7_0_HP0_DDR_LOWOCM": {
+                "address_block": "/processing_system7_0/S_AXI_HP0/HP0_DDR_LOWOCM",
+                "offset": "0x0000000000000000",
+                "range": "1G"
+              }
+            }
+          },
+          "Data_m_axi_gmem_params": {
             "segments": {
               "SEG_processing_system7_0_HP0_DDR_LOWOCM": {
                 "address_block": "/processing_system7_0/S_AXI_HP0/HP0_DDR_LOWOCM",
