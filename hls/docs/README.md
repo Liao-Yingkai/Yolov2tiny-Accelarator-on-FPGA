@@ -7,6 +7,10 @@
 - [Loader、Writer 与层间 DDR 缓冲](yolov2_tiny_ddr_io.md)：模型布局、紧凑 RGB、NHWC 写回与 A/B 屏障。
 - [Im2Row](im2row.md)、[OS Systolic](systolic_os.md)、[ConvPostProcess](conv_postprocess.md)、[Pool](pool.md)：模块接口、实现与各自验证边界。
 
+## 独立视频叠加模块
+
+[ROI遮罩与检测框显示](../roi_overlay/README.md) 位于 `hls/roi_overlay/`，不参与CNN计算流水。它在640×480视频中显示416×416 ROI，将外侧填黑，并接收PS完成NMS后提交的检测框和标签。独立Top为 `roi_overlay`，测试入口为 `test_roi_overlay.cpp`；不能将该测试与CNN的testbench一起注册到同一个Top。
+
 ## 当前 testbench
 
 `cnn_accelerator/testbench/` 保留以下五个 YOLO 测试入口，每个文件含独立 `main()`，应按对应 Top 单独注册：
