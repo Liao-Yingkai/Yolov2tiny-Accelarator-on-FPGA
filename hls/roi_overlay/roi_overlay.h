@@ -27,7 +27,10 @@ static_assert(LABEL_HEIGHT_2 < (1 << 6) && CLASS_CHARS*FONT_CELL*2 <= (1 << 8) &
 using video_axis_t = ap_axiu<24, 1, 0, 0>;
 // 每次调用传递一个像素；视频自由运行，PS不需要Start。
 // command/data为单命令邮箱，status返回ACK及整批切换状态，位定义见README。
-// PS先BEGIN、上传前count框的全部9word，再COMMIT；有效提交仅在SOF确认。
+// PS先BEGIN、上传前count框的全部9word，再COMMIT；逐框检查完才可在SOF确认。
+// COMMIT检查需count+2个后续像素事务，检查期间的SOF不会激活新页。
+// status.pending覆盖检查及等待SOF；ACK仍表示新批次已在帧边界生效。
+// 几何WRITE延后1或5个像素事务ACK（字段未齐/准备布局），PS始终逐条等ACK。
 void roi_overlay(hls::stream<video_axis_t>& s_axis_video,
                  hls::stream<video_axis_t>& m_axis_video,
                  ap_uint<32> command, ap_uint<32> command_data,

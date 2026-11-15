@@ -36,7 +36,7 @@ inline ap_uint<5> overlay_font_row(ap_uint<8> ch, ap_uint<3> row) {
     else if (ch == '%') index = 37;
     else if (ch == '.') index = 38;
     if (ch == '-') return row == 3 ? ap_uint<5>(31) : ap_uint<5>(0);
-    return font[index][row];
+    return font[index.to_uint()][row.to_uint()];
 }
 } // namespace roi_overlay_detail
 #endif
