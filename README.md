@@ -2,8 +2,8 @@
 
 本仓库从 Zynq-7000 上的 MNIST 加速器演进而来。当前 **HLS 源码**面向固定的
 YOLOv2-tiny VOC 九层网络；**Vivado摄像头工程已接入YOLO IP和roi_overlay**。
-Vitis PS应用正分阶段迁移，当前完成SD模型加载验收入口，保留HDMI预览，
-尚不启动YOLO推理，也未接入新预处理、NMS和检测框上传。
+Vitis PS应用正分阶段迁移，当前接入SD模型加载、416×416 ROI整数预处理和
+连续YOLO原始张量推理，保留HDMI预览；检测框解码、NMS和列表上传尚未接入。
 
 ## 当前 HLS
 
@@ -52,7 +52,7 @@ AXI 写回顺序和板级时序需要分别检查综合报告、RTL 仿真与实
 ## 既有板级工程
 
 [Vivado 工程说明](vivado/README.md)记录了OV5640 480p、HDMI预览与Vitis
-裸机工程的打开方式。[SD模型加载说明](vivado/cnn_accel_cam/vitis/cnn_accel_cam/README.md)
-列出当前27个BIN文件的SD目录、DDR拼接和构建步骤；
+裸机工程的打开方式。[PS应用说明](vivado/cnn_accel_cam/vitis/cnn_accel_cam/README.md)
+列出27个BIN的SD目录、DDR拼接、ROI整数预处理、连续推理和构建步骤；
 [Overlay设计](hls/roi_overlay/README.md)说明新列表控制协议。
-使用匹配当前硬件的XSA和BSP，Build Platform后再构建PS应用；加载验收通过不等同于相机YOLO推理已完成。
+使用匹配当前硬件的XSA和BSP，Build Platform后再构建PS应用；软件检查和硬件Done不能代替板上数值及检测效果验证。

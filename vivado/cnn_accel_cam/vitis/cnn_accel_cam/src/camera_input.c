@@ -45,10 +45,10 @@ int camera_input_check(XAxiVdma *vdma)
 }
 
 int camera_input_capture(XAxiVdma *vdma, const uint8_t *frames,
-                         uint8_t snapshot[CAMERA_FRAME_BYTES])
+                         uint8_t snapshot[CAMERA_ROI_BYTES])
 {
     XTime wait_start, current_time;
-    unsigned int frame_index, event_index;
+    unsigned int frame_index, event_index, row;
     const uint8_t *source_frame;
     int result = camera_input_check(vdma);
     if (result != CAMERA_OK) {
@@ -99,10 +99,17 @@ int camera_input_capture(XAxiVdma *vdma, const uint8_t *frames,
     source_frame = frames + frame_index * CAMERA_FRAME_BYTES;
     /* DMA已经写DDR，CPU旧缓存可能过期；整帧对齐失效后才能读到DMA结果。 */
     Xil_DCacheInvalidateRange((INTPTR)source_frame, CAMERA_FRAME_BYTES);
-    memcpy(snapshot, source_frame, CAMERA_FRAME_BYTES);
-    /* 保持停车保护，逐字节比较CPU快照与源帧；不是传感器图像精度验证。 */
-    if (memcmp(snapshot, source_frame, CAMERA_FRAME_BYTES) != 0) {
-        result = CAMERA_COPY_MISMATCH;
+    /* 只搬运中心416行的有效像素；源行跨度1920，目标行跨度1248字节。 */
+    for (row = 0; row < CAMERA_ROI_SIDE; ++row) {
+        memcpy(snapshot + row * CAMERA_ROI_STRIDE,
+               source_frame + (CAMERA_ROI_Y + row) * CAMERA_STRIDE +
+                   CAMERA_ROI_X * CAMERA_BYTES_PER_PIXEL,
+               CAMERA_ROI_STRIDE);
+    }
+    /* 复制全程保持停车保护，结束时再次验证所有权，避免接收撕裂ROI。 */
+    if (XAxiVdma_CurrFrameStore(vdma, XAXIVDMA_READ) != frame_index ||
+        XAxiVdma_CurrFrameStore(vdma, XAXIVDMA_WRITE) == frame_index) {
+        result = CAMERA_OWNERSHIP;
         goto release_parking;
     }
     result = camera_dma_error(vdma) ? CAMERA_DMA_ERROR : CAMERA_OK;
@@ -119,7 +126,7 @@ const char *camera_input_reason(int result)
 {
     static const char * const names[] = {
         "ok", "config", "slot", "park", "dma_error", "timeout",
-        "ownership", "copy_mismatch"
+        "ownership"
     };
-    return result >= 0 && result <= CAMERA_COPY_MISMATCH ? names[result] : "unknown";
+    return result >= 0 && result <= CAMERA_OWNERSHIP ? names[result] : "unknown";
 }

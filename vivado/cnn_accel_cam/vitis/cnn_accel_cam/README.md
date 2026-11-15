@@ -1,8 +1,8 @@
-# YOLO SD模型加载验收
+# YOLO相机预处理与推理
 
-当前阶段保留640×480摄像头和HDMI预览，启动时将YOLOv2-tiny的九层模型从SD一次性加载到DDR，配置CNN三个基址后进入空闲。**不会启动推理，也没有接入新预处理、NMS和roi_overlay列表控制。**
+当前保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理和YOLO推理。**只得到原始预测张量，尚未接入检测框解码、NMS和roi_overlay列表控制。**
 
-`main.c`调用`camera_cnn_init()`；`camera_cnn.c`管理DDR数组与CNN驱动；`model_loader.c`只负责SD文件读取、长度检查和层顺序拼接。没有运行时JSON解析，也没有把大模型编译进ELF。
+`model_loader.c`负责SD加载；`camera_input.c`负责受保护的ROI复制；`camera_preprocess.c`负责RGB顺序和整数归一化/量化；`camera_cnn.c`负责DDR、单次启动、超时及缓存维护。没有运行时JSON解析，也没有把大模型编译进ELF。
 
 ## SD卡必须如何放文件
 
@@ -70,7 +70,7 @@ SD卡根目录/
 | bias/M/S参数 | 38,172 | 38,208 |
 | Feature A+B | 1,384,448 | 1,384,448 |
 
-每个Feature bank为692,224字节，B紧接A。后续每帧从A的前519,168字节读紧凑RGB输入，九层完成后在B的前21,632字节得到`13×13×128`的物理输出，其中仅125个逻辑通道有效。当前阶段不填输入、不读输出。
+每个Feature bank为692,224字节，B紧接A。预处理直接写A的前519,168字节，九层完成后在B的前21,632字节得到`13×13×128`物理输出，其中仅125个逻辑通道有效。不能将它解释为旧的10类结果结构。
 
 权重按Conv1～Conv8、Prediction顺序直接连接。参数对每层执行`bias.bin → quant.bin`，因为quant本身是完整M数组后接完整S数组，所以每层自然成为`[bias][M][S]`。层与层、字段与字段之间**不额外插入对齐空间**；只有整个参数数组的最后允许补容量。Prediction的参数字段各125个INT32，不按128通道存储。
 
@@ -78,13 +78,49 @@ SD卡根目录/
 
 PL侧地址单位与具体布局见[DDR设计](../../../../hls/docs/yolov2_tiny_ddr_io.md)。
 
+## ROI与整数预处理
+
+几何统一位于`camera_geometry.h`：视频640×480 BGR888，ROI为`[112,528)×[32,448)`，大小416×416，与Overlay一致。抓拍保留READ停车、两个新MM2S事件和READ/WRITE槽所有权检查；源帧invalidate后按行复制ROI，复制后再次核实所有权/DMA状态，再解除停车。所有停车后出口都解除停车；失败快照不可使用。快照由PS独占，不是VDMA第四帧。
+
+只复制519,168字节紧凑BGR，删除整帧复制和逐字节memcmp诊断。解除停车后才执行归一化，缩短预览定格时间。预处理只做BGR→RGB及点对点量化，直接写Feature A，无INT8整图二次复制：
+
+```text
+q = clamp(round_nearest_even(FP32(pixel/255) * FP32(1/input_scale)), -128,127)
+```
+
+以上是YOLO训练端`to_tensor`及`dump_trace.quantize_input`的离线参考；运行时使用整数M/S和最近偶数舍入，全部256种像素值必须一致。没有mean/std、灰度、反色、平均池化、resize、LUT或8通道补零。DDR保存紧凑RGB，尾通道由PL Loader补零。
+
+更换SD模型后，在仓库根目录重新生成同批输入系数并重编译：
+
+```bash
+python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
+  --metadata /path/to/YOLOV2_TINY/generated/metadata.json
+```
+
+默认metadata为本机YOLO导出路径，默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。不再使用旧MNIST模型导出工具。
+
+## 连续推理及DDR所有权
+
+```text
+取得可写A地址 → 安全抓取ROI → 预处理写A → flush输入A → Start
+→ 轮询Done → invalidate结果B → 本轮完成 → 立即取下一帧
+```
+
+AutoRestart保持关闭，每次只启动一张图。取消原100 ms节拍，但保留安全取帧等待；本次CNN完成前不能写入下一张图。
+
+输出是B中的只读视图，按`(y*13+x)*128+c`定位，`c<125`。不转置，也不复制成紧凑125通道；视图只在本次完成到下一次启动之间有效，后续NMS必须在复用Feature前消费完。
+
+Start前清旧Done，启动后只轮询`IsDone`，避免其他控制寄存器读取偷清COR完成事件。超时阈值为10秒；推理超时或异常Busy后锁住缓冲访问并停止程序，不自动复位或继续写A。
+
 ## 构建与运行边界
 
 1. 使用与当前Vivado设计一致的XSA和bitstream。
 2. 在Vitis中Build Platform，确认应用实际使用的导出目录包含`ff.h`、`ffconf.h`以及`libxilffs.a`，而不只是BSP设置界面已勾选。
 3. 刷新应用并重新生成构建文件。Debug/Release的链接组均需包含`-lxilffs`。
-4. 本阶段在两种配置中排除了旧`camera_preprocess.c`和`camera_display.c`。文件暂留供后续重构，不连接旧灰度/数字显示流程；不能单独使用历史Debug/Release目录中尚未重生成的Makefile。
+4. Debug/Release均编译新的`camera_preprocess.c`，继续排除旧`camera_display.c`；不能单独使用历史Debug/Release目录中尚未重生成的Makefile。
 5. 下载当前bitstream、初始化PS/DDR、运行新ELF；观察HDMI预览及UART。
+
+实际连续运行建议使用Release（现有配置为`-O2`）；Debug的`-O0`适合单步检查，不适合作为预处理性能结果。不要启用fast-math来改变数值约定。
 
 缺文件、文件长度不符、读取失败、DDR范围/对齐异常或CNN并非Idle都会使初始化失败；不启动CNN、不允许将半加载模型视为有效。已成功初始化时再次调用初始化函数不会重新加载SD。
 
@@ -102,16 +138,16 @@ Model conv1: weights=1152 params=192 loaded
 Model prediction: weights=131072 params=1500 loaded
 Model: all 27 files loaded weights=15859328 params=38172
 YOLO model ready; accelerator not started
-[APP] Model ready; inference is not started in this stage.
+[APP] Continuous YOLO inference ready; no NMS or overlay yet.
 ```
 
-地址由链接器实际分配，不要求与示例相同；B必须比A大692,224字节。到最后一行后程序空闲，HDMI继续预览，不再周期打印，也不会得到检测结果。这是当前验收入口的预期行为。
+地址由链接器实际分配，B必须比A大692,224字节。初始化本身不启动CNN，随后主循环逐帧启动。正常循环不打印每帧完成、计数、张量或耗时；串口保持安静不代表程序停止。只在抓拍错误状态变化、恢复或推理失败时打印信息，当前不会显示检测结果。
 
 文件错误会打印具体路径、FRESULT，或者预期/实际长度与读取偏移；主入口随后打印初始化失败原因。没有逐块读取进度、逐像素日志、正常flush提示或耗时刷屏。
 
-本阶段没有实现预处理、NMS或Overlay命令发送，不要将“model ready”误认为已经完成YOLO相机识别。旧`camera_model_data.h`、`camera_model_input.h`、`softmax_params.h`不再是当前模型加载入口；后续部署的scale等配置也必须与SD模型一致。
+本阶段未实现NMS或Overlay命令。`camera_model_input.h`现在保存YOLO输入系数；旧`camera_model_data.h`和`softmax_params.h`不再是部署入口。输入及后续输出scale必须与SD模型一致。
 
-## 本轮软件检查（2026-11-15）
+## 上一轮模型加载软件检查（2026-11-15）
 
 - 当前构建范围的8个应用C文件通过ARM Cortex-A9编译；使用现有链接脚本和Xilinx specs完成ELF链接。只有未修改的`vdma_api.c`保留原有的有符号/无符号比较警告。
 - 当时平台导出目录尚缺FatFs头文件和库，检查在独立目录中按当前BSP配置重建`libxilffs.a`，与已导出的`libxil.a`链接；没有改写用户BSP和IDE生成文件。该结果不代表用户平台已经完成Build Platform。
@@ -120,3 +156,16 @@ YOLO model ready; accelerator not started
 - 应用工程XML和本次修改范围的差异检查通过；用户原有平台/FSBL改动保持不动。
 
 记录位于仓库根忽略目录`build/ps/sd_model_loader_check_20261115/`，包括ARM ELF/map、独立xilffs库和主机检查；不提交生成物。尚未下载ELF或进行板上SD读取、长文件名访问、HDMI及DDR总线实测。
+
+## 本轮预处理与推理软件检查（2026-11-15）
+
+- 当前9个应用C文件完成ARM编译和ELF链接，使用当前平台实际导出的BSP及xilffs库；没有改动BSP、RTL或bitstream。
+- C输入量化与独立binary32参考对全部256种字节一致；对416×416有规律BGR快照核对全部173,056个像素的RGB输出顺序及缓冲边界。Release对应的`-O2`预处理对象中量化已内联，未见浮点运算或数学helper依赖。
+- 抓拍主机模拟核对精确ROI行偏移、两个帧事件、源帧invalidate，以及复制后所有权失败仍解除停车；不等于真实VDMA时序已验证。
+- 推理主机模拟核对清旧Done、输入flush、屏障、Start、Done轮询、结果invalidate和屏障的顺序；重复调用均返回B视图，启动后没有额外IsIdle读取。超时后输出为空、输入不可写、不允许再次启动，异常Busy也锁住访问。
+- 正常逐帧日志和对应计数器已移除，保留初始化、错误状态变化、恢复和停机日志。最新ELF不含逐帧打印。
+- 本轮检查生成物均保存在忽略目录`build/ps/yolo_camera_infer_check_20261115/`；Git工作区只保留必要源码、配置和文档变更，未自动提交。
+
+以上是软件构建和模拟接口检查，尚未下载新ELF或执行真实摄像头→YOLO推理，不声明板上帧率或检测精度。本轮没有运行HLS综合、C-sim或RTL co-sim。
+
+完整检查记录：[validation.log](../../../../build/ps/yolo_camera_infer_check_20261115/validation.log)（本机生成，不提交）。

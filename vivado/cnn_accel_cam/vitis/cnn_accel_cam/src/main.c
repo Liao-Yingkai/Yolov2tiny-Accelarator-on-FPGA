@@ -10,14 +10,20 @@
 #include "ov5640/ov5640_init.h"
 #include "camera_input.h"
 #include "camera_cnn.h"
+#include "camera_geometry.h"
+#include "camera_preprocess.h"
+#include "model_loader.h"
 
 #define VDMA_ID            XPAR_AXIVDMA_0_DEVICE_ID    //VDMA器件ID
 #define DISP_VTC_ID        XPAR_VTC_0_DEVICE_ID        //VTC器件ID
 
 /* 三个连续DDR帧槽由VDMA循环写入和读取，维持摄像头到HDMI的预览。
- * 数组及各帧均按64字节对齐；启动前CPU执行flush，启动后不再访问帧内容。
- * 本阶段不抓拍、不建立推理输入，模型加载缓冲由camera_cnn模块独立管理。 */
+ * 数组及各帧均按64字节对齐；启动前CPU执行flush，运行时只在抓拍模块
+ * 确认槽所有权后读取 ROI。模型加载缓冲由 camera_cnn 模块独立管理。 */
 static u8 camera_frames[CAMERA_FRAMES*CAMERA_FRAME_BYTES] __attribute__((aligned(64)));
+/* 抓拍输出为紧密 BGR888 ROI；CPU 独占，不交给 VDMA。 */
+static uint8_t roi_snapshot[CAMERA_ROI_BYTES] __attribute__((aligned(64)));
+_Static_assert(CAMERA_ROI_BYTES == MODEL_INPUT_BYTES, "ROI matches model input");
 _Static_assert(CAMERA_WIDTH == 640U && CAMERA_HEIGHT == 480U &&
     CAMERA_BYTES_PER_PIXEL == 3U && CAMERA_FRAME_BYTES % 64U == 0U,
     "preview geometry and alignment must match");
@@ -88,9 +94,43 @@ int main(void)
             return EXIT_FAILURE;
         }
     }
-    xil_printf("[APP] Model ready; inference is not started in this stage.\r\n");
-    /* 本阶段只验收SD模型加载与预览，不启动CNN，也不进行预处理、
-     * 后处理或文字叠加。VDMA和显示控制器已自主运行，空闲循环不干预预览。 */
-    for (;;) {
+    xil_printf("[APP] Continuous YOLO inference ready; no NMS or overlay yet.\r\n");
+    {
+        int previous_capture_error = CAMERA_OK;
+        for (;;) {
+            const int8_t *prediction;
+            camera_cnn_status_t cnn_status;
+            int capture_status;
+            /* 取得 A 前先查硬件 idle；绝不在 PL 仍运行时覆盖输入。 */
+            int8_t *input = camera_cnn_input_buffer();
+            if (input == NULL) {
+                xil_printf("[APP] CNN input unavailable; board reset required\r\n");
+                return EXIT_FAILURE;
+            }
+            capture_status = camera_input_capture(&vdma, camera_frames, roi_snapshot);
+            if (capture_status != CAMERA_OK) {
+                if (capture_status != previous_capture_error)
+                    xil_printf("[CAPTURE] %s\r\n", camera_input_reason(capture_status));
+                previous_capture_error = capture_status;
+                /* 仅暂时没有新帧/槽所有权竞争可重试；失败快照不可预处理。
+                 * 配置、停车、槽号或 DMA 故障须停机检查，不自动复位。 */
+                if (capture_status == CAMERA_TIMEOUT || capture_status == CAMERA_OWNERSHIP)
+                    continue;
+                return EXIT_FAILURE;
+            }
+            if (previous_capture_error != CAMERA_OK) {
+                xil_printf("[CAPTURE] recovered\r\n");
+                previous_capture_error = CAMERA_OK;
+            }
+            /* 在 A 中直接生成完整 416×416×3 int8 输入，不额外复制。 */
+            camera_preprocess(roi_snapshot, input);
+            cnn_status = camera_cnn_run(&prediction);
+            if (cnn_status != CAMERA_CNN_OK) {
+                xil_printf("[APP] CNN stopped: %s\r\n", camera_cnn_reason(cnn_status));
+                return EXIT_FAILURE;
+            }
+            /* 原始 B 结果仅供调试/未来 NMS；本阶段不解释检测框。 */
+            (void)prediction;
+        }
     }
 }

@@ -1,0 +1,18 @@
+#ifndef CAMERA_GEOMETRY_H
+#define CAMERA_GEOMETRY_H
+/* PS摄像头几何；像素低地址依次为B、G、R，各占1字节。 */
+#define CAMERA_WIDTH 640U
+#define CAMERA_HEIGHT 480U
+#define CAMERA_BYTES_PER_PIXEL 3U
+/* VDMA环形缓冲的物理槽数；槽编号不是新画面的序号。 */
+#define CAMERA_FRAMES 3U
+/* DDR原帧无行尾填充，跨度和容量单位均为字节。 */
+#define CAMERA_STRIDE (CAMERA_WIDTH * CAMERA_BYTES_PER_PIXEL)
+#define CAMERA_FRAME_BYTES (CAMERA_STRIDE * CAMERA_HEIGHT)
+/* 中心裁剪坐标和边长单位为像素；ROI自身紧密排列，无缩放。 */
+#define CAMERA_ROI_X 112U
+#define CAMERA_ROI_Y 32U
+#define CAMERA_ROI_SIDE 416U
+#define CAMERA_ROI_STRIDE (CAMERA_ROI_SIDE * CAMERA_BYTES_PER_PIXEL)
+#define CAMERA_ROI_BYTES (CAMERA_ROI_STRIDE * CAMERA_ROI_SIDE)
+#endif
