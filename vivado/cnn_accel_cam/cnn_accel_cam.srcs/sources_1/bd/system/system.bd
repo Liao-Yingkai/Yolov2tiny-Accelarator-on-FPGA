@@ -43,8 +43,8 @@
           "auto_pc": ""
         }
       },
-      "roi_border_0": "",
-      "cnn_accelerator_ddr_0": ""
+      "cnn_accelerator_ddr_0": "",
+      "roi_overlay_0": ""
     },
     "interface_ports": {
       "DDR": {
@@ -3200,12 +3200,6 @@
           }
         }
       },
-      "roi_border_0": {
-        "vlnv": "xilinx.com:hls:roi_border:1.0",
-        "xci_name": "system_roi_border_0_1",
-        "xci_path": "ip/system_roi_border_0_1/system_roi_border_0_1.xci",
-        "inst_hier_path": "roi_border_0"
-      },
       "cnn_accelerator_ddr_0": {
         "vlnv": "xilinx.com:hls:cnn_accelerator_ddr:1.0",
         "xci_name": "system_cnn_accelerator_ddr_0_0",
@@ -3259,6 +3253,12 @@
             }
           }
         }
+      },
+      "roi_overlay_0": {
+        "vlnv": "xilinx.com:hls:roi_overlay:1.0",
+        "xci_name": "system_roi_overlay_0_0",
+        "xci_path": "ip/system_roi_overlay_0_0/system_roi_overlay_0_0.xci",
+        "inst_hier_path": "roi_overlay_0"
       }
     },
     "interface_nets": {
@@ -3277,7 +3277,7 @@
       "axi_vdma_0_M_AXIS_MM2S": {
         "interface_ports": [
           "axi_vdma_0/M_AXIS_MM2S",
-          "roi_border_0/s_axis_video"
+          "roi_overlay_0/s_axis_video"
         ]
       },
       "axi_vdma_0_M_AXI_MM2S": {
@@ -3361,12 +3361,12 @@
       "ps7_0_axi_periph_M03_AXI": {
         "interface_ports": [
           "ps7_0_axi_periph/M03_AXI",
-          "roi_border_0/s_axi_control"
+          "roi_overlay_0/s_axi_control"
         ]
       },
-      "roi_border_0_m_axis_video": {
+      "roi_overlay_0_m_axis_video": {
         "interface_ports": [
-          "roi_border_0/m_axis_video",
+          "roi_overlay_0/m_axis_video",
           "v_axi4s_vid_out_0/video_in"
         ]
       },
@@ -3486,9 +3486,9 @@
           "axi_mem_intercon/S00_ACLK",
           "axi_mem_intercon/M00_ACLK",
           "axi_mem_intercon/S01_ACLK",
-          "roi_border_0/ap_clk",
           "ps7_0_axi_periph/M03_ACLK",
-          "cnn_accelerator_ddr_0/ap_clk"
+          "cnn_accelerator_ddr_0/ap_clk",
+          "roi_overlay_0/ap_clk"
         ]
       },
       "processing_system7_0_FCLK_RESET0_N": {
@@ -3516,9 +3516,9 @@
           "axi_mem_intercon/M00_ARESETN",
           "axi_mem_intercon/S00_ARESETN",
           "axi_mem_intercon/S01_ARESETN",
-          "roi_border_0/ap_rst_n",
           "ps7_0_axi_periph/M03_ARESETN",
-          "cnn_accelerator_ddr_0/ap_rst_n"
+          "cnn_accelerator_ddr_0/ap_rst_n",
+          "roi_overlay_0/ap_rst_n"
         ]
       },
       "rst_ps7_0_100M_peripheral_reset": {
@@ -3551,8 +3551,8 @@
                 "offset_base_param": "C_S_AXI_CONTROL_BASEADDR",
                 "offset_high_param": "C_S_AXI_CONTROL_HIGHADDR"
               },
-              "SEG_roi_border_0_Reg": {
-                "address_block": "/roi_border_0/s_axi_control/Reg",
+              "SEG_roi_overlay_0_Reg": {
+                "address_block": "/roi_overlay_0/s_axi_control/Reg",
                 "offset": "0x40010000",
                 "range": "64K",
                 "offset_base_param": "C_S_AXI_CONTROL_BASEADDR",
