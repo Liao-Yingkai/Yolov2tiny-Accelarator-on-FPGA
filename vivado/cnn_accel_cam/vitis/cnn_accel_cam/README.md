@@ -1,8 +1,8 @@
 # YOLO相机预处理与推理
 
-当前保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理和YOLO推理。**只得到原始预测张量，尚未接入检测框解码、NMS和roi_overlay列表控制。**
+当前保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理、YOLO推理、解码和NMS。**PS已生成检测列表，但尚未发送给roi_overlay，HDMI不会出现本轮检测框。**
 
-`model_loader.c`负责SD加载；`camera_input.c`负责受保护的ROI复制；`camera_preprocess.c`负责RGB顺序和整数归一化/量化；`camera_cnn.c`负责DDR、单次启动、超时及缓存维护。没有运行时JSON解析，也没有把大模型编译进ELF。
+`model_loader.c`负责SD加载；`camera_input.c`负责受保护的ROI复制；`camera_preprocess.c`负责RGB顺序和整数归一化/量化；`camera_cnn.c`负责DDR、单次启动、超时及缓存维护；`camera_postprocess.c`负责解码/NMS。没有运行时JSON解析，也没有把大模型编译进ELF。
 
 ## SD卡必须如何放文件
 
@@ -103,20 +103,47 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
 
 ```text
 取得可写A地址 → 安全抓取ROI → 预处理写A → flush输入A → Start
-→ 轮询Done → invalidate结果B → 本轮完成 → 立即取下一帧
+→ 轮询Done → invalidate结果B → 解码/NMS生成检测列表 → 立即取下一帧
 ```
 
 AutoRestart保持关闭，每次只启动一张图。取消原100 ms节拍，但保留安全取帧等待；本次CNN完成前不能写入下一张图。
 
-输出是B中的只读视图，按`(y*13+x)*128+c`定位，`c<125`。不转置，也不复制成紧凑125通道；视图只在本次完成到下一次启动之间有效，后续NMS必须在复用Feature前消费完。
+输出是B中的只读视图，按`(y*13+x)*128+c`定位，`c<125`。不转置，也不复制成紧凑125通道；视图只在本次完成到下一次启动之间有效。当前解码/NMS在复用Feature前同步消费完，结果复制到独立的`detections`列表。
 
 Start前清旧Done，启动后只轮询`IsDone`，避免其他控制寄存器读取偷清COR完成事件。超时阈值为10秒；推理超时或异常Busy后锁住缓冲访问并停止程序，不自动复位或继续写A。
+
+## 检测解码与NMS
+
+每个网格的逻辑通道按`25*anchor+field`解释，字段是`tx,ty,tw,th,objectness,20类logits`。只读取0..124通道，忽略125..127填充。使用Prediction输出scale反量化；当前scale为`0.19452644884586334`、zero_point为0。
+
+```text
+center_xy = (sigmoid(tx,ty) + grid_xy) / 13
+width_height = exp(tw,th) * anchor_width_height / 13
+score[class] = sigmoid(objectness) * softmax(class_logits)[class]
+```
+
+PS用float、expf及稳定sigmoid/softmax计算，不改变PL量化规则，不增加PL DSP/BRAM占用。Softmax先减最大值，objectness不超过阈值时安全跳过，至少一个类别过阈值后才计算框。保留所有过阈值类别，不简化为每个anchor取一个argmax。
+
+默认配置在`camera_postprocess.h`：score严格大于0.25，同类框IoU严格大于0.45时抑制，最多16个结果。面积按连续坐标计算、不加1。先在归一化坐标中裁剪到[0,1]并丢弃零面积框，再NMS，最后乘416得到ROI内浮点像素坐标，不加视频偏移、不取整。
+
+静态候选区容量`13×13×5×20=16900`，位于PS DDR，不占大栈或PL BRAM，没有预先Top-K截断。候选按分数降序，只与已经保留的同类框比较；16个幸存者后停止。并列分数按anchor→y→x→class序号排序，可确定复现，但不能保证与PyTorch不同设备对同分框的任选顺序一致。Python评估默认阈值0.01、最多300框，对照时应统一阈值、并列规则、零面积规则和最终数量。
+
+`camera_postprocess(prediction, &detections)`返回本帧列表，count为0表示无目标，不沿用上一帧。每项有ROI内left/top/right/bottom、最终score和class_id；`camera_class_name()`返回模型类别名。列表独立于B区，供后续Overlay使用；正常主循环不打印结果。
+
+更换模型时，还需从同一metadata生成输出scale、anchors和类别名：
+
+```bash
+python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
+  --metadata /path/to/YOLOV2_TINY/generated/metadata.json
+```
+
+默认生成`src/camera_model_output.h`，不增加SD文件或运行时JSON解析。两份小型配置头及SD的27个BIN必须来自同一次导出，不能沿用旧MNIST Softmax参数。
 
 ## 构建与运行边界
 
 1. 使用与当前Vivado设计一致的XSA和bitstream。
 2. 在Vitis中Build Platform，确认应用实际使用的导出目录包含`ff.h`、`ffconf.h`以及`libxilffs.a`，而不只是BSP设置界面已勾选。
-3. 刷新应用并重新生成构建文件。Debug/Release的链接组均需包含`-lxilffs`。
+3. 刷新应用并重新生成构建文件。Debug/Release的链接组均需包含`-lxilffs`和`-lm`。
 4. Debug/Release均编译新的`camera_preprocess.c`，继续排除旧`camera_display.c`；不能单独使用历史Debug/Release目录中尚未重生成的Makefile。
 5. 下载当前bitstream、初始化PS/DDR、运行新ELF；观察HDMI预览及UART。
 
@@ -138,14 +165,14 @@ Model conv1: weights=1152 params=192 loaded
 Model prediction: weights=131072 params=1500 loaded
 Model: all 27 files loaded weights=15859328 params=38172
 YOLO model ready; accelerator not started
-[APP] Continuous YOLO inference ready; no NMS or overlay yet.
+[APP] Continuous YOLO decode/NMS ready; overlay not connected.
 ```
 
-地址由链接器实际分配，B必须比A大692,224字节。初始化本身不启动CNN，随后主循环逐帧启动。正常循环不打印每帧完成、计数、张量或耗时；串口保持安静不代表程序停止。只在抓拍错误状态变化、恢复或推理失败时打印信息，当前不会显示检测结果。
+地址由链接器实际分配，B必须比A大692,224字节。初始化本身不启动CNN，随后主循环逐帧推理并完成解码/NMS。正常循环不打印每帧完成、计数、张量、检测列表或耗时；串口保持安静不代表程序停止。只在错误状态变化、恢复或推理/后处理失败时打印信息，当前不会在HDMI显示检测结果。
 
 文件错误会打印具体路径、FRESULT，或者预期/实际长度与读取偏移；主入口随后打印初始化失败原因。没有逐块读取进度、逐像素日志、正常flush提示或耗时刷屏。
 
-本阶段未实现NMS或Overlay命令。`camera_model_input.h`现在保存YOLO输入系数；旧`camera_model_data.h`和`softmax_params.h`不再是部署入口。输入及后续输出scale必须与SD模型一致。
+本阶段未接入Overlay命令。`camera_model_input.h`保存YOLO输入系数，`camera_model_output.h`保存解码配置；旧`camera_model_data.h`和`softmax_params.h`不再是部署入口。
 
 ## 上一轮模型加载软件检查（2026-11-15）
 
@@ -157,7 +184,7 @@ YOLO model ready; accelerator not started
 
 记录位于仓库根忽略目录`build/ps/sd_model_loader_check_20261115/`，包括ARM ELF/map、独立xilffs库和主机检查；不提交生成物。尚未下载ELF或进行板上SD读取、长文件名访问、HDMI及DDR总线实测。
 
-## 本轮预处理与推理软件检查（2026-11-15）
+## 上一轮预处理与推理软件检查（2026-11-15）
 
 - 当前9个应用C文件完成ARM编译和ELF链接，使用当前平台实际导出的BSP及xilffs库；没有改动BSP、RTL或bitstream。
 - C输入量化与独立binary32参考对全部256种字节一致；对416×416有规律BGR快照核对全部173,056个像素的RGB输出顺序及缓冲边界。Release对应的`-O2`预处理对象中量化已内联，未见浮点运算或数学helper依赖。
@@ -169,3 +196,13 @@ YOLO model ready; accelerator not started
 以上是软件构建和模拟接口检查，尚未下载新ELF或执行真实摄像头→YOLO推理，不声明板上帧率或检测精度。本轮没有运行HLS综合、C-sim或RTL co-sim。
 
 完整检查记录：[validation.log](../../../../build/ps/yolo_camera_infer_check_20261115/validation.log)（本机生成，不提交）。
+
+## 本轮解码/NMS软件检查（2026-11-15）
+
+- 10个应用C文件使用当前导出BSP、xilffs及libm完成ARM编译和链接；仅未修改的`vdma_api.c`保留原有符号比较警告。没有修改HLS、BSP或bitstream。
+- 将真实`trace_prediction_postprocess_int8_hwc_0000.bin`的HWC125数据补成物理HWC128后，C与独立NumPy解码/NMS参考均保留1个检测；类别一致，分数/坐标在`rtol=3e-5、atol=2e-4`范围内一致。当前环境没有PyTorch/torchvision，因此没有直接执行其NMS内核。
+- 空结果、已知网格/anchor/通道地址、填充通道污染、多类别候选、同类抑制/异类保留、裁边、零面积过滤、2,535个过阈值候选、16框上限、INT8极值、无效参数及连续调用清空结果检查均通过。
+- 模型输出配置重新生成后与提交用头文件逐字节一致。候选数组为473,200字节静态DDR，与模型、Feature、视频缓冲和结果列表互不重叠；当前链接的newlib qsort无堆分配调用。
+- 正常循环仍无逐帧UART日志，SD文件组织不变。Git差异检查通过；生成物只在忽略目录`build/ps/yolo_decode_nms_check_20261115/`，没有自动提交。
+
+本轮尚未上板验证后处理耗时、精度或检测效果，也没有接入Overlay传输。检查记录：[validation.log](../../../../build/ps/yolo_decode_nms_check_20261115/validation.log)。

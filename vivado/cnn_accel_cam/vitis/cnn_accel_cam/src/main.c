@@ -12,6 +12,7 @@
 #include "camera_cnn.h"
 #include "camera_geometry.h"
 #include "camera_preprocess.h"
+#include "camera_postprocess.h"
 #include "model_loader.h"
 
 #define VDMA_ID            XPAR_AXIVDMA_0_DEVICE_ID    //VDMA器件ID
@@ -23,6 +24,8 @@
 static u8 camera_frames[CAMERA_FRAMES*CAMERA_FRAME_BYTES] __attribute__((aligned(64)));
 /* 抓拍输出为紧密 BGR888 ROI；CPU 独占，不交给 VDMA。 */
 static uint8_t roi_snapshot[CAMERA_ROI_BYTES] __attribute__((aligned(64)));
+/* 保存最近一次完整解码列表，便于调试及未来叠加；不持有A/B工作区指针。 */
+static camera_detections_t detections;
 _Static_assert(CAMERA_ROI_BYTES == MODEL_INPUT_BYTES, "ROI matches model input");
 _Static_assert(CAMERA_WIDTH == 640U && CAMERA_HEIGHT == 480U &&
     CAMERA_BYTES_PER_PIXEL == 3U && CAMERA_FRAME_BYTES % 64U == 0U,
@@ -94,7 +97,7 @@ int main(void)
             return EXIT_FAILURE;
         }
     }
-    xil_printf("[APP] Continuous YOLO inference ready; no NMS or overlay yet.\r\n");
+    xil_printf("[APP] Continuous YOLO decode/NMS ready; overlay not connected.\r\n");
     {
         int previous_capture_error = CAMERA_OK;
         for (;;) {
@@ -129,8 +132,11 @@ int main(void)
                 xil_printf("[APP] CNN stopped: %s\r\n", camera_cnn_reason(cnn_status));
                 return EXIT_FAILURE;
             }
-            /* 原始 B 结果仅供调试/未来 NMS；本阶段不解释检测框。 */
-            (void)prediction;
+            /* 同步消费B中的输出，必须在下一轮复用A/B前完成解码和NMS。 */
+            if (camera_postprocess(prediction, &detections) != CAMERA_POSTPROCESS_OK) {
+                xil_printf("[APP] YOLO postprocess failed\r\n");
+                return EXIT_FAILURE;
+            }
         }
     }
 }

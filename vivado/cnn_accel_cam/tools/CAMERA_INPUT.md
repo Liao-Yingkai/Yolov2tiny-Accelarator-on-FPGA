@@ -23,4 +23,15 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
 - 生成器枚举256种输入值，寻找32位安全、逐值一致的M/S；失败时拒绝更新头文件。
 - 运行时仅整数乘法、移位、最近偶数处理和饱和，没有浮点或查表。
 
-权重及bias/M/S仍由SD的27个BIN加载，不再使用旧`export_camera_model.py`生成MNIST模型数组；`generate_softmax_params.py`也不是本阶段入口。当前不计算检测概率，解码/NMS后续接入。
+权重及bias/M/S仍由SD的27个BIN加载，不再使用旧`export_camera_model.py`生成MNIST模型数组；`generate_softmax_params.py`也不是当前入口。
+
+## 输出解码配置
+
+当前PS已接入解码/NMS。更换SD模型后，还需从同一metadata生成Prediction输出scale、anchors和类别名：
+
+```bash
+python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
+  --metadata /path/to/YOLOV2_TINY/generated/metadata.json
+```
+
+默认输出`../vitis/cnn_accel_cam/src/camera_model_output.h`。生成器验证固定416输入、20类、5个anchor、125逻辑/128物理通道及零点0；校验完成后才更新配置头。当前输出scale为`0.19452644884586334`，不生成指数LUT或追加SD文件。输入、输出配置头及SD模型必须来自同一次导出。
