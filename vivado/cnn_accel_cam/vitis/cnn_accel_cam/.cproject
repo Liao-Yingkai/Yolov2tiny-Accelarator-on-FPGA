@@ -89,7 +89,7 @@
                                 								
                                 <option id="xilinx.gnu.linker.inferred.swplatform.flags.1006568566" superClass="xilinx.gnu.linker.inferred.swplatform.flags" valueType="libs">
                                     									
-                                    <listOptionValue builtIn="false" value="-Wl,--start-group,-lxil,-lgcc,-lc,--end-group"/>
+                                    <listOptionValue builtIn="false" value="-Wl,--start-group,-lxilffs,-lxil,-lgcc,-lc,--end-group"/>
                                     								
                                 </option>
                                 								
@@ -119,7 +119,7 @@
                                 								
                                 <option id="xilinx.gnu.linker.inferred.swplatform.flags.1543353053" superClass="xilinx.gnu.linker.inferred.swplatform.flags" valueType="libs">
                                     									
-                                    <listOptionValue builtIn="false" value="-Wl,--start-group,-lxil,-lgcc,-lc,--end-group"/>
+                                    <listOptionValue builtIn="false" value="-Wl,--start-group,-lxilffs,-lxil,-lgcc,-lc,--end-group"/>
                                     								
                                 </option>
                                 								
@@ -135,7 +135,7 @@
                     					
                     <sourceEntries>
                         						
-                        <entry excluding="_ide" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="_ide|src/camera_display.c|src/camera_preprocess.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         					
                     </sourceEntries>
                     				
@@ -233,7 +233,7 @@
                                 								
                                 <option id="xilinx.gnu.linker.inferred.swplatform.flags.1921626053" superClass="xilinx.gnu.linker.inferred.swplatform.flags" valueType="libs">
                                     									
-                                    <listOptionValue builtIn="false" value="-Wl,--start-group,-lxil,-lgcc,-lc,--end-group"/>
+                                    <listOptionValue builtIn="false" value="-Wl,--start-group,-lxilffs,-lxil,-lgcc,-lc,--end-group"/>
                                     								
                                 </option>
                                 								
@@ -263,7 +263,7 @@
                                 								
                                 <option id="xilinx.gnu.linker.inferred.swplatform.flags.1176850689" superClass="xilinx.gnu.linker.inferred.swplatform.flags" valueType="libs">
                                     									
-                                    <listOptionValue builtIn="false" value="-Wl,--start-group,-lxil,-lgcc,-lc,--end-group"/>
+                                    <listOptionValue builtIn="false" value="-Wl,--start-group,-lxilffs,-lxil,-lgcc,-lc,--end-group"/>
                                     								
                                 </option>
                                 								
@@ -279,7 +279,7 @@
                     					
                     <sourceEntries>
                         						
-                        <entry excluding="_ide" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="_ide|src/camera_display.c|src/camera_preprocess.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         					
                     </sourceEntries>
                     				

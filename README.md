@@ -1,8 +1,9 @@
 # FPGA INT8 CNN Accelerator
 
 本仓库从 Zynq-7000 上的 MNIST 加速器演进而来。当前 **HLS 源码**面向固定的
-YOLOv2-tiny VOC 九层网络；仓库里现有的 **Vivado IP、Vitis PS 工程和摄像头
-演示**仍属于旧 MNIST 版本，不能直接驱动当前 YOLO Top。
+YOLOv2-tiny VOC 九层网络；**Vivado摄像头工程已接入YOLO IP和roi_overlay**。
+Vitis PS应用正分阶段迁移，当前完成SD模型加载验收入口，保留HDMI预览，
+尚不启动YOLO推理，也未接入新预处理、NMS和检测框上传。
 
 ## 当前 HLS
 
@@ -29,7 +30,7 @@ YOLOv2-tiny VOC 九层网络；仓库里现有的 **Vivado IP、Vitis PS 工程�
 | [hls/cnn_accelerator/testbench](hls/cnn_accelerator/testbench) | 模块级测试与 YOLO Top BIN 对照 |
 | [hls/cnn_accelerator/script](hls/cnn_accelerator/script) | Vitis HLS 工程入口 |
 | [hls/docs](hls/docs) | 设计、布局与验证记录 |
-| [vivado/cnn_accel_cam](vivado/cnn_accel_cam) | 旧版摄像头预览、Vivado/IP 和 Vitis PS 工程 |
+| [vivado/cnn_accel_cam](vivado/cnn_accel_cam) | 摄像头预览、YOLO/Overlay IP和分阶段迁移的Vitis PS工程 |
 | `build/hls/` | 本地生成的工程、日志和报告（不提交 Git） |
 
 安装 Vitis HLS 2022.2 后，在仓库根目录执行：
@@ -50,8 +51,8 @@ AXI 写回顺序和板级时序需要分别检查综合报告、RTL 仿真与实
 
 ## 既有板级工程
 
-[Vivado 工程说明](vivado/README.md)记录了 OV5640 480p、HDMI 预览与 Vitis
-裸机工程的打开方式。[ROI 显示设计](hls/docs/roi_display.md)和
-[历史 MNIST DDR Wrapper](hls/docs/ddr_wrapper.md)说明旧板级 ABI。
-当前没有同步修改 Vivado、PS 应用、驱动、XSA 或 bitstream。切换到新 YOLO Top
-时需要重新导出 IP，并按新版内存布局和生成的驱动更新 PS 应用。
+[Vivado 工程说明](vivado/README.md)记录了OV5640 480p、HDMI预览与Vitis
+裸机工程的打开方式。[SD模型加载说明](vivado/cnn_accel_cam/vitis/cnn_accel_cam/README.md)
+列出当前27个BIN文件的SD目录、DDR拼接和构建步骤；
+[Overlay设计](hls/roi_overlay/README.md)说明新列表控制协议。
+使用匹配当前硬件的XSA和BSP，Build Platform后再构建PS应用；加载验收通过不等同于相机YOLO推理已完成。

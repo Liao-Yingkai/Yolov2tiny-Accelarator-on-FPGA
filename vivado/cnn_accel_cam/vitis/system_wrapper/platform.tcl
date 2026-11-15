@@ -33,3 +33,17 @@ platform generate
 platform active {system_wrapper}
 platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
 platform generate -domains 
+platform active {system_wrapper}
+platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform generate -domains 
+bsp reload
+bsp setlib -name xilffs -ver 4.8
+bsp write
+bsp reload
+catch {bsp regenerate}
+bsp reload
+bsp config use_lfn "1"
+bsp write
+bsp reload
+catch {bsp regenerate}
+platform generate -domains standalone_ps7_cortexa9_0 

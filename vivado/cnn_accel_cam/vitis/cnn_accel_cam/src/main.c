@@ -1,6 +1,4 @@
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include "xil_types.h"
 #include "xil_cache.h"
 #include "xparameters.h"
@@ -11,25 +9,18 @@
 #include "emio_sccb_cfg/emio_sccb_cfg.h"
 #include "ov5640/ov5640_init.h"
 #include "camera_input.h"
-#include "camera_preprocess.h"
 #include "camera_cnn.h"
-#include "camera_display.h"
-#include "xtime_l.h"
 
 #define VDMA_ID            XPAR_AXIVDMA_0_DEVICE_ID    //VDMA器件ID
 #define DISP_VTC_ID        XPAR_VTC_0_DEVICE_ID        //VTC器件ID
 
-/* 静态DDR分配，整帧及数组都以cacheline对齐；启动后CPU只读。 */
+/* 三个连续DDR帧槽由VDMA循环写入和读取，维持摄像头到HDMI的预览。
+ * 数组及各帧均按64字节对齐；启动前CPU执行flush，启动后不再访问帧内容。
+ * 本阶段不抓拍、不建立推理输入，模型加载缓冲由camera_cnn模块独立管理。 */
 static u8 camera_frames[CAMERA_FRAMES*CAMERA_FRAME_BYTES] __attribute__((aligned(64)));
-/* CPU独占的普通DDR数组，不是VDMA第四帧槽；VDMA仍只访问上方三帧，
- * 不会覆盖此快照。成功后可供调试器查看。 */
-static u8 camera_snapshot[CAMERA_FRAME_BYTES] __attribute__((aligned(64)));
-/* 前784字节有效，容量832字节；这些工作数组仅由CPU访问。 */
-static uint8_t camera_gray[CAMERA_DEBUG_BYTES] __attribute__((aligned(64)));
-static int8_t camera_model_input[CAMERA_DEBUG_BYTES] __attribute__((aligned(64)));
-_Static_assert(CAMERA_WIDTH == CAMERA_PREPROCESS_WIDTH &&
-    CAMERA_HEIGHT == CAMERA_PREPROCESS_HEIGHT && CAMERA_BYTES_PER_PIXEL == 3U &&
-    CAMERA_FRAME_BYTES % 64U == 0U && CAMERA_MODEL_PIXELS == CAMERA_CNN_INPUT_BYTES, "capture/preprocess geometry and alignment must match");
+_Static_assert(CAMERA_WIDTH == 640U && CAMERA_HEIGHT == 480U &&
+    CAMERA_BYTES_PER_PIXEL == 3U && CAMERA_FRAME_BYTES % 64U == 0U,
+    "preview geometry and alignment must match");
 //全局变量
 XAxiVdma     vdma;
 DisplayCtrl  dispCtrl;
@@ -88,51 +79,18 @@ int main(void)
 		return EXIT_FAILURE;
 	}
 
+    xil_printf("[VIDEO] 640x480 preview ready\r\n");
     {
-        camera_cnn_status_t cnn_status;
-        camera_cnn_result_t result;
-        XTime cycle_start, now;
-        status = camera_display_init();
-        if (status != XST_SUCCESS) {
-            xil_printf("ERROR: digit display initialization failed!\r\n");
-            return EXIT_FAILURE;
-        }
-        cnn_status = camera_cnn_init();
+        const camera_cnn_status_t cnn_status = camera_cnn_init();
         if (cnn_status != CAMERA_CNN_OK) {
-            camera_display_clear();
-            xil_printf("CNN: %s\r\n", camera_cnn_reason(cnn_status));
+            xil_printf("[APP] Model initialization failed: %s\r\n",
+                       camera_cnn_reason(cnn_status));
             return EXIT_FAILURE;
         }
-        for (;;) {
-            int capture_status;
-            XTime_GetTime(&cycle_start);
-            capture_status = camera_input_capture(&vdma, camera_frames, camera_snapshot);
-            if (capture_status == CAMERA_OK) {
-                camera_preprocess(camera_snapshot, camera_gray, camera_model_input);
-                cnn_status = camera_cnn_predict(camera_model_input, &result);
-                if (cnn_status != CAMERA_CNN_OK) {
-                    camera_display_clear();
-                    xil_printf("CNN: %s\r\n", camera_cnn_reason(cnn_status));
-                    /* PL可能仍访问DDR，立即结束且不复用buffer；需板级复位重启，
-                     * 不能仅自动reset CNN后继续，以免未完成AXI访问破坏数据。 */
-                    return EXIT_FAILURE;
-                }
-                camera_display_update(result.class_index, result.probability[result.class_index]);
-                xil_printf("digit=%u probability=%u.%02u%%\r\n", (unsigned)result.class_index,
-                    (unsigned)result.probability[result.class_index] / 100U,
-                    (unsigned)result.probability[result.class_index] % 100U);
-            } else {
-                camera_display_clear();
-                /* 失败快照无效，跳过预处理和CNN，下一节拍再取帧。 */
-                xil_printf("capture: %s\r\n", camera_input_reason(capture_status));
-            }
-            /* 从本轮开始计100ms，含capture/预处理/CNN/串口；超时则立即
-             * 进入下一轮。这是调度目标，不保证10fps或每次都是独立新帧。
-             * snapshot/gray/model_input仅CPU读写，不做调试器专用flush；
-             * CNN模块独立输入buffer的flush负责CPU→PL的数据可见性。 */
-            do {
-                XTime_GetTime(&now);
-            } while (now - cycle_start < COUNTS_PER_SECOND / 10);
-        }
+    }
+    xil_printf("[APP] Model ready; inference is not started in this stage.\r\n");
+    /* 本阶段只验收SD模型加载与预览，不启动CNN，也不进行预处理、
+     * 后处理或文字叠加。VDMA和显示控制器已自主运行，空闲循环不干预预览。 */
+    for (;;) {
     }
 }

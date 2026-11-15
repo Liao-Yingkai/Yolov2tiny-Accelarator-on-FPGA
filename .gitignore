@@ -28,6 +28,8 @@
 
 # 集中保存的 HLS 运行工程与日志；禁止生成物回到源码树
 /build/hls/
+# PS 裸机编译、链接及主机验证生成物。
+/build/ps/
 /vitis_hls_*/
 /vitis_hls*.log
 /hls/vitis_hls*.log
