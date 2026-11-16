@@ -1,8 +1,8 @@
 # YOLO相机预处理与推理
 
-当前保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理、YOLO推理、解码和NMS。**PS已生成检测列表，但尚未发送给roi_overlay，HDMI不会出现本轮检测框。**
+当前保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理、YOLO推理、解码/NMS，并把检测列表发送给`roi_overlay`。Overlay在视频帧边界整批更新框、类别和置信度；没有目标时清除旧框。软件闭环已连接，板上显示与检测效果仍需实测。
 
-`model_loader.c`负责SD加载；`camera_input.c`负责受保护的ROI复制；`camera_preprocess.c`负责RGB顺序和整数归一化/量化；`camera_cnn.c`负责DDR、单次启动、超时及缓存维护；`camera_postprocess.c`负责解码/NMS。没有运行时JSON解析，也没有把大模型编译进ELF。
+`model_loader.c`负责SD加载；`camera_input.c`负责受保护的ROI复制；`camera_preprocess.c`负责RGB顺序和整数归一化/量化；`camera_cnn.c`负责DDR、单次启动、超时及缓存维护；`camera_postprocess.c`负责解码/NMS；`camera_display.c`负责坐标/文字打包、Overlay命令和确认。没有运行时JSON解析，也没有把大模型编译进ELF。
 
 ## SD卡必须如何放文件
 
@@ -103,7 +103,7 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
 
 ```text
 取得可写A地址 → 安全抓取ROI → 预处理写A → flush输入A → Start
-→ 轮询Done → invalidate结果B → 解码/NMS生成检测列表 → 立即取下一帧
+→ 轮询Done → invalidate结果B → 解码/NMS → 上传整批检测并等帧边界确认 → 取下一帧
 ```
 
 AutoRestart保持关闭，每次只启动一张图。取消原100 ms节拍，但保留安全取帧等待；本次CNN完成前不能写入下一张图。
@@ -128,7 +128,7 @@ PS用float、expf及稳定sigmoid/softmax计算，不改变PL量化规则，不�
 
 静态候选区容量`13×13×5×20=16900`，位于PS DDR，不占大栈或PL BRAM，没有预先Top-K截断。候选按分数降序，只与已经保留的同类框比较；16个幸存者后停止。并列分数按anchor→y→x→class序号排序，可确定复现，但不能保证与PyTorch不同设备对同分框的任选顺序一致。Python评估默认阈值0.01、最多300框，对照时应统一阈值、并列规则、零面积规则和最终数量。
 
-`camera_postprocess(prediction, &detections)`返回本帧列表，count为0表示无目标，不沿用上一帧。每项有ROI内left/top/right/bottom、最终score和class_id；`camera_class_name()`返回模型类别名。列表独立于B区，供后续Overlay使用；正常主循环不打印结果。
+`camera_postprocess(prediction, &detections)`返回本帧列表，count为0表示无目标，不沿用上一帧。每项有ROI内left/top/right/bottom、最终score和class_id；`camera_class_name()`返回模型类别名。列表独立于B区，直接交给Overlay控制模块；正常主循环不打印结果。
 
 更换模型时，还需从同一metadata生成输出scale、anchors和类别名：
 
@@ -139,12 +139,33 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
 
 默认生成`src/camera_model_output.h`，不增加SD文件或运行时JSON解析。两份小型配置头及SD的27个BIN必须来自同一次导出，不能沿用旧MNIST Softmax参数。
 
+## Overlay控制与显示
+
+`camera_display_init()`在HDMI启动后执行，使用BSP生成的`XRoi_overlay`驱动，不硬编码AXI寄存器地址，也不调用Start（该核自由运行）。先读取当前command的sequence，等待视频已见SOF、旧命令已ACK且没有待提交批次，再从该sequence继续递增；随后提交空列表，清除上次运行留下的检测框。这样PS重新运行而PL未复位时，不会直接用sequence=1覆盖尚未完成的命令。
+
+`camera_display_update(&detections)`在发送前检查并组装整批数据：
+
+- 左上边界向下取整，右下边界向上取整，限制在416×416 ROI；加上`(112,32)`得到全视频半开坐标。
+- 类别来自模型的20类名称，最多16个ASCII字节。概率是NMS使用的最终`objectness×class_probability`，格式为`87.3%`，不是只有分类Softmax的概率；百分比取整仅影响显示。
+- 每框完整上传9个32位word，字符低字节在先；最多16框。没有旧的单数字/95%门限，显示门限由`camera_postprocess.h`中的score阈值控制。
+- 先BEGIN，逐框写9word，最后COMMIT(count)。每条先写payload，再写命令并轮询同sequence的ACK，确认前不发下一条。sequence按16位回绕。
+
+COMMIT的ACK表示新列表已在SOF生效，而非仅表示命令收到。核会在非活动页准备数据，HDMI继续画完整的旧列表，到下一帧再切到新列表，不会逐个露出正在上传的框。PS不等待整个视频帧画完；显示与下一轮抓拍/推理各自运行。无目标也提交count=0，不保留旧框。
+
+核控制依赖视频事务；停流、下游阻塞或没有SOF时命令可能无法确认。初始化及每条命令均有`CAMERA_DISPLAY_TIMEOUT_MS=500`毫秒超时。协议错误或超时后锁住Overlay接口并停止应用，不盲目重发；需检查视频流、时钟、当前bitstream/BSP和复位。非法软件列表在发BEGIN前拒绝，不发布半批数据。
+
+抓拍从正常转为失败时清框一次，重复的取帧竞争不反复上传空列表；恢复后重新推理并显示。CNN/后处理等终止错误也尽力清除旧框；Overlay本身已出错时不再发送清框命令。主循环没有10fps限制，没有逐帧UART输出。
+
+HDMI显示ROI内实时图像、ROI外黑色、绿色检测框，类别及概率在框内左下角；空间不够时由HLS隐藏文字但保留边框。绘图位于VDMA的MM2S输出之后，不写回采集DDR，不影响CNN输入。框来自较早的快照，物体移动时会滞后；帧边界更新只避免半新半旧列表，不保证检测框与当前预览来自同一采集帧。
+
+完整字布局及命令字段见[Overlay设计](../../../../hls/roi_overlay/README.md)。PS和HLS各自维护相同协议，修改其中一端时必须同步。
+
 ## 构建与运行边界
 
 1. 使用与当前Vivado设计一致的XSA和bitstream。
 2. 在Vitis中Build Platform，确认应用实际使用的导出目录包含`ff.h`、`ffconf.h`以及`libxilffs.a`，而不只是BSP设置界面已勾选。
 3. 刷新应用并重新生成构建文件。Debug/Release的链接组均需包含`-lxilffs`和`-lm`。
-4. Debug/Release均编译新的`camera_preprocess.c`，继续排除旧`camera_display.c`；不能单独使用历史Debug/Release目录中尚未重生成的Makefile。
+4. Debug/Release均须编译`camera_preprocess.c`、`camera_postprocess.c`及重写的`camera_display.c`（已取消旧的源文件排除）；不能单独使用历史Debug/Release目录中尚未重生成的Makefile。
 5. 下载当前bitstream、初始化PS/DDR、运行新ELF；观察HDMI预览及UART。
 
 实际连续运行建议使用Release（现有配置为`-O2`）；Debug的`-O0`适合单步检查，不适合作为预处理性能结果。不要启用fast-math来改变数值约定。
@@ -157,6 +178,7 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
 
 ```text
 [VIDEO] 640x480 preview ready
+[OVERLAY] ready
 DDR weights=0x... params=0x... feature A=0x... B=0x...
 SD mount 0: start
 SD mount 0: success
@@ -165,14 +187,14 @@ Model conv1: weights=1152 params=192 loaded
 Model prediction: weights=131072 params=1500 loaded
 Model: all 27 files loaded weights=15859328 params=38172
 YOLO model ready; accelerator not started
-[APP] Continuous YOLO decode/NMS ready; overlay not connected.
+[APP] Continuous YOLO detection/overlay ready
 ```
 
-地址由链接器实际分配，B必须比A大692,224字节。初始化本身不启动CNN，随后主循环逐帧推理并完成解码/NMS。正常循环不打印每帧完成、计数、张量、检测列表或耗时；串口保持安静不代表程序停止。只在错误状态变化、恢复或推理/后处理失败时打印信息，当前不会在HDMI显示检测结果。
+地址由链接器实际分配，B必须比A大692,224字节。初始化本身不启动CNN，随后主循环推理、解码/NMS并上传Overlay。正常循环不打印每帧完成、计数、张量、检测列表或耗时；串口保持安静不代表程序停止。只在初始化、错误状态变化、恢复或停机时打印信息。
 
 文件错误会打印具体路径、FRESULT，或者预期/实际长度与读取偏移；主入口随后打印初始化失败原因。没有逐块读取进度、逐像素日志、正常flush提示或耗时刷屏。
 
-本阶段未接入Overlay命令。`camera_model_input.h`保存YOLO输入系数，`camera_model_output.h`保存解码配置；旧`camera_model_data.h`和`softmax_params.h`不再是部署入口。
+`camera_model_input.h`保存YOLO输入系数，`camera_model_output.h`保存解码配置；旧`camera_model_data.h`和`softmax_params.h`不再是部署入口。
 
 ## 上一轮模型加载软件检查（2026-11-15）
 
@@ -197,7 +219,7 @@ YOLO model ready; accelerator not started
 
 完整检查记录：[validation.log](../../../../build/ps/yolo_camera_infer_check_20261115/validation.log)（本机生成，不提交）。
 
-## 本轮解码/NMS软件检查（2026-11-15）
+## 上一轮解码/NMS软件检查（2026-11-15）
 
 - 10个应用C文件使用当前导出BSP、xilffs及libm完成ARM编译和链接；仅未修改的`vdma_api.c`保留原有符号比较警告。没有修改HLS、BSP或bitstream。
 - 将真实`trace_prediction_postprocess_int8_hwc_0000.bin`的HWC125数据补成物理HWC128后，C与独立NumPy解码/NMS参考均保留1个检测；类别一致，分数/坐标在`rtol=3e-5、atol=2e-4`范围内一致。当前环境没有PyTorch/torchvision，因此没有直接执行其NMS内核。
@@ -205,4 +227,14 @@ YOLO model ready; accelerator not started
 - 模型输出配置重新生成后与提交用头文件逐字节一致。候选数组为473,200字节静态DDR，与模型、Feature、视频缓冲和结果列表互不重叠；当前链接的newlib qsort无堆分配调用。
 - 正常循环仍无逐帧UART日志，SD文件组织不变。Git差异检查通过；生成物只在忽略目录`build/ps/yolo_decode_nms_check_20261115/`，没有自动提交。
 
-本轮尚未上板验证后处理耗时、精度或检测效果，也没有接入Overlay传输。检查记录：[validation.log](../../../../build/ps/yolo_decode_nms_check_20261115/validation.log)。
+该轮尚未上板验证后处理耗时、精度或检测效果，当时没有接入Overlay传输。检查记录：[validation.log](../../../../build/ps/yolo_decode_nms_check_20261115/validation.log)。
+
+## Overlay接入软件检查（2026-11-16）
+
+- 当前11个应用C文件使用现有Vitis 2022.2 ARM工具链和BSP完成编译、链接；新增代码无警告，仅保留旧`vdma_api.c:134`的符号比较警告。
+- 软件驱动模拟覆盖延迟ACK、旧命令未完成时的启动同步、sequence回绕、16框与空列表、坐标裁剪/取整/偏移、类别/百分比打包、非法列表拒绝、协议错误及超时锁存；再次启用地址和未定义行为检查后通过。
+- Debug/Release均重新纳入`camera_display.c`；工程XML、主循环调用顺序、无逐帧UART和Git差异检查通过。现有忽略规则已覆盖全部检查生成物，无需新增忽略项。
+
+上述模拟只验证PS软件的命令组织和错误处理，不验证实际RTL绘图、SOF时序或AXI互联。本轮没有修改HLS/Vivado/BSP，没有运行HLS仿真或综合，也没有下载上板。需在Vitis刷新并重新生成应用构建文件、Build Release，再使用匹配当前硬件的bitstream和ELF检查显示效果。
+
+检查记录：[validation.log](../../../../build/ps/yolo_overlay_check_20261115/validation.log)（目录沿用检查启动时命名，生成物不提交）。

@@ -13,6 +13,7 @@
 #include "camera_geometry.h"
 #include "camera_preprocess.h"
 #include "camera_postprocess.h"
+#include "camera_display.h"
 #include "model_loader.h"
 
 #define VDMA_ID            XPAR_AXIVDMA_0_DEVICE_ID    //VDMA器件ID
@@ -24,7 +25,7 @@
 static u8 camera_frames[CAMERA_FRAMES*CAMERA_FRAME_BYTES] __attribute__((aligned(64)));
 /* 抓拍输出为紧密 BGR888 ROI；CPU 独占，不交给 VDMA。 */
 static uint8_t roi_snapshot[CAMERA_ROI_BYTES] __attribute__((aligned(64)));
-/* 保存最近一次完整解码列表，便于调试及未来叠加；不持有A/B工作区指针。 */
+/* 保存完整解码列表供叠加消费；不持有A/B工作区指针。 */
 static camera_detections_t detections;
 _Static_assert(CAMERA_ROI_BYTES == MODEL_INPUT_BYTES, "ROI matches model input");
 _Static_assert(CAMERA_WIDTH == 640U && CAMERA_HEIGHT == 480U &&
@@ -34,6 +35,15 @@ _Static_assert(CAMERA_WIDTH == 640U && CAMERA_HEIGHT == 480U &&
 XAxiVdma     vdma;
 DisplayCtrl  dispCtrl;
 VideoMode    vd_mode;
+
+/* 非叠加故障退出时尽力清框；清除失败只报告，不再发命令。 */
+static camera_display_status_t clear_overlay_on_error(void)
+{
+    const camera_display_status_t status = camera_display_clear();
+    if (status != CAMERA_DISPLAY_OK)
+        xil_printf("[OVERLAY] Clear failed: %s\r\n", camera_display_reason(status));
+    return status;
+}
 
 int main(void)
 {
@@ -90,14 +100,25 @@ int main(void)
 
     xil_printf("[VIDEO] 640x480 preview ready\r\n");
     {
+        /* HDMI 已启动：先清旧框并在有限时间内确认视频 SOF。 */
+        const camera_display_status_t overlay_status = camera_display_init();
+        if (overlay_status != CAMERA_DISPLAY_OK) {
+            xil_printf("[OVERLAY] Initialization failed: %s\r\n",
+                       camera_display_reason(overlay_status));
+            return EXIT_FAILURE;
+        }
+    }
+    xil_printf("[OVERLAY] ready\r\n");
+    {
         const camera_cnn_status_t cnn_status = camera_cnn_init();
         if (cnn_status != CAMERA_CNN_OK) {
             xil_printf("[APP] Model initialization failed: %s\r\n",
                        camera_cnn_reason(cnn_status));
+            clear_overlay_on_error();
             return EXIT_FAILURE;
         }
     }
-    xil_printf("[APP] Continuous YOLO decode/NMS ready; overlay not connected.\r\n");
+    xil_printf("[APP] Continuous YOLO detection/overlay ready\r\n");
     {
         int previous_capture_error = CAMERA_OK;
         for (;;) {
@@ -108,10 +129,17 @@ int main(void)
             int8_t *input = camera_cnn_input_buffer();
             if (input == NULL) {
                 xil_printf("[APP] CNN input unavailable; board reset required\r\n");
+                clear_overlay_on_error();
                 return EXIT_FAILURE;
             }
             capture_status = camera_input_capture(&vdma, camera_frames, roi_snapshot);
             if (capture_status != CAMERA_OK) {
+                /* 正常转为暂时失败时只清一次，连续失败不反复清框。 */
+                if (previous_capture_error == CAMERA_OK &&
+                    (capture_status == CAMERA_TIMEOUT || capture_status == CAMERA_OWNERSHIP)) {
+                    if (clear_overlay_on_error() != CAMERA_DISPLAY_OK)
+                        return EXIT_FAILURE;
+                }
                 if (capture_status != previous_capture_error)
                     xil_printf("[CAPTURE] %s\r\n", camera_input_reason(capture_status));
                 previous_capture_error = capture_status;
@@ -119,23 +147,32 @@ int main(void)
                  * 配置、停车、槽号或 DMA 故障须停机检查，不自动复位。 */
                 if (capture_status == CAMERA_TIMEOUT || capture_status == CAMERA_OWNERSHIP)
                     continue;
+                clear_overlay_on_error();
                 return EXIT_FAILURE;
             }
-            if (previous_capture_error != CAMERA_OK) {
-                xil_printf("[CAPTURE] recovered\r\n");
-                previous_capture_error = CAMERA_OK;
-            }
+            previous_capture_error = CAMERA_OK;
             /* 在 A 中直接生成完整 416×416×3 int8 输入，不额外复制。 */
             camera_preprocess(roi_snapshot, input);
             cnn_status = camera_cnn_run(&prediction);
             if (cnn_status != CAMERA_CNN_OK) {
                 xil_printf("[APP] CNN stopped: %s\r\n", camera_cnn_reason(cnn_status));
+                clear_overlay_on_error();
                 return EXIT_FAILURE;
             }
             /* 同步消费B中的输出，必须在下一轮复用A/B前完成解码和NMS。 */
             if (camera_postprocess(prediction, &detections) != CAMERA_POSTPROCESS_OK) {
                 xil_printf("[APP] YOLO postprocess failed\r\n");
+                clear_overlay_on_error();
                 return EXIT_FAILURE;
+            }
+            {
+                /* 空列表也提交，确保无目标时清除上一帧检测框。 */
+                const camera_display_status_t overlay_status = camera_display_update(&detections);
+                if (overlay_status != CAMERA_DISPLAY_OK) {
+                    xil_printf("[OVERLAY] Update failed: %s\r\n",
+                               camera_display_reason(overlay_status));
+                    return EXIT_FAILURE;
+                }
             }
         }
     }

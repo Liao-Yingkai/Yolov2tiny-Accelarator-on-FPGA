@@ -1,6 +1,6 @@
 # Vivado 工程
 
-当前摄像头工程已接入YOLO DDR加速器和`roi_overlay`。PS正分阶段迁移；当前应用接入SD加载、ROI整数预处理、连续推理及解码/NMS，保留HDMI预览；尚未接入检测框上传。SD目录、后处理、长文件名配置和DDR布局见[应用说明](cnn_accel_cam/vitis/cnn_accel_cam/README.md)。
+当前摄像头工程已接入YOLO DDR加速器和`roi_overlay`。PS应用接入SD加载、ROI整数预处理、连续推理、解码/NMS和检测列表上传，保留HDMI预览。软件闭环已连接，板上效果仍需实测。SD目录、后处理、Overlay控制、长文件名配置和DDR布局见[应用说明](cnn_accel_cam/vitis/cnn_accel_cam/README.md)。
 
 安装 Vivado 2022.2，打开 `cnn_accel_cam/cnn_accel_cam.xpr`。首次打开后，为 `system` Block Design 重新生成 Output Products，再运行综合；缓存、综合、实现和仿真输出由本机生成，不纳入 Git。旧的`cnn_accel_ddr`独立测试工程已移除，可以从Git历史恢复；HLS DDR顶层和testbench不受影响。
 
