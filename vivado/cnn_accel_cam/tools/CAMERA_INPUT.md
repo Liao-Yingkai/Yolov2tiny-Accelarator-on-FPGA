@@ -1,6 +1,6 @@
 # YOLO相机输入配置
 
-当前PS使用416×416 RGB INT8输入；取帧、DDR和推理流程见[应用说明](../vitis/cnn_accel_cam/README.md)。此前MNIST灰度、反色和mean/std流程不再适用。
+当前PS使用416×416 RGB INT8输入；取帧、DDR和推理流程见[应用说明](../vitis/cnn_accel_cam/README.md)。模型BIN从SD加载，输入量化和输出解码配置从同批metadata生成后编译进PS应用。
 
 ## 输入系数生成
 
@@ -23,7 +23,7 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
 - 生成器枚举256种输入值，寻找32位安全、逐值一致的M/S；失败时拒绝更新头文件。
 - 运行时仅整数乘法、移位、最近偶数处理和饱和，没有浮点或查表。
 
-权重及bias/M/S仍由SD的27个BIN加载，不再使用旧`export_camera_model.py`生成MNIST模型数组；`generate_softmax_params.py`也不是当前入口。
+权重及bias/M/S由SD的27个BIN加载；模型BIN保持训练端导出的布局，不编译为模型数组。SD文件目录及DDR拼接约定见[应用说明](../vitis/cnn_accel_cam/README.md)。
 
 ## 输出解码配置
 

@@ -61,11 +61,15 @@
 /vivado/*/vitis/**/Debug/
 /vivado/*/vitis/**/Release/
 /vivado/*/vitis/**/_ide/
+# Vitis 生成的平台/FSBL工作副本；正式平台描述和FSBL源仍保留。
+/vivado/*/vitis/*/_platform/
 /vivado/*/vitis/**/.log/
 /vivado/*/vitis/**/tempdsa/
 /vivado/*/vitis/**/*.elf
 /vivado/*/vitis/*/export/
 /vivado/*/vitis/*/logs/
+# IDE包管理器的仓库索引，不是工程源码或启动镜像配置。
+/vivado/*/Packages/.repos.xml
 
 # 平台 hw 的解包副本可重生成；保留平台描述引用的内部硬件交接 XSA。
 /vivado/*/vitis/*/hw/*

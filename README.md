@@ -1,6 +1,6 @@
 # FPGA INT8 CNN Accelerator
 
-本仓库从 Zynq-7000 上的 MNIST 加速器演进而来。当前 **HLS 源码**面向固定的
+本仓库面向 Zynq-7000 上的 YOLOv2-tiny INT8 检测加速。当前 **HLS 源码**面向固定的
 YOLOv2-tiny VOC 九层网络；**Vivado摄像头工程已接入YOLO IP和roi_overlay**。
 Vitis PS应用已接入SD模型加载、416×416 ROI整数预处理、连续YOLO推理、
 检测框解码/NMS及Overlay整批上传，保留HDMI预览；板上检测效果仍需实测。

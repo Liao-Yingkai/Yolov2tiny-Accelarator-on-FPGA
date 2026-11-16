@@ -46,7 +46,7 @@ SD卡根目录/
 /home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/bins/
 ```
 
-只需要这27个模型BIN；本阶段不需要`metadata.json`、NPY、trace、测试图片或旧MNIST的头文件。不要将`conv1_quant.bin`拆成两个文件，也不要重新打包权重或补通道。所有文件必须来自同一次导出；长度检查不能识别两个相同网络、不同checkpoint之间的混用。
+只需要这27个模型BIN；SD模型目录不需要`metadata.json`、NPY、trace或测试图片。不要将`conv1_quant.bin`拆成两个文件，也不要重新打包权重或补通道。所有文件必须来自同一次导出；长度检查不能识别两个相同网络、不同checkpoint之间的混用。
 
 若通过JTAG运行ELF，SD中只需上述模型目录；若从SD启动，根目录仍需匹配当前硬件和应用的`BOOT.BIN`，它与`yolo/`目录独立，不要覆盖原有启动文件。
 
@@ -70,7 +70,7 @@ SD卡根目录/
 | bias/M/S参数 | 38,172 | 38,208 |
 | Feature A+B | 1,384,448 | 1,384,448 |
 
-每个Feature bank为692,224字节，B紧接A。预处理直接写A的前519,168字节，九层完成后在B的前21,632字节得到`13×13×128`物理输出，其中仅125个逻辑通道有效。不能将它解释为旧的10类结果结构。
+每个Feature bank为692,224字节，B紧接A。预处理直接写A的前519,168字节，九层完成后在B的前21,632字节得到`13×13×128`物理输出，其中仅125个逻辑通道有效，交由YOLO解码/NMS处理。
 
 权重按Conv1～Conv8、Prediction顺序直接连接。参数对每层执行`bias.bin → quant.bin`，因为quant本身是完整M数组后接完整S数组，所以每层自然成为`[bias][M][S]`。层与层、字段与字段之间**不额外插入对齐空间**；只有整个参数数组的最后允许补容量。Prediction的参数字段各125个INT32，不按128通道存储。
 
@@ -97,7 +97,7 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
   --metadata /path/to/YOLOV2_TINY/generated/metadata.json
 ```
 
-默认metadata为本机YOLO导出路径，默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。不再使用旧MNIST模型导出工具。
+默认metadata为本机YOLO导出路径，默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。
 
 ## 连续推理及DDR所有权
 
@@ -137,7 +137,7 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
   --metadata /path/to/YOLOV2_TINY/generated/metadata.json
 ```
 
-默认生成`src/camera_model_output.h`，不增加SD文件或运行时JSON解析。两份小型配置头及SD的27个BIN必须来自同一次导出，不能沿用旧MNIST Softmax参数。
+默认生成`src/camera_model_output.h`，不增加SD文件或运行时JSON解析。两份小型配置头及SD的27个BIN必须来自同一次导出。
 
 ## Overlay控制与显示
 
@@ -147,7 +147,7 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
 
 - 左上边界向下取整，右下边界向上取整，限制在416×416 ROI；加上`(112,32)`得到全视频半开坐标。
 - 类别来自模型的20类名称，最多16个ASCII字节。概率是NMS使用的最终`objectness×class_probability`，格式为`87.3%`，不是只有分类Softmax的概率；百分比取整仅影响显示。
-- 每框完整上传9个32位word，字符低字节在先；最多16框。没有旧的单数字/95%门限，显示门限由`camera_postprocess.h`中的score阈值控制。
+- 每框完整上传9个32位word，字符低字节在先；最多16框。显示门限由`camera_postprocess.h`中的score阈值控制。
 - 先BEGIN，逐框写9word，最后COMMIT(count)。每条先写payload，再写命令并轮询同sequence的ACK，确认前不发下一条。sequence按16位回绕。
 
 COMMIT的ACK表示新列表已在SOF生效，而非仅表示命令收到。核会在非活动页准备数据，HDMI继续画完整的旧列表，到下一帧再切到新列表，不会逐个露出正在上传的框。PS不等待整个视频帧画完；显示与下一轮抓拍/推理各自运行。无目标也提交count=0，不保留旧框。
@@ -194,7 +194,7 @@ YOLO model ready; accelerator not started
 
 文件错误会打印具体路径、FRESULT，或者预期/实际长度与读取偏移；主入口随后打印初始化失败原因。没有逐块读取进度、逐像素日志、正常flush提示或耗时刷屏。
 
-`camera_model_input.h`保存YOLO输入系数，`camera_model_output.h`保存解码配置；旧`camera_model_data.h`和`softmax_params.h`不再是部署入口。
+`camera_model_input.h`保存YOLO输入系数，`camera_model_output.h`保存解码配置；模型权重及bias/M/S从SD加载。
 
 ## 上一轮模型加载软件检查（2026-11-15）
 
