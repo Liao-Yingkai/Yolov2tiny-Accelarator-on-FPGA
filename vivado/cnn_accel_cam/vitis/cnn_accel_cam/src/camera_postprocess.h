@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include "camera_model_output.h"
 
-#define CAMERA_POSTPROCESS_SCORE_THRESHOLD 0.25f
-#define CAMERA_POSTPROCESS_IOU_THRESHOLD 0.45f
-#define CAMERA_POSTPROCESS_MAX_DETECTIONS 16U
+#define CAMERA_POSTPROCESS_SCORE_THRESHOLD 0.55f
+#define CAMERA_POSTPROCESS_IOU_THRESHOLD 0.55f
+#define CAMERA_POSTPROCESS_MAX_DETECTIONS 8U
 
 /* 坐标为416×416 ROI内的浮点像素坐标，不含原视频的裁剪偏移。
  * right/bottom是连续坐标边界，计算面积时不能加1。 */
