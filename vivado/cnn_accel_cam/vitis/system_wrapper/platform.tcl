@@ -49,3 +49,9 @@ catch {bsp regenerate}
 platform generate -domains standalone_ps7_cortexa9_0 
 platform clean
 platform generate
+platform active {system_wrapper}
+platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform clean
+platform generate
+platform clean
+platform generate
