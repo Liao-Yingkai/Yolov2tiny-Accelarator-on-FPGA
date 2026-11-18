@@ -141,6 +141,8 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
 
 ## Overlay控制与显示
 
+**接口版本提醒（2026-11-18）：当前Overlay源码使用`ap_ctrl_none`自由运行及显式`PIPELINE II=1 style=flp`，不需要Start或AutoRestart。此前为co-sim临时加入启动控制的说明不再适用；当前`camera_display_init()`的不调用Start方式与该接口一致。本轮只更新文档，未重建IP、XSA、BSP或bitstream，重新接入时仍须成套更新并检查板上显示。详见[Overlay说明](../../../../hls/roi_overlay/README.md)。**
+
 `camera_display_init()`在HDMI启动后执行，使用BSP生成的`XRoi_overlay`驱动，不硬编码AXI寄存器地址，也不调用Start（该核自由运行）。先读取当前command的sequence，等待视频已见SOF、旧命令已ACK且没有待提交批次，再从该sequence继续递增；随后提交空列表，清除上次运行留下的检测框。这样PS重新运行而PL未复位时，不会直接用sequence=1覆盖尚未完成的命令。
 
 `camera_display_update(&detections)`在发送前检查并组装整批数据：

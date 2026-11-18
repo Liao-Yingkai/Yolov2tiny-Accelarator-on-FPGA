@@ -1,10 +1,18 @@
 # 独立 YOLO 视频叠加核
 
-本目录只提供独立HLS源码，不修改现有CNN、Vivado或Vitis工程。顶层为`roi_overlay`，输入输出均为`ap_axiu<24,1,0,0>`的AXI4-Stream，双向接口寄存器启用；自由运行`ap_ctrl_none`，不需要启动。RGB从高到低字节为R、G、B，所有旁带原样透传。
+本目录只提供独立HLS源码，不修改现有CNN、Vivado或Vitis工程。顶层为`roi_overlay`，输入输出均为`ap_axiu<24,1,0,0>`的AXI4-Stream，双向接口寄存器启用。核使用 `ap_ctrl_none`，复位释放后随视频流持续运行。RGB从高到低字节为R、G、B，所有旁带原样透传。
 
 文件包括：`roi_overlay.h`（接口与配置）、`roi_overlay.cpp`（叠加核）、`font.h`（字模）、`test_roi_overlay.cpp`（独立测试台）和本说明。综合脚本与生成物保存在源码目录之外。
 
 系统视频接线预期为`MM2S → roi_overlay → video_out`，PS控制口接AXI4-Lite；插入叠加核不改变摄像头和DDR的数据处理职责。
+
+## 像素事务与启动
+
+当前源码使用 `ap_ctrl_none` 和显式 `PIPELINE II=1 style=flp`：C++一次调用处理一个像素，RTL复位释放后持续接收视频，不需要PS调用Start或开启AutoRestart。`II=1`是流水目标，实际II、延迟和时序以本版综合结果为准。
+
+2026-11-18源码修订显式选择FLP（可排空流水线），不再交由工具自动选择流水风格。按照本次源码中的修复说明，该选择针对Vitis HLS 2022.2生成的FRP输出FIFO在反压下覆盖待发送像素的问题；输入间歇时，FLP允许已进入流水线的像素继续排出。这里记录修改意图，不将其推广为所有FRP设计的问题，也不以源码修改代替RTL反压测试或板上验证。
+
+PS 初始化 AXI-Lite 驱动后等待视频同步，再按 sequence ACK 下发命令。静态坐标、上传状态及双页缓存跨迭代保留，SOF 负责同步坐标及切换已提交的配置。
 
 ## 视频与显示
 
@@ -16,9 +24,9 @@
 
 ## 控制寄存器
 
-`command`、`command_data`、`status`均属于`control` AXI4-Lite接口，`status`无额外valid握手。具体地址由HLS生成的寄存器头文件确定，不在此硬编码。复位时ACK、sequence跟踪、框数量及控制状态均为0。
+`command`、`command_data`、`status`均属于`control` AXI4-Lite接口。具体地址由重新生成的寄存器头文件确定，不在此硬编码，也不假定与旧IP地址相同。复位时ACK、sequence跟踪、框数量及控制状态均为0。
 
-`status`同时指定`s_axilite`与`ap_none`是有意组合：前者选择AXI4-Lite适配器，后者选择适配器与核之间的端口级协议，不请求`ap_vld`状态握手。AMD的[S_AXILITE and Port-Level Protocols](https://docs.amd.com/r/2024.1-English/ug1399-vitis-hls/S_AXILITE-and-Port-Level-Protocols)说明了这两个层次；2022.2综合已生成该AXI4-Lite接口，具体寄存器地址仍以生成的头文件与RTL为准，实际PS访问留待系统验证。
+`status`显式组合`s_axilite`和`ap_none`：前者将状态映射到AXI-Lite，后者不请求核侧的`ap_vld`端口握手。PS读取状态并通过`status[31:16]`的sequence ACK确认命令完成，包括COMMIT的帧边界确认；不能用Start、Done或数据有效标记代替该ACK。以接口pragma为准，源码末尾仍提到`ap_vld`的注释与当前配置不一致，本轮只更新文档，不修改源码。
 
 `command`字段：
 
@@ -90,7 +98,7 @@ BEGIN清除inactive页的written masks、上传完整标记和几何有效标记
 
 因此错误后原地修字并成功COMMIT，历史error仍为1，不能仅凭该位判断修正后的提交是否成功。推荐出现error就重新BEGIN并重传整批，使本批错误状态明确。
 
-初始化时先复位，再等视频稳定、检查synced并发送BEGIN。顶层阻塞读取视频，**没有输入像素就不处理命令，也不会更新ACK**；没有后续SOF，合法COMMIT也不会完成。PS应使用有限超时，检查摄像头、视频时钟、SOF及下游是否反压，不能无限忙等。若PS进程重启但核未复位，应从当前ACK恢复sequence，并确保没有遗留pending命令；无法确认状态时协调复位后重新上传。
+初始化驱动后等视频稳定、检查synced并发送BEGIN。顶层阻塞读取视频，**没有输入像素时不处理命令，也不会更新ACK**；没有后续SOF，合法COMMIT也不会完成。PS应使用有限超时，检查复位、摄像头、视频时钟、SOF及下游是否反压，不能无限忙等。若PS进程重启但核未复位，应先确保像素事务仍可持续运行，再从当前ACK恢复sequence，并确保没有遗留pending命令；无法确认状态时协调复位后重新上传。
 
 ## 资源边界与系统关系
 
@@ -102,7 +110,17 @@ HLS资源与时序属于工具估计，不等同于Vivado布局布线结果；�
 
 PS仍独立完成裁剪、坐标换算、量化、推理及文本格式化；相机与DDR路径不作修改。检测结果对应较早采集的图像，本核只保证在视频帧边界整批更新，不建立推理帧与实时显示帧的时间匹配。因此物体运动时框与实时画面可有推理及上传延迟，不应把帧边界原子更新误解为同源帧同步。
 
-## 本次检查与测试入口
+## 测试入口与验证边界
+
+2026-11-18本轮仅对照用户修改后的源码更新文档，没有运行静态编译、C-sim、RTL co-sim或综合，也没有更新导出IP、BSP或PS程序。当前FLP版的验证结果须单独记录，不能直接沿用旧版的资源、II、时序或PASS结论。
+
+C++测试台直接调用`roi_overlay()`，一次调用对应一个像素事务，检查绘图、旁带、命令ACK和错误处理；它不能证明流水风格及RTL反压行为。完整测试约215万个像素事务，不输出CSV。
+
+历史上，自由运行接口的自动co-sim曾在生成的`roi_overlay.autotb.v`中出现`ap_done`未声明及`AESL_done`多驱动，未进入RTL仿真；之后临时改为带Start的版本，用户反馈该版本co-sim通过。**该PASS不属于当前恢复`ap_ctrl_none`并指定FLP的版本。** 当前接口没有块级启动握手；若自动测试台仍依赖`ap_done`，应检查生成测试台的兼容性，不能把编译失败视为DUT功能失败，也不能为仿真悄悄替换控制接口。
+
+重新验证时先从当前源码执行C Synthesis，再生成co-sim或系统RTL测试，不复用旧`sim/`。重点覆盖输入停顿、下游持续及间歇反压，检查像素和SOF/TLAST不丢失、不重复、不乱序；上板还需检查Video Out锁定、连续显示及提交/清框。重新导出后，XSA、bitstream和BSP必须配套更新。
+
+### 历史检查记录（以下数据不代表当前显式FLP版本）
 
 2026-11-12：DUT与独立testbench均通过系统G++和Vitis HLS 2022.2附带Clang 3.9的C++14 `-fsyntax-only`检查；Tcl文本括号/引号完整性及文件空白检查通过。日志位于仓库根`build/hls/roi_overlay_static_check/`，没有生成或执行仿真程序，也没有执行建工程脚本或综合。
 
@@ -137,13 +155,13 @@ C-sim完成，`input_pixels=1843673 output_pixels=1843673 checked=1843673 errors
 
 用户原有`~/High_Level_Synthesis/yolov2_roi_overlay`工程未被覆盖；上述生成物不随Git提交。
 
-### 多周期控制优化结果（multicycle1，当前实现）
+### 历史多周期控制优化结果（multicycle1，旧自由运行接口）
 
-采用上文的逐框COMMIT状态机；几何WRITE当拍也不再归约全部ready位，而在下一准备事务只检查目标框。绘图公式、命令字段、字模、视频尺寸和ROI不变；提交检查完成前的SOF不再允许激活新页，pending覆盖检查期。按ACK逐条发送的PS无需改变命令格式；若旧PS将pending理解为“已通过检查”，必须按新语义调整。
+该历史版本采用上文的逐框COMMIT状态机；几何WRITE当拍也不再归约全部ready位，而在下一准备事务只检查目标框。绘图公式、命令字段、字模、视频尺寸和ROI不变；提交检查完成前的SOF不再允许激活新页，pending覆盖检查期。当前版本保留相同命令格式，并仍采用无需Start的自由运行接口；与该历史版本的流水风格区别见上文。
 
 器件、8 ns时钟及2.16 ns不确定度均保持不变，未放宽约束：
 
-| 项目 | 上一轮iter9 | 当前multicycle1 |
+| 项目 | 历史iter9 | 历史multicycle1 |
 | --- | ---: | ---: |
 | LUT | 9,566 | 9,131 |
 | FF | 8,636 | 8,227 |
@@ -158,5 +176,5 @@ C-sim通过：`input_pixels=2150923 output_pixels=2150923 checked=2150923 errors
 
 仍有两处动态数组索引的`HLS 214-358` QoR提示（准备器选择本框mask及扫描器选择当前框标记），另有变量位选择、静态寄存器上电初始化和`status ap_none`通用提示。这些不等于已发现功能错误，当前C-sim与II检查通过；复位、真实AXI4-Lite访问及反压仍需RTL系统验证。本轮未运行RTL co-simulation或Vivado。
 
-- [当前综合报告](../../build/hls/roi_overlay_opt_20261114/roi_overlay_opt/multicycle1/syn/report/roi_overlay_csynth.rpt)
-- [当前C-sim与综合日志](../../build/hls/roi_overlay_opt_20261114/multicycle1_console.log)
+- [历史multicycle1综合报告](../../build/hls/roi_overlay_opt_20261114/roi_overlay_opt/multicycle1/syn/report/roi_overlay_csynth.rpt)
+- [历史multicycle1 C-sim与综合日志](../../build/hls/roi_overlay_opt_20261114/multicycle1_console.log)

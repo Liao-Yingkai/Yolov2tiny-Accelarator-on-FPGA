@@ -23,7 +23,9 @@ void roi_overlay(hls::stream<video_axis_t>& s_axis_video,
 #pragma HLS INTERFACE s_axilite port=command_data bundle=control
 #pragma HLS INTERFACE s_axilite port=status bundle=control
 #pragma HLS INTERFACE ap_none port=status
-#pragma HLS PIPELINE II=1
+    // 连续运行并在输入暂时无数据时排空流水线。
+    // 显式选用 FLP，避免 2022.2 自动推断的 FRP 输出 FIFO 在满时覆盖待发送像素。
+#pragma HLS PIPELINE II=1 style=flp
     // 文字独立为单写单读LUTRAM；每框预留8word，实际使用6word。
     static ap_uint<32> text_memory[256];
 #pragma HLS BIND_STORAGE variable=text_memory type=ram_s2p impl=lutram latency=1
@@ -293,9 +295,9 @@ void roi_overlay(hls::stream<video_axis_t>& s_axis_video,
         out.data = BLACK;
         if (row_y < cell_height && glyph_x < 5 && glyph_y < 7 && glyph[4-glyph_x.to_uint()]) out.data = WHITE;
     }
-    // 输出与状态：成功传输后推进坐标，每调用写回无valid握手的状态。
+    // 输出与状态：每个完成的像素事务输出一个像素并写回status。
     m_axis_video.write(out);
-    // 无ap_vld握手：每个已完成像素事务更新可读状态。
+    // ap_vld通知AXI-Lite适配器更新可读状态，不代表命令ACK。
     status = (ap_uint<32>(ack) << 16) | (ap_uint<32>(active_count) << 8) |
              (ap_uint<32>(synced) << 3) | (ap_uint<32>(error) << 2) |
              (ap_uint<32>(upload_open) << 1) |
