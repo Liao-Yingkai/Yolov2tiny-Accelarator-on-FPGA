@@ -1,40 +1,58 @@
 # Vivado 与 Vitis 工程
 
-当前工程已完成摄像头 → YOLO 推理 → 解码/NMS → HDMI 叠加的上板功能验证
-（2026-11-19，用户确认）。硬件目标为 `xc7z020clg400-2`，使用 Vivado / Vitis
-2022.2。模型、SD 文件及应用流程见 [PS 应用说明](cnn_accel_cam/vitis/cnn_accel_cam/README.md)。
+本目录包含摄像头/HDMI硬件工程和Zynq裸机应用。验证基线使用
+`xc7z020clg400-2`、Vivado/Vitis 2022.2，已完成摄像头、YOLO推理、解码/NMS及显示功能验证。
+本文路径均相对于仓库根目录；模型、SD文件和应用流程见
+[PS应用说明](cnn_accel_cam/vitis/cnn_accel_cam/README.md)。
 
-## 保留的工程结构
+## 环境与硬件前提
 
-- `cnn_accel_cam/cnn_accel_cam.xpr`：Vivado 工程入口。
-- `cnn_accel_cam/cnn_accel_cam.srcs/`：BD、IP 配置、约束和图形布局。
-- `cnn_accel_cam/cnn_accel_cam.srcs/sources_1/imports/system_wrapper.v`：XPR 实际引用的 wrapper。
-- `cnn_accel_cam/ip_repo/`：完整的 CNN、Overlay、摄像头和 DVI 自定义 IP。
-- `cnn_accel_cam/vitis/`：现有平台、应用和系统工程；不另建一套目录结构。
+使用Vivado和Vitis Classic IDE 2022.2，不将新版Vitis Unified IDE的菜单和工程格式
+混用于本流程。GUI操作以相应工具菜单为入口，不要求Linux终端；Windows构建迁移尚未在
+本仓库验证。工具的系统要求应按AMD对应版本文档检查，不能由本项目的一次验证推及所有系统。
+[Vitis启动与环境设置](https://docs.amd.com/r/2022.2-English/ug1400-vitis-embedded/Setting-Up-the-Environment-to-Run-the-Vitis-Software-Platform)
+分别说明Linux shell与Windows桌面/命令行入口。
 
-`ip_repo` 内的 HDL、`component.xml`、XGUI、驱动及 `.dat` 初始化文件是当前 BD 的
-实际依赖。即使由 HLS 生成，也不是可以随意删除的缓存；修改 HLS 后须重新导出 IP，
-不能手改已导出 HDL 来替代源码。
+板级工程包含OV5640、640×480视频、VDMA、DDR、DVI/HDMI输出及两个HLS IP。器件型号相同
+不等于板卡相同：使用其他板卡前须核对电源/接口、PS DDR/MIO配置、时钟和
+`vivado/cnn_accel_cam/cnn_accel_cam.srcs/constrs_1/new/LCD.xdc`的引脚约束。
+这些配置不是通用Zynq板卡模板。
 
-## 打开 Vivado
+## 工程文件分工
 
-1. 用 Vivado 2022.2 打开 `cnn_accel_cam/cnn_accel_cam.xpr`。
-2. 检查项目器件为 `xc7z020clg400-2`，IP Repository 指向本工程的 `ip_repo`。
-3. 打开 `system` BD，检查 IP Status，再 Validate Design。
-4. 首次打开时按需 Generate Output Products，然后运行综合、实现及 bitstream 生成。
-5. 若修改了硬件，重新导出包含 bitstream 的 XSA，并同步 Vitis 平台。
+| 内容 | 仓库内位置 |
+|---|---|
+| Vivado入口 | `vivado/cnn_accel_cam/cnn_accel_cam.xpr` |
+| BD、IP配置、约束及布局 | `vivado/cnn_accel_cam/cnn_accel_cam.srcs/` |
+| XPR实际引用的wrapper | `vivado/cnn_accel_cam/cnn_accel_cam.srcs/sources_1/imports/system_wrapper.v` |
+| 自定义IP实体 | `vivado/cnn_accel_cam/ip_repo/` |
+| Vitis工作区 | `vivado/cnn_accel_cam/vitis/` |
 
-实际 BD、wrapper、XDC 和 IP 仓库均在工程内。XPR 中旧的 ImportPath、备用 run
-或未启用的增量缓存目录是迁移记录，不是缺失源文件；不要为消除这些记录而改器件、
-连接或时钟。遇到 locked IP，先看 Report IP Status 的具体原因，不要直接删除互联。
-保留同版本工具，避免无意升级 IP 改变已验证配置。
+`ip_repo`内HDL、`component.xml`、XGUI、驱动和`.dat`初始化文件都是当前BD的实际依赖，
+不能因其由HLS生成就当作缓存删除。现有导出IP可用于Vivado重建；只有修改HLS实现时才
+需要重新综合、导出并替换相应IP，不直接手改导出HDL。
 
-CNN 由 PS 逐次 Start；Overlay 是 `ap_ctrl_none` 自由运行、显式 FLP 流水，不调用
+## 打开和构建Vivado
+
+1. 启动Vivado 2022.2，通过Open Project选择上表中的XPR。
+2. 检查当前项目器件为`xc7z020clg400-2`，IP Repository解析到本工程的`ip_repo`，
+   源文件列表中没有实际缺失的BD、wrapper或约束。
+3. 打开`system` BD，先检查Report IP Status，再执行Validate Design。
+   如有locked IP，按报告中的锁定原因处理，不直接删除互联或盲目升级所有IP。
+4. 按需Generate Output Products，再执行综合、实现及生成bitstream。
+5. 导出包含bitstream的XSA，更新Vitis平台后再重建应用；不要只替换bitstream而保留
+   不配套的硬件描述、驱动或初始化代码。
+
+部分XPR字段保存旧ImportPath、备用run或未启用增量缓存的历史位置，不应与当前实际
+文件依赖混为一谈。移植时先检查实际Source/IP Repository解析结果，不因看到旧目录名
+就改器件、连接或时钟。更换工具版本、板卡或时钟后，需要重新验证时序与功能。
+
+CNN由PS逐次Start；Overlay采用`ap_ctrl_none`自由运行和显式FLP流水，不调用
 Start/AutoRestart。两者不是同一种控制方式。
 
-## 打开 Vitis
+## 导入和构建Vitis
 
-现有项目名称为：
+工作区为`vivado/cnn_accel_cam/vitis/`，项目名称如下：
 
 | 类型 | 名称 |
 |---|---|
@@ -42,34 +60,42 @@ Start/AutoRestart。两者不是同一种控制方式。
 | Application | `cnn_accel_cam` |
 | System project | `cnn_accel_cam_system` |
 
-1. 在 Vitis 2022.2 中使用 `cnn_accel_cam/vitis/` 作为工作区，导入现有平台及应用。
-2. 确认平台硬件指向本地的 `system_wrapper.xsa`，必要时 Update Hardware Specification。
-3. Build Platform，生成 BSP、库和 `export/system_wrapper/system_wrapper.xpfm`。
-4. **迁移目录后重新选择应用及系统工程关联的平台**。IDE 的 `.prj/.sprj` 保存过旧机器
-   的绝对平台路径，不能把缺失的旧 `.xpfm` 当成缺失源码，也不靠硬编码 include 路径绕过。
-5. 检查 BSP 启用 `xilffs`，长文件名 `use_lfn=1`；应用链接包含 `xilffs` 和 `m`。
-   Build Release 后，使用配套 bitstream、PS 初始化和新 ELF 运行。
+1. 在Vitis Classic IDE 2022.2中选择该工作区。若Explorer没有这些项目，通过项目
+   Import入口导入现有平台、应用及系统工程，不创建空应用替代源码。
+2. 选中平台`system_wrapper`，检查其硬件描述。需要更新时，右键平台选择
+   Update Hardware Specification，并选择当前硬件对应的XSA。
+   [AMD硬件更新流程](https://docs.amd.com/r/2022.2-English/ug1400-vitis-embedded/Updating-the-Hardware-Specification)
+   指定了此平台级操作。
+3. Build Platform，生成BSP及
+   `vivado/cnn_accel_cam/vitis/system_wrapper/export/system_wrapper/system_wrapper.xpfm`。
+4. 迁移目录后，检查应用和系统工程关联的平台，重新选择上一步本地生成的`.xpfm`。
+   `.prj/.sprj`保留过旧开发路径，而`platform.spr`使用平台目录占位表达式；
+   不能把它们一概视为自动可迁移，也不靠硬编码旧include路径绕过平台生成。
+5. 检查standalone域的BSP启用了`xilffs`、`use_lfn=1`；应用的Debug/Release链接配置
+   包含`xilffs`及`m`。应设置应用项目的编译/链接选项，不是系统项目的System Builder。
+6. Build Release。使用匹配当前硬件的bitstream、PS初始化和新ELF运行；
+   JTAG调试与SD自启动是不同方式，SD模型与启动镜像的关系见应用说明。
 
-`platform.tcl` 的硬件路径已改为相对于脚本位置解析，原平台生成步骤和 BSP 配置保持
-不变。该文件是平台创建/生成脚本，不要在正在使用的平台上反复 source；已有平台优先
-通过 IDE 更新、构建。本轮整理没有执行平台重建或验证全新路径下的 IDE 构建。
+两份硬件交接文件分别为
+`vivado/cnn_accel_cam/vitis/system_wrapper.xsa`和
+`vivado/cnn_accel_cam/vitis/system_wrapper/hw/system_wrapper.xsa`。
+更新硬件时须保持平台使用的交接内容一致；文件名相同不证明内容配套。
+FSBL源码、hook、链接脚本、初始化文件、平台描述和BSP的`system.mss`均保留在源码管理中。
 
-两个 `system_wrapper.xsa` 分别位于工作区根和 `system_wrapper/hw/`；平台描述会引用
-它们，因此都保留。整理时两者内容一致。硬件、XSA、驱动与应用必须配套；不要只更新
-其中一个。FSBL 源码、hook、链接脚本、初始化文件、平台描述及 BSP 的 `system.mss`
-继续保留，不把它们按“生成文件”整体移除。
+`platform.tcl`按脚本位置定位硬件文件，但它是会创建/生成平台的脚本，不是只读恢复检查。
+已有平台优先按上述GUI流程更新；不在仍使用的工作区中反复source。当前没有提供覆盖
+所有主机系统、路径和IDE状态的一键重建保证。
 
 ## 源文件与生成物
 
-版本管理保留 XPR、完整 SRCs、完整自定义 IP、两份 XSA，以及 Vitis 的源文件、工程
-描述、平台设置和 FSBL 源码。以下内容由本机重建，不纳入版本管理：
+版本管理保留XPR、SRCs、自定义IP、两份XSA和Vitis必要源码/描述。以下内容由各自
+开发环境生成，不随Git提供：
 
-- Vivado 的 `.cache/.runs/.sim/.hw/.ip_user_files/.gen`、日志及 `.Xil`。
-- Vitis 的工作区状态、`Debug/Release`、`_ide/_platform`、平台 `export/logs`。
-- BSP 自动生成的头、库、驱动工作副本、编译产物和平台硬件解包副本（上述 XSA 除外）。
-- PS 配置器的 `NA/ps7_summary.html` 等摘要报告、Python 缓存及旧测试的 CSV 输出。
+- Vivado的`.cache/.runs/.sim/.hw/.ip_user_files/.gen`、日志及`.Xil`。
+- Vitis工作区状态、`Debug/Release`、`_ide/_platform`、平台`export/logs`。
+- BSP自动生成的头、库、驱动工作副本、编译产物及硬件解包副本（上述XSA除外）。
+- PS配置器摘要报告、Python缓存和旧测试CSV。
 
-这些忽略规则不删除已有本地文件。已有跟踪的生成报告单独取消跟踪；不清空本机工作区，
-不改写 Git 历史。`.prj/.sprj/.cproject/platform.spr` 等必要配置仍跟踪，不使用
-`assume-unchanged` 隐藏真正的设置变化。再次生成工程后，应审查必要配置的 diff，
-不能以“所有 modified 都是垃圾”为理由统一忽略。
+因此克隆后需要Build Platform及生成Output Products，不能依赖开发者原有缓存。
+忽略规则不会删除本地文件；必要工程配置仍跟踪，重建后应审查其diff，不统一忽略所有
+modified文件，也不使用`assume-unchanged`隐藏真实配置变更。

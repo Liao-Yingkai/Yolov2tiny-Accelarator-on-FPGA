@@ -5,7 +5,7 @@
 计算与搬运是独立模块，DDR 数据格式见
 [Loader、Writer 与层间 DDR 缓冲](yolov2_tiny_ddr_io.md)。
 
-当前整网已完成测试及上板功能验证（2026-11-19，用户确认）。下文保留首版检查数据，
+当前整网已完成测试及上板功能验证（2026-11-19验证基线）。下文保留首版检查数据，
 用于解释开发基线；当前配置的实际帧率、资源及布局布线时序应读取配套报告，不由旧估计推断。
 
 ## 接口与模型区
@@ -61,7 +61,7 @@ AXI 完成顺序和板级吞吐不由 C 仿真证明。
 
 ## 验证入口
 
-`cnn_accelerator/script/hls_ddr.tcl` 只注册本 Top 使用的源文件，默认运行
+`hls/cnn_accelerator/script/hls_ddr.tcl`只注册本Top使用的源文件，默认运行
 `-O3` 编译的 C 仿真。设置 `YOLO_HLS_STAGE=csynth` 只做 HLS 综合。
 工程在仓库根目录的 `build/hls/cnn_yolo_ddr/`；建议从生成物目录启动
 Vitis HLS，避免工具启动日志进入源码树。
@@ -75,12 +75,12 @@ golden。默认读取仓库内的`data/yolov2_tiny/`，不需要设置环境变�
 
 ### 历史首版检查记录
 
-以下记录对应首版集成，不表示本轮重新运行，也不替代后续完成的系统验证。
+以下记录对应首版集成，不代表每次文档更新都重新运行，也不替代其他环境下的系统验证。
 
 首版 G++ 功能检查和 Vitis HLS 2022.2 C 仿真均通过：样本 0000 的
 21,125 个有效输出和 507 个物理尾槽零错误，A/B 之外的哨兵未改变。
 Vitis HLS 2022.2 综合也通过，
-本机报告`build/hls/cnn_yolo_ddr/solution1/syn/report/cnn_accelerator_ddr_csynth.rpt`
+历史报告位置`build/hls/cnn_yolo_ddr/solution1/syn/report/cnn_accelerator_ddr_csynth.rpt`
 显示只有一套 Im2Row、OS Systolic、PostProcess 和 Pool。10 ns 目标下的 HLS
 估计周期为 7.300 ns，资源估算为 232 BRAM_18K、81 DSP、38,240 FF、45,592 LUT；
 这些不是 Vivado 布局布线结果。

@@ -1,37 +1,59 @@
-# YOLO相机输入配置
+# 相机模型配置生成
 
-当前PS使用416×416 RGB INT8输入；取帧、DDR和推理流程见[应用说明](../vitis/cnn_accel_cam/README.md)。模型BIN从SD加载，输入量化和输出解码配置从同批metadata生成后编译进PS应用。
+PS预处理接收416×416 RGB INT8输入；取帧、DDR和推理流程见
+[应用说明](../vitis/cnn_accel_cam/README.md)。模型BIN从SD加载，输入量化与输出解码配置
+从同一批metadata生成后编译进PS应用，不需要在PS上解析JSON。
 
-## 输入系数生成
+## 运行前提与默认位置
 
-在仓库根目录运行：
+两个脚本要求Python 3.7或以上，仅使用标准库，不要求安装PyTorch。本文路径和命令
+从仓库根目录计算；使用其他工作目录时，需要自行指定脚本文件的实际位置。
+
+- 默认输入：`data/yolov2_tiny/metadata.json`，不随Git克隆提供，须预先准备。
+- 默认输出：`vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/camera_model_input.h`及
+  `camera_model_output.h`。
+- 默认输入、输出按脚本位置定位，不受启动目录影响；显式相对路径则按进程当前目录解释。
+- 优先级为`--metadata`文件参数 → 非空`YOLO_DATA_DIR`数据根目录 → 仓库默认目录。
+  正常使用默认目录无需设置环境变量；`--output`可另存结果，避免覆盖现有配置头。
+
+## 生成输入和输出配置
+
+Linux/Bash，使用Python 3解释器命令：
 
 ```bash
-python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
-  --metadata /path/to/YOLOV2_TINY/generated/metadata.json
+python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
+python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
 ```
 
-默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本位置定位，正常运行无需设置环境变量。`--metadata`可显式指定文件，非空`YOLO_DATA_DIR`可选指定数据根目录；优先级为`--metadata` → 环境变量 → 仓库默认目录。默认输出为`../vitis/cnn_accel_cam/src/camera_model_input.h`（相对于本目录）。更换SD模型时必须用同一次导出的metadata重新生成此头并重编译PS。
+Windows/PowerShell，安装Python Launcher时可使用：
 
-生成器只读取metadata，不修改训练工程，不重新导出BIN；只生成少量M/S标量，不生成LUT或大数组。
+```powershell
+py -3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
+py -3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
+```
 
-## 数值与布局
+解释器命令不是固定要求：若本机使用`python`或解释器完整路径，请确认其版本后替换命令。
+以上Windows示例是调用语法，不代表已完成Windows整套工程验证。外部数据覆盖的两种Shell
+示例、导出文件清单及获取边界见[数据说明](../../../hls/docs/data.md)。
 
-- 源视频640×480 BGR888，安全抓拍只复制`[112,528)×[32,448)`的紧凑BGR ROI。
-- 预处理交换B/R后，以H→W→RGB写紧凑INT8；不缩放、不灰度、不反色、不做mean/std，不补8通道。
-- 离线参考为`FP32(pixel/255) × FP32(1/input_scale)`后最近偶数舍入和INT8饱和，与YOLO `dump_trace.quantize_input`一致。
-- 生成器枚举256种输入值，寻找32位安全、逐值一致的M/S；失败时拒绝更新头文件。
-- 运行时仅整数乘法、移位、最近偶数处理和饱和，没有浮点或查表。
+两个命令都会更新相应配置头。更换SD模型时，应从同一次导出的metadata同时生成两份头，
+然后重编译PS应用；不得将新BIN与旧scale、anchors或类别名混用。生成器不训练模型、
+不修改外部训练工程，也不重新导出BIN。
 
-权重及bias/M/S由SD的27个BIN加载；模型BIN保持训练端导出的布局，不编译为模型数组。SD文件目录及DDR拼接约定见[应用说明](../vitis/cnn_accel_cam/README.md)。
+## 输入数值与布局
+
+- 源视频为640×480 BGR888，抓拍复制`[112,528)×[32,448)`的紧凑BGR ROI。
+- 预处理交换B/R，以H→W→RGB写紧凑INT8；不缩放、灰度、反色、mean/std或补8通道。
+- 离线参考为`FP32(pixel/255) × FP32(1/input_scale)`，随后最近偶数舍入、INT8饱和。
+- 输入生成器枚举256种像素值，寻找32位安全、逐值一致的M/S；不能满足时拒绝更新头。
+- PS运行时只进行整数乘法、移位、最近偶数处理及饱和，不使用浮点或查表。
+
+权重、bias及M/S仍由SD的27个BIN加载，不编译为大模型数组。这里的两个小配置头不替代
+这些BIN；SD布局及DDR拼接见应用说明。
 
 ## 输出解码配置
 
-当前PS已接入解码/NMS。更换SD模型后，还需从同一metadata生成Prediction输出scale、anchors和类别名：
-
-```bash
-python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
-  --metadata /path/to/YOLOV2_TINY/generated/metadata.json
-```
-
-默认输出`../vitis/cnn_accel_cam/src/camera_model_output.h`。生成器验证固定416输入、20类、5个anchor、125逻辑/128物理通道及零点0；校验完成后才更新配置头。当前输出scale为`0.19452644884586334`，不生成指数LUT或追加SD文件。输入、输出配置头及SD模型必须来自同一次导出。
+输出生成器校验416输入、20类、5个anchor、125逻辑/128物理通道及零点0，随后生成
+Prediction scale、anchors和类别名称。校验成功后才写入目标文件，不生成指数LUT或
+额外SD文件。配置中的具体scale由模型决定，以同批metadata和生成头为准，不是可复用
+到任意模型的固定常量。

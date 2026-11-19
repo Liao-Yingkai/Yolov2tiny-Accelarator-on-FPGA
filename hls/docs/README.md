@@ -1,6 +1,8 @@
 # YOLOv2-tiny HLS 文档
 
-本目录记录当前固定九层 YOLOv2-tiny VOC 设计。接口入口以 [DDR Top](top.md) 为准，整体使用入口见[仓库说明](../../README.md)。用户已于2026-11-19确认测试及上板功能验证完成；各模块保留的旧检查记录只代表对应版本，不等同于本次重新运行。
+本目录记录固定九层YOLOv2-tiny VOC设计。接口入口以[DDR Top](top.md)为准，整体环境见
+[仓库说明](../../README.md)。文件路径以仓库根目录为基准；表中链接可直接定位源文件。
+系统验证基线为2026-11-19，各模块保留的历史检查只代表对应版本与检查范围。
 
 - [设计记录与待优化事项](yolov2_tiny_refactor_plan.md)：层表、数值契约、存储预算与后续优化。
 - [DDR Top](top.md)：顶层接口、层/块调度与已有整网检查记录。
@@ -16,7 +18,8 @@
 
 ## 当前 testbench
 
-`cnn_accelerator/testbench/` 保留以下五个 YOLO 测试入口，每个文件含独立 `main()`，应按对应 Top 单独注册：
+`hls/cnn_accelerator/testbench/`保留以下五个YOLO测试入口，每个文件含独立`main()`，
+应按对应Top单独注册，不能将五个文件一起加入同一个testbench：
 
 | 文件 | 对应 Top |
 |---|---|
@@ -26,6 +29,53 @@
 | [test_pool_pytorch.cpp](../cnn_accelerator/testbench/test_pool_pytorch.cpp) | `maxpool` |
 | [test_cnn_accel_ddr.cpp](../cnn_accelerator/testbench/test_cnn_accel_ddr.cpp) | `cnn_accelerator_ddr` |
 
-测试使用同一次Python模型导出的BIN/trace；五个CNN测试默认读取仓库内`data/yolov2_tiny/`，无需环境变量，样本为`0000`。可选的非空`YOLO_DATA_DIR`仅用于覆盖默认目录。所有测试只打印统计和有限错误，不再写CSV或创建输出数据目录；失败返回非零。完整文件清单见[数据说明](data.md)。
+测试使用同一次模型导出的BIN/trace，样本为`0000`。默认目标目录是`data/yolov2_tiny/`，
+但它不随Git提供，须先准备数据。所有测试只打印统计和有限错误，不写CSV，失败返回非零。
+完整文件清单及可选覆盖方式见[数据说明](data.md)。
 
-文档中的历史`build/`报告和日志只保存在本机，不随源码提供。2026-11-19整理仅做静态检查，不重跑testbench、仿真或综合，不更改DUT实现及硬件配置。
+## 脚本入口与运行产物
+
+`hls/cnn_accelerator/script/hls_ddr.tcl`仅建立DDR Top工程，默认执行C仿真；
+`YOLO_HLS_STAGE=csynth`选择综合，空值同默认，其他值报错。它不自动执行co-sim或导出IP。
+Linux/Bash调用示例见[仓库说明](../../README.md#运行-hls-验证)。
+
+工程始终生成在`build/hls/cnn_yolo_ddr/`，路径由脚本位置定位；启动工具所在目录仍可能
+产生`vitis_hls.log`，因此示例先进入`build/hls/`。这两个目录含义不能混淆。
+默认数据路径通过`YOLO_DEFAULT_DATA_DIR`编译宏仅传给Top测试文件，不改变DUT配置。
+整个仓库搬迁后需要重新执行脚本并编译，旧测试程序可能保留旧编译路径。
+
+## 手动模块工程与路径限制
+
+手动建立工程时，选择Vitis HLS 2022.2的Vivado IP流程、C++14和目标器件
+`xc7z020clg400-2`。每个模块选择上表对应的Top与唯一testbench；设计文件分别为：
+
+| Top | 设计源文件（相对于`hls/cnn_accelerator/src/`） |
+|---|---|
+| `im2row` | `im2row/im2row.cpp` |
+| `systolic_OS` | `systolic/systolic_OS.cpp` |
+| `conv_postprocess` | `postprocess/conv_postprocess.cpp` |
+| `maxpool` | `pool/pool.cpp` |
+| `cnn_accelerator_ddr` | 上述四个文件，加`axi/ddr_io.cpp`和`top/cnn_accel_ddr.cpp` |
+
+保留源码的相对目录关系及`yolo_data_path.h`，不要只将单个CPP复制到无关目录。CNN脚本
+使用10 ns目标时钟；Overlay独立工程不套用此配置，约束应与其视频系统匹配。
+
+不使用脚本宏时，CNN测试从`yolo_data_path.h`的源码位置推导仓库。Linux下绝对源码路径
+可以直接定位；相对路径需要在仿真运行目录中仍能解析。若自建工程改变了编译/执行位置，
+可在testbench编译选项中将`YOLO_DEFAULT_DATA_DIR`定义为数据目录的C++字符串常量。
+宏引用语法取决于所用工具的参数传递方式，不是环境变量。非空`YOLO_DATA_DIR`可覆盖已
+成功编译程序的运行时数据位置，但不能修复编译阶段的路径兼容问题。
+
+### 操作系统边界
+
+- 本仓库HLS流程与路径检查在Linux完成验证。
+- Windows的Vitis HLS自身有MinGW命令行入口，但本仓库尚未完成Windows重建验证。
+  `yolo_data_path.h`的无宏回退使用POSIX `realpath`及Unix路径判断，Tcl中的宏引用也按
+  POSIX shell处理。仅设置运行时环境变量不能让不兼容的源码分支免于编译。
+- 因此不能将Linux的Bash命令直接当成PowerShell/CMD命令，也不能仅因为工具支持Windows
+  就宣称本项目已跨平台。Windows移植需处理这些测试/脚本限制，再重新验证。
+
+这些限制属于软件验证入口，不改变PL接口或网络的数据契约。
+
+历史`build/`报告与日志不随源码提供。文档中的历史PASS、资源或时序数值不保证新的工具、
+主机系统、路径或模型也通过，需要使用对应环境重新检查。

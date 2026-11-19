@@ -1,13 +1,13 @@
 # YOLOv2-tiny 设计记录与待优化事项
 
 记录日期：2026-11-01，整理日期：2026-11-19。当前YOLO系统已完成测试及上板功能验证
-（用户确认）；本文保留架构取舍与后续优化方向，不再作为待实现模块的清单。
+（2026-11-19验证基线）；本文保留架构取舍与后续优化方向，不作为待实现模块的清单。
 
 本文记录当前 YOLOv2-tiny VOC 的接口、数值契约和存储调度，并保留后续性能优化及验证事项。九层 DDR Top 已实现；已完成检查、综合结果与尚未覆盖的 RTL/板级边界见 [Top](top.md)。
 
 ## 1. 重构边界与目标网络
 
-当前HLS计算与存储调度保留单套物理计算流水，已与Vivado、Vitis、摄像头和检测结果显示集成。后续变更接口或数值契约时仍需同步Python exporter、Golden Model和testbench；本轮仅整理工程，不改变现有实现和结构。
+当前HLS计算与存储调度保留单套物理计算流水，已与Vivado、Vitis、摄像头和检测结果显示集成。后续变更接口或数值契约时仍需同步Python exporter、Golden Model和testbench；本文描述既有实现，不改变现有结构。
 
 软件参考为外部Python工程的`YOLOV2_TINY/`目录。使用其`export.py`冻结的整数权重BIN布局和`dump_trace.py`逐层整数数据做对照；测试默认读取仓库内`data/yolov2_tiny/`，`YOLO_DATA_DIR`仅作可选覆盖，见[数据说明](data.md)。
 
@@ -27,7 +27,7 @@
 
 前八层为BN折叠后的Conv与LeakyReLU，斜率为0.1；Prediction无BN、无激活。HLS输出原始Prediction Tensor，检测解码及NMS由PS执行，Overlay负责绘图。
 
-本轮不扩展任意卷积 stride、任意 kernel 或任意网络图，仅覆盖上述网络所需操作。
+实现范围不包括任意卷积stride、任意kernel或任意网络图，仅覆盖上述网络所需操作。
 
 ## 2. 必须统一的事务和 Tile 含义
 
@@ -205,7 +205,7 @@ Line Buffer 的覆盖规则必须逐位置、逐 Group 成立：旧行数据先�
 
 ### 7.1 Systolic
 
-详细接口、循环、缓存和验收步骤见 [YOLOv2-tiny Systolic 重构计划](systolic_os.md#yolov2-tiny-重构计划)。首版各层统一按最多 32 Cout 驻留，Conv8 不例外；一次 Systolic 调用处理一个驻留块。
+详细接口、循环、缓存和验收步骤见[YOLOv2-tiny Systolic实现](systolic_os.md#当前实现)。各层统一按最多32 Cout驻留，Conv8不例外；一次Systolic调用处理一个驻留块。
 
 - 保留传统 4×4 OS，Activation 向右、Weight 向下传播，PE 内 Dot8，INT32 累加。
 - 支持可变 K Tokens；1×1 也连续归约全部 Cin Group，不按 Group 重启波前。
@@ -265,7 +265,7 @@ output = signed INT8 clamp(scaled, -128, 127)
 
 ## 8. Pool：原值行缓存与边界暂存
 
-本节采用最后讨论的方案：Line Buffer 保存原始输入，不保存水平 max，也不保存最终池化结果。之前讨论的“水平 max 行缓存”不作为本次重构基线。
+Line Buffer保存原始输入，不保存水平max或最终池化结果；当前设计不采用水平max行缓存。
 
 ### 8.1 新调度下缓存什么
 

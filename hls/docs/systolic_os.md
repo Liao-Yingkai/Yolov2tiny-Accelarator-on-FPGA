@@ -1,12 +1,12 @@
 # 传统 Output-Stationary 脉动阵列
 
-本文件对应 `cnn_accelerator/src/systolic/systolic_OS.cpp`，记录 YOLO 按块实现。模块已接入完成测试及上板功能验证的[YOLO DDR Top](top.md)；下文独立开发阶段的存储预算和旧检查结果不替代当前版本的性能实测。
+本文件对应仓库根目录下的`hls/cnn_accelerator/src/systolic/systolic_OS.cpp`，记录YOLO按块实现。模块已接入完成测试及上板功能验证的[YOLO DDR Top](top.md)；下文独立开发阶段的存储预算和旧检查结果不替代当前版本的性能实测。
 
 ## 当前实现
 
 2026-11-09 确认的首版范围：固定九层 YOLOv2-tiny VOC、单套 OS 阵列、一次调用处理
 一个 Cout 驻留块。各层统一按**最多 32 个 Cout 驻留**，Conv8 也按 32 设计；实际综合后再决定是否缩小。
-当前使用单份权重驻留缓存，不实现预取。权重加载重叠保留为后续性能优化，本轮整理不改变该调度。
+当前使用单份权重驻留缓存，不实现预取。权重加载重叠保留为后续性能优化，现有实现保持该调度。
 全网调度见 [YOLOv2-tiny 重构总案](yolov2_tiny_refactor_plan.md)。
 
 ### 阵列与归约
@@ -86,7 +86,7 @@
 
 HLS 工程的 Top 设为 `systolic_OS`，设计文件使用 `systolic_OS.cpp`，testbench 仅加入 [`test_systolic_pytorch.cpp`](../cnn_accelerator/testbench/test_systolic_pytorch.cpp)。
 
-默认读取仓库内`data/yolov2_tiny/`，无需设置环境变量，样本后缀固定为`0000`；非空`YOLO_DATA_DIR`可选覆盖数据根目录，见[数据说明](data.md)。每层使用以下三份文件，必须来自同一套导出参数：
+默认数据目标是仓库内`data/yolov2_tiny/`，样本后缀固定为`0000`；手动工程的定位条件及操作系统限制见[HLS入口说明](README.md#手动模块工程与路径限制)。非空`YOLO_DATA_DIR`可选覆盖根目录，文件准备见[数据说明](data.md)。每层使用以下三份文件，必须来自同一套导出参数：
 
 - `trace/trace_<layer>_im2row_int8_0000.bin`：按 `y → tile_x → token` 的物理 Activation Pack。BIN 不带 mask，按行宽重建 `spatial_valid`。每个 Cout 块重新发送整层一次；不为块内每个 Cout Tile 重复发送。
 - `bins/<layer>_weight.bin`：按全局 Cout Tile 和 token 取本块的连续片段，原样恢复 signed INT8 lane；检查尾部补零，不改动 BIN 数据。

@@ -1,9 +1,22 @@
 # 模型与测试数据
 
+本文路径以仓库根目录（包含`README.md`、`hls/`、`vivado/`的目录）为基准。
+默认数据位置是根目录下的`data/yolov2_tiny/`，不是`hls/data/`。
+
+## 数据获取边界
+
 Git保存HLS、PS源码及两份小型模型配置头，不跟踪训练checkpoint、图像数据集、模型BIN
-或逐层trace。本机所需数据副本集中在仓库根目录的`data/yolov2_tiny/`，由`.gitignore`
-排除。训练和数据导出仍在外部Python工程的`YOLOV2_TINY/`中完成；HLS测试只读取
-导出结果，不自动训练、导出或改写模型。
+或逐层trace。`data/yolov2_tiny/`由`.gitignore`排除，克隆仓库不会自动创建或填充它；
+文件被Git忽略不代表文件已从磁盘删除。
+
+当前仓库没有提供数据包下载地址、自动下载脚本或完整训练/export工程。因此仅克隆代码
+不能完成依赖BIN的功能测试，必须另行取得与本设计匹配的导出产物。文档中的
+`YOLOV2_TINY/`、`export.py`和`dump_trace.py`用于标识外部参考工程及数据来源，
+不是要求使用者已经拥有作者的目录，也不是本仓库中可直接执行的入口。
+
+取得数据后，将导出目录中的`metadata.json`、`bins/`及`trace/`复制到下方位置。
+不再嵌套一层`generated/`；文件复制可以使用操作系统文件管理器，不要求特定Shell。
+HLS测试只读取这些结果，不自动训练、导出或改写模型。
 
 ## 导出目录与路径
 
@@ -30,27 +43,42 @@ data/yolov2_tiny/             # 与外部工程的generated根目录内容对应
     └── ...                 # 其余层按下面的边界命名
 ```
 
-五个CNN testbench默认读取仓库根目录的`data/yolov2_tiny/`，无需设置环境变量。
-默认位置根据脚本或测试源码路径确定，不按仿真进程的当前工作目录拼接，因此从
-`csim/build`等目录启动也不需要更改数据路径。工程搬迁后重新编译测试即可。
+五个CNN testbench的默认目标是仓库根目录的`data/yolov2_tiny/`，不是相对于仿真工作目录
+寻找同名文件夹。通过`hls_ddr.tcl`运行Top时，脚本在编译测试文件时传入绝对默认路径；
+移动仓库后须重新执行脚本并重新编译，不沿用旧位置的测试可执行文件。
+
+手动建立模块工程时，测试会尝试从源码路径回退定位仓库。该实现含POSIX `realpath`和
+Unix绝对路径判断；相对源码路径只有在仿真运行目录中仍可解析时才有效。不能据此保证
+所有手动工程都与运行目录无关，更不能宣称Windows路径已适配。说明见
+[HLS入口与平台限制](README.md#手动模块工程与路径限制)。
 
 数据查找优先级为：非空的`YOLO_DATA_DIR`可选覆盖 → 仓库内默认目录。变量未设置或
-为空都使用默认目录；只有默认数据缺失或文件不匹配时才报错。覆盖目录同样应包含
+为空时尝试使用默认目录；源码路径无法定位、数据缺失或文件不匹配都会报错。覆盖目录应包含
 `bins/`、`trace/`和`metadata.json`，当前样本后缀固定为`0000`。
 
-只有想读取另一套外部导出时才需配置，例如：
+只有想读取另一套外部导出时才需配置。以下示例明确区分Shell，路径是占位示例，不能照抄为
+作者的目录；建议使用绝对路径。Windows示例只说明环境变量语法，不代表HLS流程已验证。
+
+Linux/Bash，在运行工具的同一终端中：
 
 ```bash
-YOLO_DATA_DIR=/path/to/another/generated vitis_hls -f /path/to/repository/hls/cnn_accelerator/script/hls_ddr.tcl
+export YOLO_DATA_DIR="/absolute/path/to/generated"
 ```
 
-这不是正常运行的前置步骤。若以前在终端中设置过`YOLO_DATA_DIR`，旧值仍会覆盖默认
-目录；不再需要覆盖时取消该设置即可。
+Windows/PowerShell，在启动工具前：
 
-2026-11-19本机复制范围为`metadata.json`、27个模型BIN和样本`0000`的43个trace BIN。
-没有复制Python工程的NPY、checkpoint或训练数据集；源导出目录保留，副本不会自动跟随
-源目录更新。更换模型时应整套更新，不能只替换其中几个BIN。文件名中的`0000`是样本
-编号，不表示只验证第一层。
+```powershell
+$env:YOLO_DATA_DIR = "D:/datasets/yolov2_tiny/generated"
+```
+
+不再需要覆盖时，Bash使用`unset YOLO_DATA_DIR`，PowerShell使用
+`Remove-Item Env:YOLO_DATA_DIR -ErrorAction SilentlyContinue`。这些操作只影响相应终端
+及其后续子进程，不改变已运行的HLS进程。默认目录正常使用时不需要上述设置。
+
+用于五个CNN测试的样本`0000`参考文件集为`metadata.json`、27个模型BIN和43个trace BIN，
+合计71个文件；不需要NPY、checkpoint或完整训练数据集。文件名中的`0000`是样本编号，
+不表示只验证第一层。更换模型时应整套更新，不能混用不同checkpoint的BIN和golden。
+当前两份PS配置头记录了checkpoint校验标识；使用其他模型时需按下文重新生成。
 
 ## 模块测试需要哪些文件
 
@@ -88,12 +116,26 @@ Overlay 测试使用程序构造的视频与框，不需要模型目录。
 
 ## PS 配置与 SD 卡
 
-在仓库根目录执行以下命令，默认更新现有 PS 配置头，不更改模型 BIN：
+需要Python 3.7或以上，两个生成器仅依赖Python标准库，不要求在本机安装PyTorch。
+以下命令从仓库根目录执行，默认更新现有PS配置头，不更改模型BIN。请先确认所用命令
+启动的是Python 3；`python3`和`py -3`是两种环境下的示例，不是跨系统固定名称。
+
+Linux/Bash：
 
 ```bash
 python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
 python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
 ```
+
+Windows/PowerShell（已安装Python Launcher时）：
+
+```powershell
+py -3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
+py -3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
+```
+
+没有`py`命令时，用本机Python 3解释器命令或可执行文件路径替换；脚本输入输出位置
+不因更换解释器命令而改变。此处给出调用语法，不声称已完成Windows端到端构建验证。
 
 两脚本默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本所在位置定位，与启动
 目录无关。可用`--metadata /path/to/metadata.json`显式指定文件，或用非空
@@ -101,6 +143,9 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
 输出分别为 `camera_model_input.h` 和 `camera_model_output.h`，保存量化
 标量、Prediction scale、anchors、类别及 checkpoint 校验标识；不保存大模型或 LUT。
 更新模型后，两份头和 27 个 BIN 必须同步，重新编译 PS 应用。
+
+显式的相对`--metadata`、`--output`或相对`YOLO_DATA_DIR`按进程当前目录解释；
+只有默认路径按脚本位置定位。外部覆盖建议传绝对路径，以免在IDE和终端中指向不同文件。
 
 板上只需把 `bins/` 下 27 个文件放到 SD 的 `0:/yolo/`，不要再嵌套 `bins/`；SD 不需要
 trace、NPY 或 metadata。JTAG 运行不要求 `BOOT.BIN`，SD 自启动时则另需匹配硬件的

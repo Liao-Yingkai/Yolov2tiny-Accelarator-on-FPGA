@@ -29,7 +29,7 @@ for 每个 Cout 块：
 
 每块读 `B` 个参数 Pack 和 `spatial_tiles*B` 个累加 Tile，写同样多的 INT8 Tile。整层读 `geometry.cout_tiles` 个参数 Pack，输入输出各 `geometry.spatial_tiles*geometry.cout_tiles` 个 Tile。块边界由计数确定，不额外发送块头或坐标。参数流按全局 Cout Tile 递增；BIN 里只有逻辑 Cout 个 bias/M/S，Loader 先按 `oc=(first+local_cout_tile)*4+lane` 判界再读，无效 lane 在 Pack 内填零，不读越界地址。Prediction 最后一个 Pack 只含 C124 一个有效 lane。
 
-Systolic 现有 OS 入口仍一次处理一块，不因本次 PostProcess 重构而改变。整网集成时，上游层级调度依次调用 OS，把各块接续到同一条输出流；PostProcess 同时按整层运行，不能让上游等待整层 PostProcess 返回后才供给下一块。Loader 须保证对应块参数可以到达，不能先因写满累加路径相关的浅 FIFO 而停在参数发送之前。Pool/Writer 按同一块顺序消费，层切换仍等待整层写回完成。
+Systolic OS入口一次处理一个Cout缓存块。整网集成时，上游层级调度依次调用 OS，把各块接续到同一条输出流；PostProcess 同时按整层运行，不能让上游等待整层 PostProcess 返回后才供给下一块。Loader 须保证对应块参数可以到达，不能先因写满累加路径相关的浅 FIFO 而停在参数发送之前。Pool/Writer 按同一块顺序消费，层切换仍等待整层写回完成。
 
 ## 2. 参数缓存与一次 signed requant
 
@@ -54,7 +54,7 @@ out = clamp((INT64(a) * m) 算术右移 S, -128, 127)
 
 ## 4. 验证
 
-HLS Top 设为 `conv_postprocess`，设计源文件选 `conv_postprocess.cpp`，testbench 只加入 [`test_conv_postprocess_pytorch.cpp`](../cnn_accelerator/testbench/test_conv_postprocess_pytorch.cpp)。默认读取仓库内`data/yolov2_tiny/`，无需设置环境变量，使用样本`0000`；非空`YOLO_DATA_DIR`可选覆盖根目录，数据准备见[数据说明](data.md)。每层读取同一套导出的四个文件：
+HLS Top设为`conv_postprocess`，设计源文件选`hls/cnn_accelerator/src/postprocess/conv_postprocess.cpp`，testbench只加入[`test_conv_postprocess_pytorch.cpp`](../cnn_accelerator/testbench/test_conv_postprocess_pytorch.cpp)。默认数据目标是仓库内`data/yolov2_tiny/`，样本为`0000`；路径定位条件见[HLS入口说明](README.md#手动模块工程与路径限制)。非空`YOLO_DATA_DIR`可选覆盖根目录，数据准备见[数据说明](data.md)。每层读取同一套导出的四个文件：
 
 - `trace/trace_<layer>_systolic_int32_hwc_0000.bin`：bias 前的 little-endian INT32 HWC 输入。
 - `bins/<layer>_bias.bin`、`bins/<layer>_quant.bin`：参数按逻辑 Cout 排布；quant 先存全部 `M`，再存全部 `S`，均为 little-endian INT32。组包时先判 Cout 边界再读文件。

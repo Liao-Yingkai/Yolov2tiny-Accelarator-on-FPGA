@@ -1,10 +1,15 @@
 # YOLO相机预处理与推理
 
-当前保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理、YOLO推理、解码/NMS，并把检测列表发送给`roi_overlay`。Overlay在视频帧边界整批更新框、类别和置信度；没有目标时清除旧框。用户已于2026-11-19确认测试及上板功能验证完成；本文末尾旧软件检查记录不作为当前帧率或检测精度报告。
+应用保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理、YOLO推理、解码/NMS，并把检测列表发送给`roi_overlay`。Overlay在视频帧边界整批更新框、类别和置信度；没有目标时清除旧框。2026-11-19基线已完成测试及上板功能验证；本文末尾历史软件检查不作为当前帧率或检测精度报告。
+
+本文文件路径以仓库根目录为基准，`src/`特指`vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/`。
+构建使用Vitis Classic IDE 2022.2及standalone Cortex-A9 BSP；工作区导入、平台重绑定和
+操作系统验证范围见[Vivado/Vitis说明](../../../README.md)。本应用运行于板上裸机，不能将
+它与开发主机使用Linux还是Windows混为一谈，也不能作为普通桌面程序直接运行。
 
 `model_loader.c`负责SD加载；`camera_input.c`负责受保护的ROI复制；`camera_preprocess.c`负责RGB顺序和整数归一化/量化；`camera_cnn.c`负责DDR、单次启动、超时及缓存维护；`camera_postprocess.c`负责解码/NMS；`camera_display.c`负责坐标/文字打包、Overlay命令和确认。没有运行时JSON解析，也没有把大模型编译进ELF。
 
-## SD卡必须如何放文件
+## SD模型文件布局
 
 使用当前xilffs支持的分区格式，建议FAT32。在SD卡根目录创建小写`yolo`文件夹，将以下27个文件直接放进去，不要再套一层`bins`目录：
 
@@ -40,19 +45,23 @@ SD卡根目录/
     └── prediction_quant.bin
 ```
 
-板上路径是`0:/yolo/conv1_weight.bin`等。文件来源是同一次Python模型导出的：
+板上路径是`0:/yolo/conv1_weight.bin`等，`0:`是FatFs卷号，不是Windows盘符。所需27个BIN
+来自同一次兼容模型导出；在本仓库默认数据目录中位于：
 
 ```text
-YOLOV2_TINY/generated/bins/
+data/yolov2_tiny/bins/
 ```
 
 只需要这27个模型BIN；SD模型目录不需要`metadata.json`、NPY、trace或测试图片。不要将`conv1_quant.bin`拆成两个文件，也不要重新打包权重或补通道。所有文件必须来自同一次导出；长度检查不能识别两个相同网络、不同checkpoint之间的混用。
 
+这些BIN不随Git克隆提供，数据来源与准备边界见[模型与测试数据](../../../../hls/docs/data.md)。
+可使用主机文件管理器复制到SD，过程不要求特定Shell；不要把`bins/`目录本身嵌套到`yolo/`下。
+
 若通过JTAG运行ELF，SD中只需上述模型目录；若从SD启动，根目录仍需匹配当前硬件和应用的`BOOT.BIN`，它与`yolo/`目录独立，不要覆盖原有启动文件。
 
-## 长文件名与“静态工作缓冲”
+## FatFs与长文件名
 
-目前BSP的`system.mss`已经配置`use_lfn=1`，这是所需设置，无需另开一个“静态工作缓冲”开关：
+保留的BSP配置要求`use_lfn=1`。导入或重新生成平台后，应确认实际构建的xilffs采用该值：
 
 - `0`：关闭长文件名，不能按上述长文件名访问。
 - `1`：开启长文件名，文件名处理缓冲放在静态内存中，适合当前单线程裸机程序。
@@ -82,7 +91,7 @@ PL侧地址单位与具体布局见[DDR设计](../../../../hls/docs/yolov2_tiny_
 
 几何统一位于`camera_geometry.h`：视频640×480 BGR888，ROI为`[112,528)×[32,448)`，大小416×416，与Overlay一致。抓拍保留READ停车、两个新MM2S事件和READ/WRITE槽所有权检查；源帧invalidate后按行复制ROI，复制后再次核实所有权/DMA状态，再解除停车。所有停车后出口都解除停车；失败快照不可使用。快照由PS独占，不是VDMA第四帧。
 
-只复制519,168字节紧凑BGR，删除整帧复制和逐字节memcmp诊断。解除停车后才执行归一化，缩短预览定格时间。预处理只做BGR→RGB及点对点量化，直接写Feature A，无INT8整图二次复制：
+只复制519,168字节紧凑BGR，不复制整帧或逐字节memcmp。解除停车后才执行归一化，缩短预览定格时间。预处理只做BGR→RGB及点对点量化，直接写Feature A，无INT8整图二次复制：
 
 ```text
 q = clamp(round_nearest_even(FP32(pixel/255) * FP32(1/input_scale)), -128,127)
@@ -90,12 +99,8 @@ q = clamp(round_nearest_even(FP32(pixel/255) * FP32(1/input_scale)), -128,127)
 
 以上是YOLO训练端`to_tensor`及`dump_trace.quantize_input`的离线参考；运行时使用整数M/S和最近偶数舍入，全部256种像素值必须一致。没有mean/std、灰度、反色、平均池化、resize、LUT或8通道补零。DDR保存紧凑RGB，尾通道由PL Loader补零。
 
-更换SD模型后，在仓库根目录重新生成同批输入系数并重编译：
-
-```bash
-python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
-  --metadata /path/to/YOLOV2_TINY/generated/metadata.json
-```
+更换SD模型后，使用同批metadata运行`generate_camera_model_input.py`并重编译应用。
+Python解释器、Linux/Bash与Windows/PowerShell调用示例见[配置生成说明](../../tools/CAMERA_INPUT.md)。
 
 默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本位置定位，无需环境变量；`--metadata`或非空`YOLO_DATA_DIR`可选覆盖，命令行参数优先。默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。数据组织见[模型与测试数据](../../../../hls/docs/data.md)。
 
@@ -106,7 +111,8 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
 → 轮询Done → invalidate结果B → 解码/NMS → 上传整批检测并等帧边界确认 → 取下一帧
 ```
 
-AutoRestart保持关闭，每次只启动一张图。取消原100 ms节拍，但保留安全取帧等待；本次CNN完成前不能写入下一张图。
+CNN的AutoRestart保持关闭，每次只启动一张图；不设固定10fps节拍，但保留安全取帧等待。
+本次CNN完成前不能写入下一张图。
 
 输出是B中的只读视图，按`(y*13+x)*128+c`定位，`c<125`。不转置，也不复制成紧凑125通道；视图只在本次完成到下一次启动之间有效。当前解码/NMS在复用Feature前同步消费完，结果复制到独立的`detections`列表。
 
@@ -130,12 +136,8 @@ PS用float、expf及稳定sigmoid/softmax计算，不改变PL量化规则，不�
 
 `camera_postprocess(prediction, &detections)`返回本帧列表，count为0表示无目标，不沿用上一帧。每项有ROI内left/top/right/bottom、最终score和class_id；`camera_class_name()`返回模型类别名。列表独立于B区，直接交给Overlay控制模块；正常主循环不打印结果。
 
-更换模型时，还需从同一metadata生成输出scale、anchors和类别名：
-
-```bash
-python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py \
-  --metadata /path/to/YOLOV2_TINY/generated/metadata.json
-```
+更换模型时，还需从同一metadata运行`generate_camera_model_output.py`生成输出scale、
+anchors和类别名；调用方式及可选参数见[配置生成说明](../../tools/CAMERA_INPUT.md)。
 
 默认生成`src/camera_model_output.h`，不增加SD文件或运行时JSON解析。两份小型配置头及SD的27个BIN必须来自同一次导出。
 
@@ -167,7 +169,9 @@ HDMI显示ROI内实时图像、ROI外黑色、绿色检测框，类别及概率�
 1. 使用与当前Vivado设计一致的XSA和bitstream。
 2. 在Vitis中Build Platform，确认应用实际使用的导出目录包含`ff.h`、`ffconf.h`以及`libxilffs.a`，而不只是BSP设置界面已勾选。
 3. 刷新应用并重新生成构建文件。Debug/Release的链接组均需包含`-lxilffs`和`-lm`。
-4. Debug/Release均须编译`camera_preprocess.c`、`camera_postprocess.c`及重写的`camera_display.c`（已取消旧的源文件排除）；不能单独使用历史Debug/Release目录中尚未重生成的Makefile。
+4. Debug/Release均须编译`camera_preprocess.c`、`camera_postprocess.c`及`camera_display.c`；
+   重新生成应用构建文件，不依赖其他工作区留下的Makefile。链接选项设置在应用项目
+   `cnn_accel_cam`，不是系统项目`cnn_accel_cam_system`的System Builder。
 5. 下载当前bitstream、初始化PS/DDR、运行新ELF；观察HDMI预览及UART。
 
 实际连续运行建议使用Release（现有配置为`-O2`）；Debug的`-O0`适合单步检查，不适合作为预处理性能结果。不要启用fast-math来改变数值约定。
@@ -209,10 +213,10 @@ YOLO model ready; accelerator not started
 ### 模型加载软件检查（2026-11-15）
 
 - 当前构建范围的8个应用C文件通过ARM Cortex-A9编译；使用现有链接脚本和Xilinx specs完成ELF链接。只有未修改的`vdma_api.c`保留原有的有符号/无符号比较警告。
-- 当时平台导出目录尚缺FatFs头文件和库，检查在独立目录中按当前BSP配置重建`libxilffs.a`，与已导出的`libxil.a`链接；没有改写用户BSP和IDE生成文件。该结果不代表用户平台已经完成Build Platform。
+- 当时平台导出目录尚缺FatFs头文件和库，检查在独立目录中按当前BSP配置重建`libxilffs.a`，与已导出的`libxil.a`链接；没有改写原BSP和IDE生成文件。该结果不代表平台已完成Build Platform。
 - ELF中的模型、Feature、视频帧和临时读取缓冲均落在DDR，大小、64字节对齐和互不重叠检查通过。
 - 主机文件系统模拟检查逐字节核对全部27个真实BIN的权重/参数DDR拼接，覆盖缺文件、大小不符、成功返回但实际短读、读取错误及容量不足。失败块不复制到目标区，挂载只执行一次。该检查没有连接真实SD控制器或CNN。
-- 应用工程XML和本次修改范围的差异检查通过；用户原有平台/FSBL改动保持不动。
+- 应用工程XML和该次修改范围的差异检查通过，平台/FSBL配置未改动。
 
 记录位于仓库根忽略目录`build/ps/sd_model_loader_check_20261115/`，包括ARM ELF/map、独立xilffs库和主机检查；不提交生成物。尚未下载ELF或进行板上SD读取、长文件名访问、HDMI及DDR总线实测。
 
@@ -223,9 +227,9 @@ YOLO model ready; accelerator not started
 - 抓拍主机模拟核对精确ROI行偏移、两个帧事件、源帧invalidate，以及复制后所有权失败仍解除停车；不等于真实VDMA时序已验证。
 - 推理主机模拟核对清旧Done、输入flush、屏障、Start、Done轮询、结果invalidate和屏障的顺序；重复调用均返回B视图，启动后没有额外IsIdle读取。超时后输出为空、输入不可写、不允许再次启动，异常Busy也锁住访问。
 - 正常逐帧日志和对应计数器已移除，保留初始化、错误状态变化、恢复和停机日志。最新ELF不含逐帧打印。
-- 本轮检查生成物均保存在忽略目录`build/ps/yolo_camera_infer_check_20261115/`；Git工作区只保留必要源码、配置和文档变更，未自动提交。
+- 该次检查生成物均保存在忽略目录`build/ps/yolo_camera_infer_check_20261115/`；Git工作区只保留必要源码、配置和文档变更，未自动提交。
 
-以上是软件构建和模拟接口检查，尚未下载新ELF或执行真实摄像头→YOLO推理，不声明板上帧率或检测精度。本轮没有运行HLS综合、C-sim或RTL co-sim。
+以上是软件构建和模拟接口检查，尚未下载新ELF或执行真实摄像头→YOLO推理，不声明板上帧率或检测精度。该次检查没有运行HLS综合、C-sim或RTL co-sim。
 
 完整检查记录：`build/ps/yolo_camera_infer_check_20261115/validation.log`（仓库根目录下，本机生成，不提交）。
 
@@ -245,7 +249,7 @@ YOLO model ready; accelerator not started
 - 软件驱动模拟覆盖延迟ACK、旧命令未完成时的启动同步、sequence回绕、16框与空列表、坐标裁剪/取整/偏移、类别/百分比打包、非法列表拒绝、协议错误及超时锁存；再次启用地址和未定义行为检查后通过。
 - Debug/Release均重新纳入`camera_display.c`；工程XML、主循环调用顺序、无逐帧UART和Git差异检查通过。现有忽略规则已覆盖全部检查生成物，无需新增忽略项。
 
-上述模拟只验证PS软件的命令组织和错误处理，不验证实际RTL绘图、SOF时序或AXI互联。本轮没有修改HLS/Vivado/BSP，没有运行HLS仿真或综合，也没有下载上板。需在Vitis刷新并重新生成应用构建文件、Build Release，再使用匹配当前硬件的bitstream和ELF检查显示效果。
+上述模拟只验证PS软件的命令组织和错误处理，不验证实际RTL绘图、SOF时序或AXI互联。该次检查没有修改HLS/Vivado/BSP，没有运行HLS仿真或综合，也没有下载上板。需在Vitis刷新并重新生成应用构建文件、Build Release，再使用匹配当前硬件的bitstream和ELF检查显示效果。
 
 检查记录：`build/ps/yolo_overlay_check_20261115/validation.log`（目录沿用检查启动时命名，生成物不提交）。
 

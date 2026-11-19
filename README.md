@@ -4,9 +4,26 @@
 Vivado 摄像头/HDMI 工程和 Vitis 裸机应用。网络采用固定九层结构，面向学习与实现
 FPGA 推理数据通路，不是任意网络的通用部署框架。
 
-当前已完成测试及上板功能验证（2026-11-19，用户确认），能够连续执行摄像头取帧、
+当前已完成测试及上板功能验证（2026-11-19验证基线），能够连续执行摄像头取帧、
 整数预处理、PL 推理、PS 解码/NMS 和 HDMI 检测框显示。具体帧率、精度及最终资源
 应以对应版本的实测和实现报告为准，历史 HLS 估计不作为当前板测指标。
+
+## 环境与路径约定
+
+本文中的“仓库根目录”指同时包含`README.md`、`hls/`和`vivado/`的目录，不是`hls/`。
+除非另有说明，文件路径和命令的起始位置均以仓库根目录为基准；不要求仓库使用特定名称。
+
+| 项目 | 要求或验证范围 |
+|---|---|
+| FPGA | `xc7z020clg400-2`；引脚、DDR及外设配置针对现有板级工程，不代表所有Zynq板卡可直接使用 |
+| 开发工具 | Vivado、Vitis HLS、Vitis Classic IDE 2022.2；不是新版Vitis Unified IDE流程 |
+| HLS运行环境 | 当前脚本与测试路径处理在Linux验证；下方命令明确使用Bash |
+| Windows | 工具本身提供Windows入口，但本仓库的HLS路径回退和编译参数引用尚未完成Windows验证，不能按“一键复现”承诺 |
+| Python | 使用Python 3，辅助脚本要求3.7或以上，仅依赖标准库；解释器命令可能是`python3`、`python`或`py -3` |
+| 模型数据 | 另行准备配套的模型BIN、metadata及所需trace；不随Git克隆提供 |
+
+AMD提供Windows Vitis HLS命令行入口，并说明其使用MinGW环境；这与本仓库是否完成
+跨平台验证是两回事。参见[HLS命令行说明](https://docs.amd.com/r/2022.2-English/ug1399-vitis-hls/Running-Vitis-HLS-from-the-Command-Line)。
 
 ## 系统分工
 
@@ -47,19 +64,24 @@ HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的�
 | [hls/docs](hls/docs/README.md) | 模块设计、DDR 契约和测试数据说明 |
 | [vivado/cnn_accel_cam](vivado/cnn_accel_cam) | 摄像头预览、YOLO/Overlay IP和Vitis PS应用 |
 | [vivado/cnn_accel_cam/tools](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md) | 从模型 metadata 生成 PS 输入/输出配置 |
-| `data/yolov2_tiny/` | 本地模型与样本0000测试数据副本，不纳入版本管理 |
+| `data/yolov2_tiny/` | 默认模型及测试数据位置，需要自行准备，不纳入版本管理 |
 | `build/hls/`、`build/ps/` | 本地检查、工程、日志和报告，不纳入版本管理 |
 
-保留现有目录与工程名称；本地目录名即使包含历史项目名称，也不影响当前 YOLO 实现。
+仓库目录名可以自选；Vivado/Vitis内部的工程名称沿用现有配置，不能仅重命名文件夹后
+假定平台关联、项目标识和硬件交接文件会自动同步。
 
 ## 运行 HLS 验证
 
 需要 Vitis HLS 2022.2，以及同一次 Python 模型导出的 `metadata.json`、`bins/` 和
-`trace/`。本机已将所需导出文件复制到`data/yolov2_tiny/`；该目录由Git忽略，
-克隆仓库后仍须另行准备数据，文件要求见
+`trace/`。将这些内容放入`data/yolov2_tiny/`；该目录由Git忽略，不会因克隆仓库而自动出现。
+当前没有随仓库提供数据下载入口或完整训练/export工程，文件要求和准备边界见
 [测试与模型数据](hls/docs/data.md)。
 
-在仓库根目录执行：
+以下是**Linux/Bash**命令，不是PowerShell或Windows CMD命令。先在该终端初始化
+Vitis HLS 2022.2环境，确保`vitis_hls`可执行；若使用安装目录的`settings64.sh`，将路径
+替换为实际安装位置。工具环境设置与可选的模型路径覆盖不是同一项配置。
+
+在仓库根目录执行C仿真：
 
 ```bash
 mkdir -p build/hls
@@ -67,14 +89,22 @@ cd build/hls
 vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
 ```
 
-脚本默认只跑 C 仿真，工程写到 `build/hls/cnn_yolo_ddr/`。如需单独运行 HLS
-综合，在命令前加 `YOLO_HLS_STAGE=csynth`；脚本不自动运行 RTL co-sim 或导出 IP。
+脚本默认只跑C仿真，工程写到`build/hls/cnn_yolo_ddr/`。仅做HLS综合时，在上述
+`build/hls/`目录中改用：
+
+```bash
+YOLO_HLS_STAGE=csynth vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
+```
+
+该前缀赋值语法属于Bash。脚本不自动运行RTL co-sim或导出IP，末尾`exit`会结束工具
+会话，不应当作无副作用的查询脚本在已有GUI工程中随意执行。
 五个 CNN testbench 默认读取仓库内的 `data/yolov2_tiny/`，使用样本 `0000`，只打印统计和有限
 错误，不写 CSV。模块级测试须各自选择对应 Top，不要将多个 `main()` 加入同一工程；
 入口对照见 [HLS 文档索引](hls/docs/README.md)。
 
-正常运行无需设置环境变量，默认路径由脚本或测试源码位置定位，不依赖仿真运行目录。
-仅在使用另一套数据时，可选用`YOLO_DATA_DIR`覆盖默认目录；若此前已经设置，该覆盖仍优先。
+使用上述Tcl入口时无需手动设置数据环境变量：脚本向Top testbench传入默认数据路径。
+手动建立模块工程时，源码路径回退存在条件，详见[HLS入口与平台限制](hls/docs/README.md)。
+非空的`YOLO_DATA_DIR`可选覆盖默认目录，建议使用绝对路径；它不是首次运行的必填项。
 
 C++ 对照可以验证逐元素输出和 DDR 软件地址计算；单实例、有限 FIFO 反压、
 AXI 写回顺序和板级时序需要分别检查综合报告、RTL 仿真与实现。
