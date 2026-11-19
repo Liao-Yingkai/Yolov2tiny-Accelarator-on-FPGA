@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -15,8 +16,7 @@
  * 参数流按全局 4-Cout Tile 递增，每层只供给一次；一个 DUT 调用处理完整一层。
  */
 namespace {
-const std::string generated_directory =
-    "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/";
+std::string generated_directory;
 constexpr char sample_suffix[] = "0000";
 constexpr int INT32_BYTES = 4;
 constexpr int MAX_PRINTED_ERRORS = 10;
@@ -190,6 +190,12 @@ bool run_layer(const ConvGeometry& g, const char* name,
 }  // namespace
 
 int main() {
+    const char* configured_path = std::getenv("YOLO_DATA_DIR");
+    if (!configured_path || !*configured_path) {
+        std::cerr << "请设置环境变量 YOLO_DATA_DIR，指向 YOLO generated 根目录。\n";
+        return 1;
+    }
+    generated_directory = std::string(configured_path) + "/";
     const char* names[] = {"conv1", "conv2", "conv3", "conv4", "conv5",
                            "conv6", "conv7", "conv8", "prediction"};
     static_assert(sizeof(names) / sizeof(names[0]) == YOLO_TINY_LAYER_COUNT,

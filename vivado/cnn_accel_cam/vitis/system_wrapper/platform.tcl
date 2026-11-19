@@ -1,16 +1,21 @@
 # 
 # Usage: To re-create this platform project launch xsct with below options.
-# xsct /home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper/platform.tcl
+# xsct path/to/vitis/system_wrapper/platform.tcl
 # 
 # OR launch xsct and run below command.
-# source /home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper/platform.tcl
+# source path/to/vitis/system_wrapper/platform.tcl
 # 
 # To create the platform in a different location, modify the -out option of "platform create" command.
 # -out option specifies the output directory of the platform project.
 
+# 路径相对于当前脚本解析；保留原平台生成步骤，不依赖作者电脑目录。
+set platform_script_dir [file dirname [file normalize [info script]]]
+set platform_workspace_dir [file dirname $platform_script_dir]
+set platform_hardware_file [file join $platform_workspace_dir system_wrapper.xsa]
+
 platform create -name {system_wrapper}\
--hw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}\
--out {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis}
+-hw $platform_hardware_file\
+-out $platform_workspace_dir
 
 platform write
 domain create -name {standalone_ps7_cortexa9_0} -display-name {standalone_ps7_cortexa9_0} -os {standalone} -proc {ps7_cortexa9_0} -runtime {cpp} -arch {32-bit} -support-app {empty_application}
@@ -22,19 +27,19 @@ platform generate -quick
 platform generate
 platform generate
 platform active {system_wrapper}
-platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform config -updatehw $platform_hardware_file
 platform generate -domains 
 platform active {system_wrapper}
-platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform config -updatehw $platform_hardware_file
 platform generate -domains 
 platform active {system_wrapper}
-platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform config -updatehw $platform_hardware_file
 platform generate
 platform active {system_wrapper}
-platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform config -updatehw $platform_hardware_file
 platform generate -domains 
 platform active {system_wrapper}
-platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform config -updatehw $platform_hardware_file
 platform generate -domains 
 bsp reload
 bsp setlib -name xilffs -ver 4.8
@@ -50,7 +55,7 @@ platform generate -domains standalone_ps7_cortexa9_0
 platform clean
 platform generate
 platform active {system_wrapper}
-platform config -updatehw {/home/liaoyingkai/Projects/mnist_fpga_accelerator/vivado/cnn_accel_cam/vitis/system_wrapper.xsa}
+platform config -updatehw $platform_hardware_file
 platform clean
 platform generate
 platform clean

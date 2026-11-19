@@ -1,36 +1,75 @@
-# Vivado 工程
+# Vivado 与 Vitis 工程
 
-当前摄像头工程已接入YOLO DDR加速器和`roi_overlay`。PS应用接入SD加载、ROI整数预处理、连续推理、解码/NMS和检测列表上传，保留HDMI预览。软件闭环已连接，板上效果仍需实测。SD目录、后处理、Overlay控制、长文件名配置和DDR布局见[应用说明](cnn_accel_cam/vitis/cnn_accel_cam/README.md)。
+当前工程已完成摄像头 → YOLO 推理 → 解码/NMS → HDMI 叠加的上板功能验证
+（2026-11-19，用户确认）。硬件目标为 `xc7z020clg400-2`，使用 Vivado / Vitis
+2022.2。模型、SD 文件及应用流程见 [PS 应用说明](cnn_accel_cam/vitis/cnn_accel_cam/README.md)。
 
-安装 Vivado 2022.2，打开 `cnn_accel_cam/cnn_accel_cam.xpr`。首次打开后，为 `system` Block Design 重新生成 Output Products，再运行综合；缓存、综合、实现和仿真输出由本机生成，不纳入 Git。
+## 保留的工程结构
 
-版本管理保留以下内容：
+- `cnn_accel_cam/cnn_accel_cam.xpr`：Vivado 工程入口。
+- `cnn_accel_cam/cnn_accel_cam.srcs/`：BD、IP 配置、约束和图形布局。
+- `cnn_accel_cam/cnn_accel_cam.srcs/sources_1/imports/system_wrapper.v`：XPR 实际引用的 wrapper。
+- `cnn_accel_cam/ip_repo/`：完整的 CNN、Overlay、摄像头和 DVI 自定义 IP。
+- `cnn_accel_cam/vitis/`：现有平台、应用和系统工程；不另建一套目录结构。
 
-- `.xpr` 工程文件与完整 `.srcs` 目录，包括 Block Design、IP 配置（`.xci`）及界面布局。
-- `cnn_accel_cam/ip_repo` 中完整的自定义 IP，包括 `component.xml`、HDL、驱动、XGUI 和数据文件。
-- `cnn_accel_cam/cnn_accel_cam.srcs/sources_1/imports/system_wrapper.v`，这是当前XPR实际引用的wrapper。`.gen`内容忽略并按需重生成。
+`ip_repo` 内的 HDL、`component.xml`、XGUI、驱动及 `.dat` 初始化文件是当前 BD 的
+实际依赖。即使由 HLS 生成，也不是可以随意删除的缓存；修改 HLS 后须重新导出 IP，
+不能手改已导出 HDL 来替代源码。
 
-`.cache`、`.runs`、`.sim`、`.hw`、`.ip_user_files` 及工具日志和临时缓存不纳入 Git。忽略规则不会删除本地已有产物。
+## 打开 Vivado
 
-此目录用于保留可打开的工程及所需源文件，不代表已经完成时序收敛或上板验证。请使用同版本 Vivado，避免自动升级 IP 带来的差异。
+1. 用 Vivado 2022.2 打开 `cnn_accel_cam/cnn_accel_cam.xpr`。
+2. 检查项目器件为 `xc7z020clg400-2`，IP Repository 指向本工程的 `ip_repo`。
+3. 打开 `system` BD，检查 IP Status，再 Validate Design。
+4. 首次打开时按需 Generate Output Products，然后运行综合、实现及 bitstream 生成。
+5. 若修改了硬件，重新导出包含 bitstream 的 XSA，并同步 Vitis 平台。
 
-## Vitis 工作区版本管理
+实际 BD、wrapper、XDC 和 IP 仓库均在工程内。XPR 中旧的 ImportPath、备用 run
+或未启用的增量缓存目录是迁移记录，不是缺失源文件；不要为消除这些记录而改器件、
+连接或时钟。遇到 locked IP，先看 Report IP Status 的具体原因，不要直接删除互联。
+保留同版本工具，避免无意升级 IP 改变已验证配置。
 
-`cnn_accel_cam/vitis` 保留应用 `src/`（包括YOLO量化/解码配置头、链接脚本、`Xilinx.spec` 和说明）、工具脚本、`.project`/`.cproject`/`.prj`、系统 `.sprj`、平台 `platform.spr`/`platform.tcl` 及小型资源配置。规则按工作区和平台目录层级匹配，不依赖 `system_wrapper` 的固定名称，也覆盖 `system_wrappe` 等平台命名变体；不排除其他平台的源码或工程描述。
-保留工作区根 `system_wrapper.xsa` 和平台内 `system_wrapper/hw/system_wrapper.xsa` 两份硬件交接文件；后者由 `platform.spr` 的 `platIntHandOff` 引用，不能随解包目录一并排除。两个 BSP 的 `system.mss` 配置也保留。
+CNN 由 PS 逐次 Start；Overlay 是 `ap_ctrl_none` 自由运行、显式 FLP 流水，不调用
+Start/AutoRestart。两者不是同一种控制方式。
 
-忽略 IDE 状态（`.workspace`、`.metadata`、`.analytics`、`IDE.log`、`RemoteSystemsTempFiles`）、各级 `Debug`/`Release`、`_ide` 复制的 bitstream/PS 初始化文件、平台 `export`/`logs`/`.log`、`tempdsa` 临时硬件解包目录、编译生成的 `.elf`，以及 BSP 自动生成的 include/lib/libsrc 和构建文件。Vivado 目录下其他位置的 `.log`/`.jou` 也忽略。平台 `hw/` 中除上述 XSA 外的解包副本（驱动、bitstream、PS 初始化等）也忽略；原始自定义 IP 的完整源仍保留在 `ip_repo/`，不受这些规则影响。
+## 打开 Vitis
 
-Vitis重新生成的`平台/_platform/`是平台/FSBL工作副本，整体忽略；正式`platform.spr`、`platform.tcl`、`zynq_fsbl/`源码及BSP的`system.mss`继续保留。`Packages/.repos.xml`只是IDE包管理器自动生成的仓库索引，单独忽略，不排除其他包文件或启动镜像配置。本地文件不会因此删除。
+现有项目名称为：
 
-平台标记 `hasFsblMakeHasChanges=false`；与本机 Vitis 2022.2 的 `data/embeddedsw/lib/sw_apps/zynq_fsbl/src` 比较，共有源码（含 hook）当前一致，工作区另有硬件初始化和构建文件。仍保守保留 `zynq_fsbl` 的源码、hook、链接脚本、初始化源码与自身 Makefile，便于以后保留用户启动定制；仅排除其 BSP 生成物和 Debug/Release，不把所有 Makefile 或头文件一刀切忽略。
+| 类型 | 名称 |
+|---|---|
+| Platform | `system_wrapper` |
+| Application | `cnn_accel_cam` |
+| System project | `cnn_accel_cam_system` |
 
-恢复工程后先 Build Platform/BSP，再 Build Application。`.prj` 和 `platform.tcl` 含原机器绝对路径，搬迁时需要重新绑定/导入平台并检查硬件路径；当前不改写元数据，也不承诺整个 Vitis 工作区可自动跨路径重建。
+1. 在 Vitis 2022.2 中使用 `cnn_accel_cam/vitis/` 作为工作区，导入现有平台及应用。
+2. 确认平台硬件指向本地的 `system_wrapper.xsa`，必要时 Update Hardware Specification。
+3. Build Platform，生成 BSP、库和 `export/system_wrapper/system_wrapper.xpfm`。
+4. **迁移目录后重新选择应用及系统工程关联的平台**。IDE 的 `.prj/.sprj` 保存过旧机器
+   的绝对平台路径，不能把缺失的旧 `.xpfm` 当成缺失源码，也不靠硬编码 include 路径绕过。
+5. 检查 BSP 启用 `xilffs`，长文件名 `use_lfn=1`；应用链接包含 `xilffs` 和 `m`。
+   Build Release 后，使用配套 bitstream、PS 初始化和新 ELF 运行。
 
-`.gitignore` 不会自动取消已有文件的跟踪。如果生成物已经提交，需仅对明确的生成物执行 `git rm --cached`，保留本地文件。本轮静态审计清理了摄像头工作区迁入的 IDE 状态、`_ide` 硬件副本、平台 `hw` 解包副本、两个 BSP 自动生成内容及 FSBL ELF；也清理了 `vivado/` 下一个 NFS 延迟删除临时文件的跟踪。未删除任何本地文件，也未恢复正在使用的 `workbench.xmi`。审计和本地文件校验记录位于忽略目录 `build/hls/camera_static_check/git_cleanup.log`。
+`platform.tcl` 的硬件路径已改为相对于脚本位置解析，原平台生成步骤和 BSP 配置保持
+不变。该文件是平台创建/生成脚本，不要在正在使用的平台上反复 source；已有平台优先
+通过 IDE 更新、构建。本轮整理没有执行平台重建或验证全新路径下的 IDE 构建。
 
-摄像头工程保留完整 `.srcs`、`ip_repo` 和 XPR 实际引用的 `.srcs/sources_1/imports/system_wrapper.v`；XPR 中外部 `.gen` 路径只是导入来源记录，并非当前 wrapper 的实际路径。现有工作区的原交接 XSA、平台内部 `hw/*.xsa`、BSP `system.mss` 和 FSBL 自身源码均继续跟踪；没有按 `.c`、`.h`、`.tcl` 或 `.dcp` 后缀统一排除。
+两个 `system_wrapper.xsa` 分别位于工作区根和 `system_wrapper/hw/`；平台描述会引用
+它们，因此都保留。整理时两者内容一致。硬件、XSA、驱动与应用必须配套；不要只更新
+其中一个。FSBL 源码、hook、链接脚本、初始化文件、平台描述及 BSP 的 `system.mss`
+继续保留，不把它们按“生成文件”整体移除。
 
-重新构建仍可能修改必要的工程描述：`.cproject` 可能增加 `refreshScope`，`.prj`/`.sprj` 更新 `dirty`/`lastBuildOptions`，自动维护的 `platform.tcl` 可能追加 `platform clean/generate`。这些文件同时保存编译配置、平台关联或重建命令，因此继续跟踪，不能为消除 modified 而整体忽略，也不使用 `assume-unchanged` 隐藏将来的配置变更。
+## 源文件与生成物
 
-若XPR直接引用增量综合检查点，应保留对应文件；以后不再保存增量综合缓存时，先在Vivado中移除引用，再调整跟踪规则，不要直接忽略所有DCP。
+版本管理保留 XPR、完整 SRCs、完整自定义 IP、两份 XSA，以及 Vitis 的源文件、工程
+描述、平台设置和 FSBL 源码。以下内容由本机重建，不纳入版本管理：
+
+- Vivado 的 `.cache/.runs/.sim/.hw/.ip_user_files/.gen`、日志及 `.Xil`。
+- Vitis 的工作区状态、`Debug/Release`、`_ide/_platform`、平台 `export/logs`。
+- BSP 自动生成的头、库、驱动工作副本、编译产物和平台硬件解包副本（上述 XSA 除外）。
+- PS 配置器的 `NA/ps7_summary.html` 等摘要报告、Python 缓存及旧测试的 CSV 输出。
+
+这些忽略规则不删除已有本地文件。已有跟踪的生成报告单独取消跟踪；不清空本机工作区，
+不改写 Git 历史。`.prj/.sprj/.cproject/platform.spr` 等必要配置仍跟踪，不使用
+`assume-unchanged` 隐藏真正的设置变化。再次生成工程后，应审查必要配置的 diff，
+不能以“所有 modified 都是垃圾”为理由统一忽略。

@@ -1,4 +1,4 @@
-/* 自动生成；来源: /home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/metadata.json
+/* 自动生成；来源: YOLOV2_TINY/generated/metadata.json
  * checkpoint SHA256: 172294266dd0fbd2b0986573980856b8f7da4c871c61607e46d509946046d21f
  * prediction output_scale=0.19452644884586334; FP32=0.194526449f。
  * 更新模型后重新运行tools/generate_camera_model_output.py；勿手改。 */

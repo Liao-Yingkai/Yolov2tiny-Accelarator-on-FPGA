@@ -126,12 +126,14 @@ Pool1 的 `208×208×16`。建议两区基址按 64 B 对齐；权重、参数�
 发读请求。最后一个 Pool Tile 产生、Writer 收到最后一个 Tile、甚至最后一个
 写请求发出，都不能单独作为层间屏障。首版不用跨层预读或原地覆盖。
 
-## 6. 实施与验收
+## 6. 检查入口与历史记录
 
-独立实现已通过 G++ 功能检查和 Vitis HLS 2022.2 Clang 静态检查。
+当前整网已完成测试及上板功能验证，见[Top](top.md)。以下先记录独立实现阶段结果，再列出后续修改应重新核对的边界，不表示本轮运行了这些流程。
+
+独立实现阶段通过 G++ 功能检查和 Vitis HLS 2022.2 Clang 静态检查。
 九层均检查了 Loader 的顺序与尾槽、Writer 的 NHWC 地址和范围外哨兵；
 首层另用 PyTorch BIN 验证紧凑 RGB 经 Feature Loader、Im2Row 后的逐元素结果。
-检查不导出 CSV，未运行综合或 RTL co-sim。
+检查不导出 CSV，该阶段未运行综合或 RTL co-sim。
 
 1. 先独立验证三个 Loader 和 Writer：RGB 跨字拆包与尾零、参数末组不越界、
    多 Cout 块写同一像素、池化后行尾和 Prediction 末字。与逻辑 HWC golden

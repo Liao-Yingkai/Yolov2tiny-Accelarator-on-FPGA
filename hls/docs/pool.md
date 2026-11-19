@@ -67,6 +67,8 @@ Bypass 对比原始输入。另用全负数的 Conv6 输入验证右/下补边�
 坐标取 2×2 最大值。检查输入/输出事务数、两种 valid mask、尾部 payload 和块/层切换；
 只打印统计和有限错误，不写 CSV 或其他数据文件。
 
-本轮通过 G++ 功能验证（九层及全负数用例均零错误）和 Vitis HLS 2022.2
-Clang 静态检查。未执行 Vitis 综合或 RTL co-sim；BRAM 映射、实际 II、时序与
-RTL 反压尚未验证。
+测试通过`YOLO_DATA_DIR`指定`generated/`根目录，不使用本机绝对默认路径，样本固定为`0000`；见[数据说明](data.md)。
+
+独立实现阶段通过 G++ 功能验证（九层及全负数用例均零错误）和 Vitis HLS 2022.2
+Clang 静态检查；该阶段未执行 Vitis 综合或 RTL co-sim，不能用该记录证明BRAM映射、
+实际II、时序或RTL反压。后续整网集成及板上状态见[Top](top.md)。

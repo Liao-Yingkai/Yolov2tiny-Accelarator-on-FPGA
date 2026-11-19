@@ -1,6 +1,15 @@
 # 本机编辑器配置，不影响工程源码或构建配置。
 **/.vscode/
 
+# Python 辅助脚本缓存和编辑器临时文件，不影响脚本或模型配置头。
+**/__pycache__/
+*.pyc
+*.pyo
+*.swp
+*.swo
+*~
+.DS_Store
+
 # Vitis HLS 独立综合验证工程（仅限仓库根目录）
 /vitis_hls_*_csynth_*/
 
@@ -34,6 +43,8 @@
 /vitis_hls*.log
 /hls/vitis_hls*.log
 /hls/.Xil/
+# 旧 testbench 的可重生成数据；当前测试只读 BIN，不再导出 CSV。
+/hls/**/simulation_data/
 
 # Vivado 工程可重生成的缓存、运行与仿真输出（仅限 vivado/）
 /vivado/**/*.cache/
@@ -48,6 +59,9 @@
 # 工具日志可能出现在工程根或隐藏 .log 目录，不只叫 vivado.log。
 /vivado/**/*.log
 /vivado/**/*.jou
+# PS 配置器导出的本机摘要报告，不是工程源文件。
+/vivado/NA/
+/vivado/**/ps7_summary.html
 
 # .gen 内容由 Vivado 重生成；当前摄像头工程的 wrapper 保存在 .srcs 内。
 /vivado/**/*.gen/**

@@ -1,12 +1,11 @@
 #include "../src/systolic/systolic.h"
 
 #include <algorithm>
-#include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <sys/stat.h>
 #include <vector>
 
 /*
@@ -17,21 +16,14 @@
  * - INT32 golden [H,W,Cout]：无 bias，little-endian；按真实 y/x/oc 随机索引。
  * - 结果按块 -> y -> tile_x -> local_cout_tile 接收；无效空间/Cout lane 期望为零，
  *   不访问 golden。分别比较两个 mask，不能用值为零代替 valid。
- * CSV 每包一行。每层 Activation 只保存一次，权重和结果完整导出。
+ * 逐包验证输入补零、输出 mask 与累加值，仅打印终端统计，不导出数据文件。
  */
 namespace {
-const std::string generated_directory =
-    "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/";
+std::string generated_directory;
 constexpr char sample_suffix[] = "0000";
 constexpr int ACTIVATION_PACK_BYTES = SYSTOLIC_SPATIAL_PAR * SYSTOLIC_CIN_PAR;
 constexpr int WEIGHT_PACK_BYTES = SYSTOLIC_COUT_PAR * SYSTOLIC_CIN_PAR;
 constexpr int INT32_BYTES = 4;
-
-bool make_directory(const char* path) {
-    if (mkdir(path, 0777) == 0) return true;
-    struct stat info;
-    return errno == EEXIST && stat(path, &info) == 0 && S_ISDIR(info.st_mode);
-}
 
 bool read_binary(const std::string& path, std::size_t expected_bytes,
                  std::vector<std::int8_t>& bytes) {
@@ -62,12 +54,7 @@ unsigned lane_mask(int first, int limit, int lanes) {
     return mask;
 }
 
-void write_columns(std::ofstream& csv, const char* prefix, int lanes, int channels) {
-    for (int lane = 0; lane < lanes; ++lane)
-        for (int c = 0; c < channels; ++c) csv << ',' << prefix << "_l" << lane << "_c" << c;
-}
-
-bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_directory,
+bool run_layer(const ConvGeometry& g, const char* name,
                hls::stream<activation_pack_t>& activation_stream,
                hls::stream<weight_pack_t>& weight_stream,
                hls::stream<yolo_acc_tile_t>& output_stream, int& total_errors) {
@@ -101,26 +88,6 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
         !read_binary(trace + "_systolic_int32_hwc" + suffix,
                      std::size_t(g.h) * g.w * g.cout * INT32_BYTES, golden)) return false;
 
-    const std::string prefix = csv_directory + "/" + layer;
-    std::ofstream input_csv((prefix + "_input.csv").c_str());
-    std::ofstream weight_csv((prefix + "_weight.csv").c_str());
-    std::ofstream output_csv((prefix + "_output.csv").c_str());
-    if (!input_csv || !weight_csv || !output_csv) {
-        std::cerr << "CSV打开失败: " << prefix << '\n';
-        return false;
-    }
-    input_csv << "transaction,y,tile_x,token,spatial_valid";
-    write_columns(input_csv, "activation", SYSTOLIC_SPATIAL_PAR, SYSTOLIC_CIN_PAR);
-    input_csv << '\n';
-    weight_csv << "transaction,global_cout_tile,token";
-    write_columns(weight_csv, "weight", SYSTOLIC_COUT_PAR, SYSTOLIC_CIN_PAR);
-    weight_csv << '\n';
-    output_csv << "transaction,block,y,tile_x,global_cout_tile,"
-                  "expected_spatial_valid,actual_spatial_valid,expected_cout_valid,actual_cout_valid";
-    write_columns(output_csv, "expected", SYSTOLIC_SPATIAL_PAR, SYSTOLIC_COUT_PAR);
-    write_columns(output_csv, "actual", SYSTOLIC_SPATIAL_PAR, SYSTOLIC_COUT_PAR);
-    output_csv << ",match\n";
-
     int errors = 0, activations_written = 0, weights_written = 0, outputs_read = 0;
     for (int first = 0, block = 0; first < cout_tiles; first += resident_tiles, ++block) {
         const int count = std::min(resident_tiles, cout_tiles - first);
@@ -135,7 +102,6 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
                 const int index = ct * reduction + token;
                 const std::int8_t* bytes = weight.data() + std::size_t(index) * WEIGHT_PACK_BYTES;
                 weight_pack_t pack;
-                weight_csv << index << ',' << ct << ',' << token;
                 for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
                     for (int c = 0; c < SYSTOLIC_CIN_PAR; ++c) {
                         const int value = bytes[j * SYSTOLIC_CIN_PAR + c];
@@ -147,10 +113,8 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
                             return false;
                         }
                         pack.lane[j].channel[c] = value;
-                        weight_csv << ',' << value;
                     }
                 }
-                weight_csv << '\n';
                 weight_stream.write(pack);
                 ++weights_written;
             }
@@ -168,8 +132,6 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
                 const std::int8_t* bytes = activation.data() + std::size_t(index) * ACTIVATION_PACK_BYTES;
                 activation_pack_t pack;
                 pack.spatial_valid = spatial_valid;
-                if (block == 0)
-                    input_csv << index << ',' << y << ',' << tile_x << ',' << token << ',' << spatial_valid;
                 for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
                     for (int c = 0; c < SYSTOLIC_CIN_PAR; ++c) {
                         const int value = bytes[i * SYSTOLIC_CIN_PAR + c];
@@ -182,11 +144,9 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
                                           << " lane=" << i << " ic=" << ic << '\n';
                                 return false;
                             }
-                            input_csv << ',' << value;
                         }
                     }
                 }
-                if (block == 0) input_csv << '\n';
                 activation_stream.write(pack);
                 ++activations_written;
             }
@@ -210,7 +170,7 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
                     const unsigned cout_valid = lane_mask(first_oc, g.cout, SYSTOLIC_COUT_PAR);
                     const unsigned actual_spatial_valid = actual.spatial_valid.to_uint();
                     const unsigned actual_cout_valid = actual.cout_valid.to_uint();
-                    bool match = actual_spatial_valid == spatial_valid && actual_cout_valid == cout_valid;
+                    const bool match = actual_spatial_valid == spatial_valid && actual_cout_valid == cout_valid;
                     if (!match && ++errors <= 10)
                         std::cerr << name << " mask错误: block=" << block << " y=" << y
                                   << " tile_x=" << tile_x << " cout_tile=" << ct
@@ -218,9 +178,7 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
                                   << " cout=" << actual_cout_valid << '/' << cout_valid
                                   << " (实际/期望)\n";
 
-                    output_csv << outputs_read++ << ',' << block << ',' << y << ',' << tile_x << ',' << ct
-                               << ',' << spatial_valid << ',' << actual_spatial_valid
-                               << ',' << cout_valid << ',' << actual_cout_valid;
+                    ++outputs_read;
                     for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i) {
                         const int x = first_x + i;
                         for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j) {
@@ -232,9 +190,7 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
                                 expected = read_le_int32(golden.data() + index * INT32_BYTES);
                             }
                             const std::int32_t got = actual.value[i][j].to_int();
-                            output_csv << ',' << expected;
                             if (got != expected) {
-                                match = false;
                                 if (++errors <= 10)
                                     std::cerr << name << " 累加值错误: block=" << block << " y=" << y
                                               << " x=" << x << " oc=" << oc << " actual=" << got
@@ -242,10 +198,6 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
                             }
                         }
                     }
-                    for (int i = 0; i < SYSTOLIC_SPATIAL_PAR; ++i)
-                        for (int j = 0; j < SYSTOLIC_COUT_PAR; ++j)
-                            output_csv << ',' << actual.value[i][j].to_int();
-                    output_csv << ',' << match << '\n';
                 }
             }
         }
@@ -257,13 +209,6 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
         }
     }
 
-    input_csv.close();
-    weight_csv.close();
-    output_csv.close();
-    if (!input_csv || !weight_csv || !output_csv) {
-        std::cerr << "CSV写入失败: " << prefix << '\n';
-        return false;
-    }
     if (activations_written != blocks * activation_packs ||
         weights_written != weight_packs || outputs_read != output_tiles) ++errors;
     std::cout << name << " Cout块=" << blocks << " Activation事务=" << activations_written
@@ -276,12 +221,12 @@ bool run_layer(const ConvGeometry& g, const char* name, const std::string& csv_d
 }  // namespace
 
 int main() {
-    const std::string directory = "simulation_data/pytorch/systolic";
-    if (!make_directory("simulation_data") || !make_directory("simulation_data/pytorch") ||
-        !make_directory(directory.c_str())) {
-        std::cerr << "无法创建CSV目录: " << directory << '\n';
+    const char* configured_path = std::getenv("YOLO_DATA_DIR");
+    if (!configured_path || !*configured_path) {
+        std::cerr << "请设置环境变量 YOLO_DATA_DIR，指向 YOLO generated 根目录。\n";
         return 1;
     }
+    generated_directory = std::string(configured_path) + "/";
     const char* names[] = {"conv1", "conv2", "conv3", "conv4", "conv5",
                            "conv6", "conv7", "conv8", "prediction"};
     static_assert(sizeof(names) / sizeof(names[0]) == YOLO_TINY_LAYER_COUNT,
@@ -292,9 +237,8 @@ int main() {
     int errors = 0;
     // 同一组流依次运行全部层、全部 Cout 块，覆盖 Conv8 跨权重段和 Prediction 尾 Cout。
     for (int i = 0; i < YOLO_TINY_LAYER_COUNT; ++i)
-        if (!run_layer(YOLO_TINY_GEOMETRIES[i], names[i], directory,
+        if (!run_layer(YOLO_TINY_GEOMETRIES[i], names[i],
                        activation_stream, weight_stream, output_stream, errors)) return 1;
-    std::cout << "Systolic OS " << (errors ? "FAIL" : "PASS") << " 错误数=" << errors
-              << " CSV目录=" << directory << '\n';
+    std::cout << "Systolic OS " << (errors ? "FAIL" : "PASS") << " 错误数=" << errors << '\n';
     return errors ? 1 : 0;
 }

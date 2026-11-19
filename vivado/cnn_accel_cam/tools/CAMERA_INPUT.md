@@ -11,7 +11,7 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
   --metadata /path/to/YOLOV2_TINY/generated/metadata.json
 ```
 
-默认metadata为`/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/metadata.json`，默认输出为`../vitis/cnn_accel_cam/src/camera_model_input.h`（相对于本目录）。更换SD模型时必须用同一次导出的metadata重新生成此头并重编译PS。
+`--metadata`优先；未指定时读取环境变量`YOLO_DATA_DIR`下的`metadata.json`，两者均未设置则报错，不再使用本机绝对默认路径。默认输出为`../vitis/cnn_accel_cam/src/camera_model_input.h`（相对于本目录）。更换SD模型时必须用同一次导出的metadata重新生成此头并重编译PS。
 
 生成器只读取metadata，不修改训练工程，不重新导出BIN；只生成少量M/S标量，不生成LUT或大数组。
 

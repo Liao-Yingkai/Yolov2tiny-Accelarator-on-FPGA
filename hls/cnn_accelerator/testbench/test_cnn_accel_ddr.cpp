@@ -72,8 +72,11 @@ bool load_model(const std::string& root, std::vector<word_t>& weights,
 
 int main() {
     const char* configured_path = std::getenv("YOLO_DATA_DIR");
-    const std::string root = configured_path && *configured_path ? configured_path :
-        "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated";
+    if (!configured_path || !*configured_path) {
+        std::cerr << "请设置环境变量 YOLO_DATA_DIR，指向 YOLO generated 根目录。\n";
+        return 1;
+    }
+    const std::string root = configured_path;
     const auto& prediction = YOLO_TINY_GEOMETRIES[YOLO_TINY_LAYER_COUNT - 1];
     const int physical_channels = prediction.output_channel_groups * FEATURE_PACK_CHANNELS;
     std::vector<std::uint8_t> rgb, golden;

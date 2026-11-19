@@ -4,6 +4,8 @@
 
 文件包括：`roi_overlay.h`（接口与配置）、`roi_overlay.cpp`（叠加核）、`font.h`（字模）、`test_roi_overlay.cpp`（独立测试台）和本说明。综合脚本与生成物保存在源码目录之外。
 
+当前已随YOLO系统完成上板功能验证（2026-11-19，用户确认）。本文描述当前协议；末尾折叠保留旧版本的检查和资源记录，不将它们作为本版FLP流水的性能报告。
+
 系统视频接线预期为`MM2S → roi_overlay → video_out`，PS控制口接AXI4-Lite；插入叠加核不改变摄像头和DDR的数据处理职责。
 
 ## 像素事务与启动
@@ -26,7 +28,7 @@ PS 初始化 AXI-Lite 驱动后等待视频同步，再按 sequence ACK 下发�
 
 `command`、`command_data`、`status`均属于`control` AXI4-Lite接口。具体地址由重新生成的寄存器头文件确定，不在此硬编码，也不假定与旧IP地址相同。复位时ACK、sequence跟踪、框数量及控制状态均为0。
 
-`status`显式组合`s_axilite`和`ap_none`：前者将状态映射到AXI-Lite，后者不请求核侧的`ap_vld`端口握手。PS读取状态并通过`status[31:16]`的sequence ACK确认命令完成，包括COMMIT的帧边界确认；不能用Start、Done或数据有效标记代替该ACK。以接口pragma为准，源码末尾仍提到`ap_vld`的注释与当前配置不一致，本轮只更新文档，不修改源码。
+`status`显式组合`s_axilite`和`ap_none`：前者将状态映射到AXI-Lite，后者不请求核侧的`ap_vld`端口握手。PS读取状态并通过`status[31:16]`的sequence ACK确认命令完成，包括COMMIT的帧边界确认；不能用Start、Done或数据有效标记代替该ACK。端口协议以接口pragma和生成驱动为准。
 
 `command`字段：
 
@@ -112,7 +114,7 @@ PS仍独立完成裁剪、坐标换算、量化、推理及文本格式化；相
 
 ## 测试入口与验证边界
 
-2026-11-18本轮仅对照用户修改后的源码更新文档，没有运行静态编译、C-sim、RTL co-sim或综合，也没有更新导出IP、BSP或PS程序。当前FLP版的验证结果须单独记录，不能直接沿用旧版的资源、II、时序或PASS结论。
+当前板上功能验证状态见本文开头。2026-11-19整理只更新说明，没有修改Overlay源码、testbench、导出IP或BSP，也没有运行仿真或综合。下列历史自动测试台问题和旧综合资源须与当前状态区分。
 
 C++测试台直接调用`roi_overlay()`，一次调用对应一个像素事务，检查绘图、旁带、命令ACK和错误处理；它不能证明流水风格及RTL反压行为。完整测试约215万个像素事务，不输出CSV。
 
@@ -121,6 +123,11 @@ C++测试台直接调用`roi_overlay()`，一次调用对应一个像素事务�
 重新验证时先从当前源码执行C Synthesis，再生成co-sim或系统RTL测试，不复用旧`sim/`。重点覆盖输入停顿、下游持续及间歇反压，检查像素和SOF/TLAST不丢失、不重复、不乱序；上板还需检查Video Out锁定、连续显示及提交/清框。重新导出后，XSA、bitstream和BSP必须配套更新。
 
 ### 历史检查记录（以下数据不代表当前显式FLP版本）
+
+以下本机`build/`路径不随仓库提供，保留版本名和数值用于解释优化过程。
+
+<details>
+<summary>展开旧版本检查与资源记录</summary>
 
 2026-11-12：DUT与独立testbench均通过系统G++和Vitis HLS 2022.2附带Clang 3.9的C++14 `-fsyntax-only`检查；Tcl文本括号/引号完整性及文件空白检查通过。日志位于仓库根`build/hls/roi_overlay_static_check/`，没有生成或执行仿真程序，也没有执行建工程脚本或综合。
 
@@ -149,9 +156,9 @@ C-sim完成，`input_pixels=1843673 output_pixels=1843673 checked=1843673 errors
 
 本机脚本和全部生成物在仓库根的忽略目录中，不污染源码：
 
-- [综合脚本](../../build/hls/roi_overlay_opt_20261114/run_hls.tcl)
-- [上一轮综合报告](../../build/hls/roi_overlay_opt_20261114/roi_overlay_opt/iter9/syn/report/roi_overlay_csynth.rpt)
-- [上一轮C-sim与综合日志](../../build/hls/roi_overlay_opt_20261114/iter9_console.log)
+- 综合脚本：`build/hls/roi_overlay_opt_20261114/run_hls.tcl`
+- iter9报告：`build/hls/roi_overlay_opt_20261114/roi_overlay_opt/iter9/syn/report/roi_overlay_csynth.rpt`
+- iter9日志：`build/hls/roi_overlay_opt_20261114/iter9_console.log`
 
 用户原有`~/High_Level_Synthesis/yolov2_roi_overlay`工程未被覆盖；上述生成物不随Git提交。
 
@@ -176,5 +183,7 @@ C-sim通过：`input_pixels=2150923 output_pixels=2150923 checked=2150923 errors
 
 仍有两处动态数组索引的`HLS 214-358` QoR提示（准备器选择本框mask及扫描器选择当前框标记），另有变量位选择、静态寄存器上电初始化和`status ap_none`通用提示。这些不等于已发现功能错误，当前C-sim与II检查通过；复位、真实AXI4-Lite访问及反压仍需RTL系统验证。本轮未运行RTL co-simulation或Vivado。
 
-- [历史multicycle1综合报告](../../build/hls/roi_overlay_opt_20261114/roi_overlay_opt/multicycle1/syn/report/roi_overlay_csynth.rpt)
-- [历史multicycle1 C-sim与综合日志](../../build/hls/roi_overlay_opt_20261114/multicycle1_console.log)
+- multicycle1报告：`build/hls/roi_overlay_opt_20261114/roi_overlay_opt/multicycle1/syn/report/roi_overlay_csynth.rpt`
+- multicycle1日志：`build/hls/roi_overlay_opt_20261114/multicycle1_console.log`
+
+</details>

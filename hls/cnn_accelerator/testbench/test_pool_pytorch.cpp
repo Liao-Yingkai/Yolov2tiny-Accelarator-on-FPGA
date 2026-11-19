@@ -2,14 +2,14 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
 namespace {
-const std::string trace_dir =
-    "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/trace/";
+std::string trace_dir;
 constexpr char trace_suffix[] = "_int8_hwc_0000.bin";
 constexpr int MAX_PRINTED_ERRORS = 10;
 
@@ -123,6 +123,12 @@ bool check_layer(const ConvGeometry& g, const std::string& name,
 }  // namespace
 
 int main() {
+    const char* configured_path = std::getenv("YOLO_DATA_DIR");
+    if (!configured_path || !*configured_path) {
+        std::cerr << "请设置环境变量 YOLO_DATA_DIR，指向 YOLO generated 根目录。\n";
+        return 1;
+    }
+    trace_dir = std::string(configured_path) + "/trace/";
     const char* layer_names[] = {"conv1", "conv2", "conv3", "conv4", "conv5",
                                  "conv6", "conv7", "conv8", "prediction"};
     static_assert(sizeof(layer_names) / sizeof(layer_names[0]) == YOLO_TINY_LAYER_COUNT,

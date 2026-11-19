@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import os
 import struct
 import sys
 from pathlib import Path
@@ -64,7 +65,7 @@ def generate(metadata, source):
     name_literal = "{ " + ", ".join(json.dumps(name, ensure_ascii=True) for name in names) + " }"
     # 只输出宏；消费模块自行定义一次静态表，不在每个包含单元复制数据。
     return (
-        "/* 自动生成；来源: " + str(source) + "\n"
+        "/* 自动生成；来源: " + Path(source).name + "（与模型权重同批导出）\n"
         f" * checkpoint SHA256: {metadata.get('checkpoint', {}).get('sha256', 'unknown')}\n"
         f" * prediction output_scale={scales[0]!r}; FP32={scale_literal}。\n"
         " * 更新模型后重新运行tools/generate_camera_model_output.py；勿手改。 */\n"
@@ -83,11 +84,16 @@ def generate(metadata, source):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--metadata", type=Path, default=Path(
-        "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/metadata.json"))
+    parser.add_argument("--metadata", type=Path,
+                        help="metadata.json路径；未指定时使用YOLO_DATA_DIR/metadata.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] /
                         "vitis/cnn_accel_cam/src/camera_model_output.h")
     args = parser.parse_args()
+    if args.metadata is None:
+        data_dir = os.environ.get("YOLO_DATA_DIR")
+        if not data_dir:
+            parser.error("请指定--metadata，或设置YOLO_DATA_DIR为包含metadata.json的导出目录")
+        args.metadata = Path(data_dir) / "metadata.json"
     metadata = json.loads(args.metadata.read_text(encoding="utf-8"))
     # 完整校验与格式化成功后才替换头文件；错误metadata不破坏已有产物。
     header = generate(metadata, args.metadata.resolve())

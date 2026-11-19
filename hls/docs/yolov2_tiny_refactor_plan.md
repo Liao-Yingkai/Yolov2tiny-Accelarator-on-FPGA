@@ -1,15 +1,15 @@
 # YOLOv2-tiny 设计记录与待优化事项
 
-记录日期：2026-11-01，更新日期：2026-11-10。状态：首版 YOLO DDR Top 已接入，
-整条流水的 AXI 顺序、反压及板级性能仍待验证。
+记录日期：2026-11-01，整理日期：2026-11-19。当前YOLO系统已完成测试及上板功能验证
+（用户确认）；本文保留架构取舍与后续优化方向，不再作为待实现模块的清单。
 
 本文记录当前 YOLOv2-tiny VOC 的接口、数值契约和存储调度，并保留后续性能优化及验证事项。九层 DDR Top 已实现；已完成检查、综合结果与尚未覆盖的 RTL/板级边界见 [Top](top.md)。
 
 ## 1. 重构边界与目标网络
 
-近期首先重构 HLS 计算与存储调度，保留单套物理计算流水。PyTorch exporter、Golden Model、testbench 随接口和数值契约确定后同步更新；Vivado、Vitis、摄像头和检测结果显示不在当前实施范围内。
+当前HLS计算与存储调度保留单套物理计算流水，已与Vivado、Vitis、摄像头和检测结果显示集成。后续变更接口或数值契约时仍需同步Python exporter、Golden Model和testbench；本轮仅整理工程，不改变现有实现和结构。
 
-软件参考工程：`/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/`。Systolic 首版沿用该工程 `export.py` 和 `README.md` 冻结的整数权重 BIN 布局，使用 `dump_trace.py` 的逐层整数数据做对照。
+软件参考为外部Python工程的`YOLOV2_TINY/`目录。使用其`export.py`冻结的整数权重BIN布局和`dump_trace.py`逐层整数数据做对照；运行路径统一通过`YOLO_DATA_DIR`指定，见[数据说明](data.md)。
 
 输入为 RGB，参考分辨率为 416×416，Batch 第一版为 1。下表的空间尺寸均采用 H×W：
 
@@ -25,7 +25,7 @@
 | Conv8 | 13×13×1024 | 3×3 / 1 / 1 | 1024 | 无 | 13×13×1024 |
 | Prediction | 13×13×1024 | 1×1 / 0 / 1 | 125 | 无 | 13×13×125 |
 
-前八层为 BN 折叠后的 Conv 与 LeakyReLU，当前软件斜率为 0.1；Prediction 无 BN、无激活。HLS 输出原始 Prediction Tensor，检测解码与 NMS 的实现位置留待后续确定。
+前八层为BN折叠后的Conv与LeakyReLU，斜率为0.1；Prediction无BN、无激活。HLS输出原始Prediction Tensor，检测解码及NMS由PS执行，Overlay负责绘图。
 
 本轮不扩展任意卷积 stride、任意 kernel 或任意网络图，仅覆盖上述网络所需操作。
 
@@ -313,7 +313,7 @@ output = signed INT8 clamp(scaled, -128, 127)
   先锁存旧值、后写当前行。内层 Cout Tile 循环目标 II=1，实际排程和映射待综合。
 - Conv7、Conv8、Prediction 原样透传。详细接口与验证见 [Pool 设计](pool.md)。
 
-## 9. 集成决策与待验证事项
+## 9. 当前集成决策与后续测量
 
 | 事项 | 当前状态或待验证结论 |
 |---|---|
@@ -321,9 +321,9 @@ output = signed INT8 clamp(scaled, -128, 127)
 | Cout驻留数量 | 首版各层最多32通道，BRAM综合后复核；按实际Tile数处理小层/尾块，配置Activation Replay |
 | Feature DDR布局 | 首版 NHWC 与 A/B 两区已定；实际 burst、端口分组及吞吐待验证 |
 | 导出ABI | 权重/参数/BIN 约定由 PyTorch 工程文档维护，HLS 与调用方按搬运规格接入 |
-| Im2Row多Group调度 | Strip BRAM访问表、Line Buffer覆盖时刻、启动及行尾处理 |
-| 1×1路径 | 四空间位置收集、Group读取与无Padding路径 |
-| YOLO整数数值 | 已决定移除激活前FakeQuant、采用一次性PostProcess；固定alpha常量及负分支系数派生，需新QAT微调、整数Golden及误差验证 |
+| Im2Row多Group调度 | 已实现Strip BRAM调度及Line Buffer覆盖门控；后续调整访问表时重新验证启动、行尾及反压 |
+| 1×1路径 | 已实现四空间位置收集、Group读取与无Padding路径 |
+| YOLO整数数值 | 已采用一次性PostProcess，固定alpha常量及负分支系数派生；更换模型后重新导出并对照整数Golden，精度单独评估 |
 | Pool输出契约 | 已确定紧密的池化后 4×4 Tile；Writer 按输出坐标组装 8 通道并写 DDR |
 | 调用配置 | 同一ConvGeometry九层表包含Pool/Bypass、输出、激活及32-Cout缓存字段，并由各模块与Top共用 |
 | 性能目标 | 目标分辨率、频率、fps及有效DDR带宽预算 |
@@ -339,7 +339,7 @@ output = signed INT8 clamp(scaled, -128, 127)
 2. PostProcess和原值行缓存Pool已实现；独立功能记录见各模块文档，模型精度及QAT误差仍需单独评估。
 3. Loader、Writer及九层计算已接入 [DDR Top](top.md)；已有整网C仿真与HLS综合记录，尚须RTL验证DDR A/B层间交接和浅FIFO反压。
 4. 综合和RTL复核实际存储预算、实例复用、AXI顺序及吞吐，测量整网基线后评估权重/参数加载重叠。
-5. 系统性能和上板验证、Vivado/Vitis更新另行安排。
+5. 已完成Vivado/Vitis集成及上板功能验证；后续性能优化应先测量同一配置的整网基线，不沿用旧估算作为当前实测。
 
 测试至少覆盖Cin=3/16/1024、1×1长归约、Cout=125尾部、W=13末Tile、多Cout驻留块与连续调用。Pool应使用原始2×2四元素公式作为独立reference，不能让reference重复DUT缓存实现。
 

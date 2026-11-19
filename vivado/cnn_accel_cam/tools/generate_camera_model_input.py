@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import os
 import struct
 import sys
 from pathlib import Path
@@ -57,11 +58,16 @@ def quantization_parameters(scale):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--metadata", type=Path, default=Path(
-        "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/metadata.json"))
+    parser.add_argument("--metadata", type=Path,
+                        help="metadata.json路径；未指定时使用YOLO_DATA_DIR/metadata.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] /
                         "vitis/cnn_accel_cam/src/camera_model_input.h")
     args = parser.parse_args()
+    if args.metadata is None:
+        data_dir = os.environ.get("YOLO_DATA_DIR")
+        if not data_dir:
+            parser.error("请指定--metadata，或设置YOLO_DATA_DIR为包含metadata.json的导出目录")
+        args.metadata = Path(data_dir) / "metadata.json"
     metadata = json.loads(args.metadata.read_text(encoding="utf-8"))
     if metadata.get("format_version") != 2 or metadata.get("weight_layout_version") != 3:
         raise ValueError("要求metadata format_version=2、weight_layout_version=3")
@@ -83,7 +89,7 @@ def main():
     multiplier, shift = quantization_parameters(scale)
     # 所有读取、契约检查及256值证明先完成，失败时不覆盖现有头文件。
     args.output.write_text(
-        "/* 自动生成；来源: " + str(args.metadata.resolve()) + "\n"
+        "/* 自动生成；来源: " + args.metadata.name + "（与模型权重同批导出）\n"
         f" * conv1 input_scale={scale!r}; metadata v2 / weight layout v3。\n"
         f" * checkpoint SHA256: {metadata.get('checkpoint', {}).get('sha256', 'unknown')}\n"
         " * FP32 byte/255、FP32 reciprocal乘法、nearest-even及INT8饱和：256/256一致。\n"

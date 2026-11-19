@@ -1,12 +1,12 @@
 # 传统 Output-Stationary 脉动阵列
 
-本文件对应 `cnn_accelerator/src/systolic/systolic_OS.cpp`，记录 YOLO 按块实现。模块已接入 [YOLO DDR Top](top.md)；整网功能检查与综合记录见该页，RTL 反压和板级性能仍待验证。
+本文件对应 `cnn_accelerator/src/systolic/systolic_OS.cpp`，记录 YOLO 按块实现。模块已接入完成测试及上板功能验证的[YOLO DDR Top](top.md)；下文独立开发阶段的存储预算和旧检查结果不替代当前版本的性能实测。
 
-## YOLOv2-tiny 重构计划
+## 当前实现
 
 2026-11-09 确认的首版范围：固定九层 YOLOv2-tiny VOC、单套 OS 阵列、一次调用处理
 一个 Cout 驻留块。各层统一按**最多 32 个 Cout 驻留**，Conv8 也按 32 设计；实际综合后再决定是否缩小。
-先实现和验证功能。权重加载重叠是后续明确要做的性能优化，首版不实现预取。
+当前使用单份权重驻留缓存，不实现预取。权重加载重叠保留为后续性能优化，本轮整理不改变该调度。
 全网调度见 [YOLOv2-tiny 重构总案](yolov2_tiny_refactor_plan.md)。
 
 ### 阵列与归约
@@ -75,7 +75,7 @@
 1. **优先评估首 Spatial Tile 边算边填。** 首遍的权重 Pack 旁路进入阵列，同时写入 Weight Buffer，随后空间位置只读缓存。该方案不增加第二份块缓存，也不要求 Weight Buffer 同拍读写。必须验证权重和 Activation 两路在任意先后到达、暂停或反压时仍按 token 对齐，不漏读、不重复写、不提前推进。加载慢于阵列时，首遍仍会等待，只能隐藏可重叠的部分。
 2. **再评估跨块预取。** 若上一项后仍有显著启动开销，再研究当前块计算时预取下一块。完整双缓冲在 Conv8 最坏情况下仅权重就需 576 KiB 逻辑容量，不作为 Z-7020 默认方案。分段预取或用完即覆盖必须证明旧地址已不再被使用，并测量 DDR 读写竞争；需要额外资源与调度评估。
 
-### 实现与验收顺序
+### 历史实现过程与后续复核
 
 1. 独立重构 OS（已实现）：接入块配置、可变 R、单缓存预加载、Replay 和两种结果 mask。Im2Row 与 Python BIN 格式不变。独立实现阶段通过 G++ 和 Vitis HLS 2022.2 Clang 的 C++14 静态语法检查；该阶段未运行 testbench 或综合。后续整网集成记录见 [Top](top.md)。
 2. 已编写真实 BIN 对照 testbench，见下节。定向非零无效 lane 的屏蔽测试留待补充，不篡改真实 trace，也不把该测试误当成允许违反 Cin 补零契约。
@@ -86,7 +86,7 @@
 
 HLS 工程的 Top 设为 `systolic_OS`，设计文件使用 `systolic_OS.cpp`，testbench 仅加入 [`test_systolic_pytorch.cpp`](../cnn_accelerator/testbench/test_systolic_pytorch.cpp)。
 
-路径和样本后缀集中在 testbench 顶部，默认读取 `YOLOV2_TINY/generated/` 的样本 `0000`。每层使用以下三份文件，必须来自同一套导出参数：
+必须设置`YOLO_DATA_DIR`为`generated/`根目录，样本后缀固定为`0000`；未设置或为空时报错退出，见[数据说明](data.md)。每层使用以下三份文件，必须来自同一套导出参数：
 
 - `trace/trace_<layer>_im2row_int8_0000.bin`：按 `y → tile_x → token` 的物理 Activation Pack。BIN 不带 mask，按行宽重建 `spatial_valid`。每个 Cout 块重新发送整层一次；不为块内每个 Cout Tile 重复发送。
 - `bins/<layer>_weight.bin`：按全局 Cout Tile 和 token 取本块的连续片段，原样恢复 signed INT8 lane；检查尾部补零，不改动 BIN 数据。
@@ -94,5 +94,5 @@ HLS 工程的 Top 设为 `systolic_OS`，设计文件使用 `systolic_OS.cpp`，
 
 默认依次验证九层的全部 100 个 Cout 块，覆盖 Conv8 的 `8191 → 8192` 权重地址分段、Prediction 的 1×1 和 `cout_valid=0001`、空间行尾和连续块调用。逐元素核对两个 mask、无效输出清零及事务守恒。当前配置预计输出 371072 个 Tile；完整 RTL co-sim 的阵列推进量约 3500 万步，另有加载和握手开销，耗时不能按 Im2Row 的测试规模估算。
 
-CSV 输出到仿真工作目录下 `simulation_data/pytorch/systolic/`，每层各有 `*_input.csv`、`*_weight.csv`、`*_output.csv`，每 Pack/Tile 一行。同层各块的 Activation 相同，输入 CSV 只记第一块；权重和输出完整记录。终端打印各层事务数与 PASS/FAIL，失败返回非零。已核对现有 27 个 BIN 的字节数，并通过 G++ 和 Vitis HLS 2022.2 Clang 静态语法检查；本次未运行 testbench、仿真或综合。
+测试不导出CSV或其他数据文件，不创建`simulation_data/`；终端打印各层事务数与PASS/FAIL，失败返回非零。逐元素比较、尾通道补零检查及事务计数保持不变。独立实现阶段已核对27个BIN的字节数，并通过静态语法检查；2026-11-19清理测试路径/输出时仅做静态检查，没有重新运行testbench、仿真或综合。
 

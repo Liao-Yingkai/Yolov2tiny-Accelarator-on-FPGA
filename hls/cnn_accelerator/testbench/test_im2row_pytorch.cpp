@@ -1,12 +1,11 @@
 #include "../src/im2row/im2row.h"
 
-#include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <sys/stat.h>
 
 /*
  * YOLOv2-tiny 真实整数 golden 对照；不是浮点/QAT 中间激活。
@@ -15,21 +14,13 @@
  * packed golden 为 [H,ceil(W/4),K*K*G,4,8]，沿 stream 顺序每次读32字节；
  * 第二参考 unfold 为 [H*W,K*K*Cin]，按逻辑坐标独立索引，不复刻缓存调度。
  * 输入/输出事务分别由 H*W*G、H*ceil(W/4)*K*K*G 推导。
- * CSV 每包一行；expected_lN_cM 来自 packed BIN，reference_match 表示其全部
- * 32个元素与 unfold 一致，actual_lN_cM 是 DUT 的 signed INT8；match 包含
- * 数据、参考一致性及 valid 检查。C-sim 无法验证 RTL 的反压与吞吐行为。
+ * 逐包检查 DUT 的 signed INT8 数据、packed/unfold 参考一致性与 valid，
+ * 仅打印终端统计，不导出数据文件。C-sim 无法验证 RTL 的反压与吞吐行为。
  */
 namespace {
 constexpr int PACK_ELEMENTS = IM2ROW_P * FEATURE_PACK_CHANNELS;
 const char* sample_suffix = "0000";
-const std::string trace_directory =
-    "/home/liaoyingkai/python_project/minist_train_fpga/YOLOV2_TINY/generated/trace/";
-
-bool make_directory(const char* path) {
-    if (mkdir(path, 0777) == 0) return true;
-    struct stat info;
-    return errno == EEXIST && stat(path, &info) == 0 && S_ISDIR(info.st_mode);
-}
+std::string trace_directory;
 
 bool open_binary(std::ifstream& file, const std::string& path, std::size_t bytes) {
     file.open(path.c_str(), std::ios::binary | std::ios::ate);
@@ -63,13 +54,13 @@ void report(int errors, const char* name, const char* kind, int y, int tile,
                   << " expected=" << expected << " actual=" << actual << '\n';
 }
 
-// 返回 false 只表示文件/目录等基础设施错误，main 必须立即失败退出。
+// 返回 false 表示文件或 stream 状态错误，main 必须立即失败退出。
 bool run_layer(const ConvGeometry& g, const char* name, const char* source,
-               const char* csv_name, const std::string& directory,
+               const char* case_name,
                hls::stream<channel_pack_t>& input,
                hls::stream<activation_pack_t>& output, int& total_errors) {
     if (!input.empty() || !output.empty()) {
-        std::cerr << "调用开始时stream非空: " << csv_name << '\n';
+        std::cerr << "调用开始时stream非空: " << case_name << '\n';
         return false;
     }
     const int groups = (g.cin + FEATURE_PACK_CHANNELS - 1) / FEATURE_PACK_CHANNELS;
@@ -85,24 +76,6 @@ bool run_layer(const ConvGeometry& g, const char* name, const char* source,
         !open_binary(packed, trace_directory + "trace_" + name + "_im2row_int8_" + sample_suffix + ".bin",
                      std::size_t(expected_outputs) * PACK_ELEMENTS)) return false;
 
-    const std::string prefix = directory + "/" + csv_name;
-    std::ofstream input_csv((prefix + "_input.csv").c_str());
-    std::ofstream output_csv((prefix + "_output.csv").c_str());
-    if (!input_csv || !output_csv) {
-        std::cerr << "CSV打开失败: " << prefix << '\n';
-        return false;
-    }
-    input_csv << "transaction,y,x,group";
-    for (int c = 0; c < FEATURE_PACK_CHANNELS; ++c) input_csv << ",c" << c;
-    input_csv << '\n';
-    output_csv << "transaction,y,tile_x,kh,kw,group,expected_valid,actual_valid";
-    for (int kind = 0; kind < 2; ++kind)
-        for (int lane = 0; lane < IM2ROW_P; ++lane)
-            for (int c = 0; c < FEATURE_PACK_CHANNELS; ++c)
-                output_csv << ',' << (kind == 0 ? "expected" : "actual")
-                           << "_l" << lane << "_c" << c;
-    output_csv << ",reference_match,match\n";
-
     int errors = 0, written = 0, read = 0;
     std::size_t comparisons = 0;
     // 每层直接取真实上游 trace，绝不把未迁移的其它 HLS 模块串接进来。
@@ -110,14 +83,11 @@ bool run_layer(const ConvGeometry& g, const char* name, const char* source,
         for (int x = 0; x < g.w; ++x)
             for (int group = 0; group < groups; ++group) {
                 channel_pack_t pack;
-                input_csv << written << ',' << y << ',' << x << ',' << group;
                 for (int cl = 0; cl < FEATURE_PACK_CHANNELS; ++cl) {
                     const int c = group * FEATURE_PACK_CHANNELS + cl;
                     const int value = c < g.cin ? int(image[(std::size_t(y) * g.w + x) * g.cin + c]) : 0;
                     pack.channel[cl] = value;
-                    input_csv << ',' << value;
                 }
-                input_csv << '\n';
                 input.write(pack);
                 ++written;
             }
@@ -132,7 +102,7 @@ bool run_layer(const ConvGeometry& g, const char* name, const char* source,
                             std::cerr << "packed BIN异常EOF: " << name << '\n';
                             return false;
                         }
-                        // 缺包时不做阻塞 read；仍导出全部参考，actual 用0且 match=0。
+                        // 缺包时不做阻塞 read；actual 用0，继续检查全部参考。
                         const bool present = !output.empty();
                         activation_pack_t actual;
                         if (present) { actual = output.read(); ++read; }
@@ -148,8 +118,6 @@ bool run_layer(const ConvGeometry& g, const char* name, const char* source,
                         for (int lane = 0; lane < IM2ROW_P; ++lane)
                             if (tile * IM2ROW_P + lane < g.w) mask |= 1u << lane;
                         const unsigned actual_mask = actual.spatial_valid.to_uint();
-                        bool match = present && mask == actual_mask;
-                        bool reference_match = true;
                         if (present && mask != actual_mask) {
                             ++errors;
                             report(errors, name, "valid", y, tile, kh, kw, group, -1, -1, mask, actual_mask);
@@ -170,23 +138,15 @@ bool run_layer(const ConvGeometry& g, const char* name, const char* source,
                                 const int i = lane * FEATURE_PACK_CHANNELS + cl;
                                 got[i] = actual.pixel[lane].channel[cl].to_int();
                                 if (int(expected[i]) != logical) {
-                                    reference_match = false;
                                     ++errors;
                                     report(errors, name, "packed/unfold", y, tile, kh, kw, group, lane, c, logical, int(expected[i]));
                                 }
                                 if (present && got[i] != int(expected[i])) {
-                                    match = false;
                                     ++errors;
                                     report(errors, name, "data", y, tile, kh, kw, group, lane, c, int(expected[i]), got[i]);
                                 }
                                 if (present) ++comparisons;
                             }
-                        const int transaction = (((y * tiles + tile) * g.kernel + kh) * g.kernel + kw) * groups + group;
-                        output_csv << transaction << ',' << y << ',' << tile << ',' << kh << ',' << kw
-                                   << ',' << group << ',' << mask << ',' << actual_mask;
-                        for (int i = 0; i < PACK_ELEMENTS; ++i) output_csv << ',' << int(expected[i]);
-                        for (int i = 0; i < PACK_ELEMENTS; ++i) output_csv << ',' << got[i];
-                        output_csv << ',' << reference_match << ',' << (match && reference_match) << '\n';
                     }
     // 精确长度已在打开时检查，这里再确认顺序读取恰好抵达EOF。
     if (packed.peek() != std::char_traits<char>::eof() || packed.bad()) {
@@ -198,13 +158,7 @@ bool run_layer(const ConvGeometry& g, const char* name, const char* source,
     while (!output.empty()) { output.read(); ++extra_outputs; }
     errors += remaining_inputs + extra_outputs;
     if (written != expected_inputs || read != expected_outputs) ++errors;
-    input_csv.flush();
-    output_csv.flush();
-    if (!input_csv.good() || !output_csv.good()) {
-        std::cerr << "CSV写入失败: " << prefix << '\n';
-        return false;
-    }
-    std::cout << csv_name << " 输入事务=" << written << '/' << expected_inputs
+    std::cout << case_name << " 输入事务=" << written << '/' << expected_inputs
               << " 输出事务=" << read << '/' << expected_outputs
               << " 剩余输入事务=" << remaining_inputs << " 多余输出事务=" << extra_outputs
               << " 验证元素数=" << comparisons << " 错误数=" << errors
@@ -215,12 +169,12 @@ bool run_layer(const ConvGeometry& g, const char* name, const char* source,
 } // namespace
 
 int main() {
-    const std::string directory = "simulation_data/pytorch/im2row";
-    if (!make_directory("simulation_data") || !make_directory("simulation_data/pytorch") ||
-        !make_directory(directory.c_str())) {
-        std::cerr << "无法创建CSV目录: " << directory << '\n';
+    const char* configured_path = std::getenv("YOLO_DATA_DIR");
+    if (!configured_path || !*configured_path) {
+        std::cerr << "请设置环境变量 YOLO_DATA_DIR，指向 YOLO generated 根目录。\n";
         return 1;
     }
+    trace_directory = std::string(configured_path) + "/trace/";
     const char* names[] = {"conv1", "conv2", "conv3", "conv4", "conv5", "conv6", "conv7", "conv8", "prediction"};
     const char* sources[] = {"input_int8_hwc", "pool1_int8_hwc", "pool2_int8_hwc", "pool3_int8_hwc",
                              "pool4_int8_hwc", "pool5_int8_hwc", "pool6_int8_hwc",
@@ -229,11 +183,10 @@ int main() {
     hls::stream<activation_pack_t> output;
     int errors = 0;
     for (int i = 0; i < YOLO_TINY_LAYER_COUNT; ++i)
-        if (!run_layer(YOLO_TINY_GEOMETRIES[i], names[i], sources[i], names[i], directory,
+        if (!run_layer(YOLO_TINY_GEOMETRIES[i], names[i], sources[i], names[i],
                        input, output, errors)) return 1;
     // 复用同一对stream，覆盖 Prediction G128/1×1 → Conv1 G1/3×3 的调用边界。
-    if (!run_layer(YOLO_TINY_GEOMETRIES[0], names[0], sources[0], "conv1_repeat", directory,
+    if (!run_layer(YOLO_TINY_GEOMETRIES[0], names[0], sources[0], "conv1_repeat",
                    input, output, errors)) return 1;
-    std::cout << "CSV目录=" << directory << '\n';
     return errors ? 1 : 0;
 }

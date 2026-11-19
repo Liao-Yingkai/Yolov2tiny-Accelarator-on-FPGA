@@ -4,7 +4,17 @@ set accelerator_dir [file dirname $script_dir]
 set src_dir [file join $accelerator_dir src]
 set repo_dir [file normalize [file join $accelerator_dir .. ..]]
 set build_dir [file join $repo_dir build hls]
-set run_synthesis [expr {[info exists ::env(YOLO_HLS_STAGE)] && $::env(YOLO_HLS_STAGE) eq "csynth"}]
+set stage csim
+if {[info exists ::env(YOLO_HLS_STAGE)] && $::env(YOLO_HLS_STAGE) ne ""} {
+    set stage $::env(YOLO_HLS_STAGE)
+}
+if {$stage ni {csim csynth}} {
+    error "YOLO_HLS_STAGE 只能是 csim 或 csynth；不自动运行 co-sim 或导出 IP。"
+}
+set run_synthesis [expr {$stage eq "csynth"}]
+if {!$run_synthesis && (![info exists ::env(YOLO_DATA_DIR)] || $::env(YOLO_DATA_DIR) eq "")} {
+    error "请先设置 YOLO_DATA_DIR 为包含 bins/ 和 trace/ 的 generated 根目录。"
+}
 set cpp_flags {-std=c++14}
 if {!$run_synthesis} {
     # 九层仿真中 ap_int 运算量较大，-O3 只用于软件仿真，不改变综合选项。
