@@ -1,4 +1,5 @@
 #include "../src/systolic/systolic.h"
+#include "yolo_data_path.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -221,11 +222,8 @@ bool run_layer(const ConvGeometry& g, const char* name,
 }  // namespace
 
 int main() {
-    const char* configured_path = std::getenv("YOLO_DATA_DIR");
-    if (!configured_path || !*configured_path) {
-        std::cerr << "请设置环境变量 YOLO_DATA_DIR，指向 YOLO generated 根目录。\n";
-        return 1;
-    }
+    const std::string configured_path = yolo_test_data_dir();
+    if (configured_path.empty()) return 1;
     generated_directory = std::string(configured_path) + "/";
     const char* names[] = {"conv1", "conv2", "conv3", "conv4", "conv5",
                            "conv6", "conv7", "conv8", "prediction"};

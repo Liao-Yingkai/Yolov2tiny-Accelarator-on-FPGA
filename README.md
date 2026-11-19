@@ -47,6 +47,7 @@ HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的�
 | [hls/docs](hls/docs/README.md) | 模块设计、DDR 契约和测试数据说明 |
 | [vivado/cnn_accel_cam](vivado/cnn_accel_cam) | 摄像头预览、YOLO/Overlay IP和Vitis PS应用 |
 | [vivado/cnn_accel_cam/tools](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md) | 从模型 metadata 生成 PS 输入/输出配置 |
+| `data/yolov2_tiny/` | 本地模型与样本0000测试数据副本，不纳入版本管理 |
 | `build/hls/`、`build/ps/` | 本地检查、工程、日志和报告，不纳入版本管理 |
 
 保留现有目录与工程名称；本地目录名即使包含历史项目名称，也不影响当前 YOLO 实现。
@@ -54,13 +55,13 @@ HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的�
 ## 运行 HLS 验证
 
 需要 Vitis HLS 2022.2，以及同一次 Python 模型导出的 `metadata.json`、`bins/` 和
-`trace/`。模型权重、测试图像和大型 trace 不包含在本仓库，文件要求见
+`trace/`。本机已将所需导出文件复制到`data/yolov2_tiny/`；该目录由Git忽略，
+克隆仓库后仍须另行准备数据，文件要求见
 [测试与模型数据](hls/docs/data.md)。
 
-在仓库根目录执行（将示例路径换成自己的导出目录）：
+在仓库根目录执行：
 
 ```bash
-export YOLO_DATA_DIR=/path/to/YOLOV2_TINY/generated
 mkdir -p build/hls
 cd build/hls
 vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
@@ -68,9 +69,12 @@ vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
 
 脚本默认只跑 C 仿真，工程写到 `build/hls/cnn_yolo_ddr/`。如需单独运行 HLS
 综合，在命令前加 `YOLO_HLS_STAGE=csynth`；脚本不自动运行 RTL co-sim 或导出 IP。
-五个 CNN testbench 统一要求设置 `YOLO_DATA_DIR`，使用样本 `0000`，只打印统计和有限
+五个 CNN testbench 默认读取仓库内的 `data/yolov2_tiny/`，使用样本 `0000`，只打印统计和有限
 错误，不写 CSV。模块级测试须各自选择对应 Top，不要将多个 `main()` 加入同一工程；
 入口对照见 [HLS 文档索引](hls/docs/README.md)。
+
+正常运行无需设置环境变量，默认路径由脚本或测试源码位置定位，不依赖仿真运行目录。
+仅在使用另一套数据时，可选用`YOLO_DATA_DIR`覆盖默认目录；若此前已经设置，该覆盖仍优先。
 
 C++ 对照可以验证逐元素输出和 DDR 软件地址计算；单实例、有限 FIFO 反压、
 AXI 写回顺序和板级时序需要分别检查综合报告、RTL 仿真与实现。

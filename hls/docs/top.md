@@ -67,7 +67,8 @@ AXI 完成顺序和板级吞吐不由 C 仿真证明。
 Vitis HLS，避免工具启动日志进入源码树。
 
 `test_cnn_accel_ddr.cpp` 读取样本 0000 的 RGB、模型 BIN 和 Prediction
-golden。必须通过 `YOLO_DATA_DIR` 指定包含 `bins/`、`trace/` 的导出目录，
+golden。默认读取仓库内的`data/yolov2_tiny/`，不需要设置环境变量；非空
+`YOLO_DATA_DIR`可选覆盖包含`bins/`、`trace/`的根目录，
 文件准备见[模型与测试数据](data.md)。
 测试逐元素核对 B 区结果和尾槽，并检查缓冲区外的哨兵，只打印摘要与有限
 错误详情，不生成 CSV。

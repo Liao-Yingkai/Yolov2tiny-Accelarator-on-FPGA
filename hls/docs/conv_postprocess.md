@@ -54,7 +54,7 @@ out = clamp((INT64(a) * m) 算术右移 S, -128, 127)
 
 ## 4. 验证
 
-HLS Top 设为 `conv_postprocess`，设计源文件选 `conv_postprocess.cpp`，testbench 只加入 [`test_conv_postprocess_pytorch.cpp`](../cnn_accelerator/testbench/test_conv_postprocess_pytorch.cpp)。必须设置`YOLO_DATA_DIR`为`generated/`根目录，使用样本`0000`；数据准备见[数据说明](data.md)。每层读取同一套导出的四个文件：
+HLS Top 设为 `conv_postprocess`，设计源文件选 `conv_postprocess.cpp`，testbench 只加入 [`test_conv_postprocess_pytorch.cpp`](../cnn_accelerator/testbench/test_conv_postprocess_pytorch.cpp)。默认读取仓库内`data/yolov2_tiny/`，无需设置环境变量，使用样本`0000`；非空`YOLO_DATA_DIR`可选覆盖根目录，数据准备见[数据说明](data.md)。每层读取同一套导出的四个文件：
 
 - `trace/trace_<layer>_systolic_int32_hwc_0000.bin`：bias 前的 little-endian INT32 HWC 输入。
 - `bins/<layer>_bias.bin`、`bins/<layer>_quant.bin`：参数按逻辑 Cout 排布；quant 先存全部 `M`，再存全部 `S`，均为 little-endian INT32。组包时先判 Cout 边界再读文件。

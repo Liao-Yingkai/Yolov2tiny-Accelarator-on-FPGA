@@ -1,15 +1,16 @@
 # 模型与测试数据
 
-本仓库保存 HLS、PS 源码及两份小型模型配置头，不保存训练 checkpoint、图像数据集、
-模型 BIN 或逐层 trace。训练和数据导出在外部 Python 工程的 `YOLOV2_TINY/` 中完成；
-HLS 测试只读取导出结果，不自动训练、导出或改写模型。
+Git保存HLS、PS源码及两份小型模型配置头，不跟踪训练checkpoint、图像数据集、模型BIN
+或逐层trace。本机所需数据副本集中在仓库根目录的`data/yolov2_tiny/`，由`.gitignore`
+排除。训练和数据导出仍在外部Python工程的`YOLOV2_TINY/`中完成；HLS测试只读取
+导出结果，不自动训练、导出或改写模型。
 
 ## 导出目录与路径
 
 准备以下目录，并让权重、参数、metadata 和 trace 来自同一次模型导出：
 
 ```text
-generated/
+data/yolov2_tiny/             # 与外部工程的generated根目录内容对应
 ├── metadata.json
 ├── bins/
 │   ├── conv1_weight.bin
@@ -29,15 +30,27 @@ generated/
     └── ...                 # 其余层按下面的边界命名
 ```
 
-五个 CNN testbench 都通过 `YOLO_DATA_DIR` 指定 `generated` 根目录，不再依赖作者电脑
-上的路径。运行 Vitis HLS 前在同一终端设置，使其启动的测试程序继承环境变量：
+五个CNN testbench默认读取仓库根目录的`data/yolov2_tiny/`，无需设置环境变量。
+默认位置根据脚本或测试源码路径确定，不按仿真进程的当前工作目录拼接，因此从
+`csim/build`等目录启动也不需要更改数据路径。工程搬迁后重新编译测试即可。
+
+数据查找优先级为：非空的`YOLO_DATA_DIR`可选覆盖 → 仓库内默认目录。变量未设置或
+为空都使用默认目录；只有默认数据缺失或文件不匹配时才报错。覆盖目录同样应包含
+`bins/`、`trace/`和`metadata.json`，当前样本后缀固定为`0000`。
+
+只有想读取另一套外部导出时才需配置，例如：
 
 ```bash
-export YOLO_DATA_DIR=/path/to/YOLOV2_TINY/generated
+YOLO_DATA_DIR=/path/to/another/generated vitis_hls -f /path/to/repository/hls/cnn_accelerator/script/hls_ddr.tcl
 ```
 
-未设置或为空时，测试明确报错并返回非零；当前样本后缀固定为 `0000`。可直接从其他
-位置读取大型 trace，无需复制到 HLS 源码目录。
+这不是正常运行的前置步骤。若以前在终端中设置过`YOLO_DATA_DIR`，旧值仍会覆盖默认
+目录；不再需要覆盖时取消该设置即可。
+
+2026-11-19本机复制范围为`metadata.json`、27个模型BIN和样本`0000`的43个trace BIN。
+没有复制Python工程的NPY、checkpoint或训练数据集；源导出目录保留，副本不会自动跟随
+源目录更新。更换模型时应整套更新，不能只替换其中几个BIN。文件名中的`0000`是样本
+编号，不表示只验证第一层。
 
 ## 模块测试需要哪些文件
 
@@ -82,8 +95,10 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
 python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
 ```
 
-两脚本读取 `YOLO_DATA_DIR/metadata.json`，也可用 `--metadata /path/to/metadata.json`
-显式覆盖。输出分别为 `camera_model_input.h` 和 `camera_model_output.h`，保存量化
+两脚本默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本所在位置定位，与启动
+目录无关。可用`--metadata /path/to/metadata.json`显式指定文件，或用非空
+`YOLO_DATA_DIR`指定外部数据根目录；优先级为命令行参数 → 环境变量 → 仓库默认目录。
+输出分别为 `camera_model_input.h` 和 `camera_model_output.h`，保存量化
 标量、Prediction scale、anchors、类别及 checkpoint 校验标识；不保存大模型或 LUT。
 更新模型后，两份头和 27 个 BIN 必须同步，重新编译 PS 应用。
 

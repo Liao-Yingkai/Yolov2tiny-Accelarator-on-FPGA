@@ -12,15 +12,18 @@ if {$stage ni {csim csynth}} {
     error "YOLO_HLS_STAGE 只能是 csim 或 csynth；不自动运行 co-sim 或导出 IP。"
 }
 set run_synthesis [expr {$stage eq "csynth"}]
-if {!$run_synthesis && (![info exists ::env(YOLO_DATA_DIR)] || $::env(YOLO_DATA_DIR) eq "")} {
-    error "请先设置 YOLO_DATA_DIR 为包含 bins/ 和 trace/ 的 generated 根目录。"
-}
 set cpp_flags {-std=c++14}
 if {!$run_synthesis} {
     # 九层仿真中 ap_int 运算量较大，-O3 只用于软件仿真，不改变综合选项。
     append cpp_flags " -O3"
 }
 file mkdir $build_dir
+# 默认数据位置只传给测试文件；运行时仍允许 YOLO_DATA_DIR 覆盖。
+set default_data_dir [file join $repo_dir data yolov2_tiny]
+# 将整个宏参数作为一个 shell 单词，保留 C++ 字符串引号和目录中的空格。
+set default_data_define "-DYOLO_DEFAULT_DATA_DIR=\"$default_data_dir\""
+set quoted_data_define [string map [list "'" "'\\''"] $default_data_define]
+set tb_flags "$cpp_flags '$quoted_data_define'"
 cd $build_dir
 open_project cnn_yolo_ddr
 set_top cnn_accelerator_ddr
@@ -30,7 +33,7 @@ add_files -cflags $cpp_flags [file join $src_dir postprocess/conv_postprocess.cp
 add_files -cflags $cpp_flags [file join $src_dir pool/pool.cpp]
 add_files -cflags $cpp_flags [file join $src_dir axi/ddr_io.cpp]
 add_files -cflags $cpp_flags [file join $src_dir top/cnn_accel_ddr.cpp]
-add_files -cflags $cpp_flags -tb [file join $accelerator_dir testbench test_cnn_accel_ddr.cpp]
+add_files -cflags $tb_flags -tb [file join $accelerator_dir testbench test_cnn_accel_ddr.cpp]
 open_solution solution1 -flow_target vivado
 set_part {xc7z020-clg400-2}
 create_clock -period 10 -name default

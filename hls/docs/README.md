@@ -26,6 +26,6 @@
 | [test_pool_pytorch.cpp](../cnn_accelerator/testbench/test_pool_pytorch.cpp) | `maxpool` |
 | [test_cnn_accel_ddr.cpp](../cnn_accelerator/testbench/test_cnn_accel_ddr.cpp) | `cnn_accelerator_ddr` |
 
-测试使用同一次外部Python模型导出的BIN/trace；五个CNN测试都要求设置`YOLO_DATA_DIR`为`generated/`根目录，样本为`0000`。所有测试只打印统计和有限错误，不再写CSV或创建输出数据目录；失败返回非零。完整文件清单见[数据说明](data.md)。
+测试使用同一次Python模型导出的BIN/trace；五个CNN测试默认读取仓库内`data/yolov2_tiny/`，无需环境变量，样本为`0000`。可选的非空`YOLO_DATA_DIR`仅用于覆盖默认目录。所有测试只打印统计和有限错误，不再写CSV或创建输出数据目录；失败返回非零。完整文件清单见[数据说明](data.md)。
 
 文档中的历史`build/`报告和日志只保存在本机，不随源码提供。2026-11-19整理仅做静态检查，不重跑testbench、仿真或综合，不更改DUT实现及硬件配置。

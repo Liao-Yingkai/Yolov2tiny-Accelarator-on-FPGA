@@ -97,7 +97,7 @@ python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py \
   --metadata /path/to/YOLOV2_TINY/generated/metadata.json
 ```
 
-不指定`--metadata`时读取`YOLO_DATA_DIR/metadata.json`；环境变量须指向`generated/`根目录，两者均未设置时报错。默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。数据组织见[模型与测试数据](../../../../hls/docs/data.md)。
+默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本位置定位，无需环境变量；`--metadata`或非空`YOLO_DATA_DIR`可选覆盖，命令行参数优先。默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。数据组织见[模型与测试数据](../../../../hls/docs/data.md)。
 
 ## 连续推理及DDR所有权
 

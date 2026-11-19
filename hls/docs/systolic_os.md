@@ -86,7 +86,7 @@
 
 HLS 工程的 Top 设为 `systolic_OS`，设计文件使用 `systolic_OS.cpp`，testbench 仅加入 [`test_systolic_pytorch.cpp`](../cnn_accelerator/testbench/test_systolic_pytorch.cpp)。
 
-必须设置`YOLO_DATA_DIR`为`generated/`根目录，样本后缀固定为`0000`；未设置或为空时报错退出，见[数据说明](data.md)。每层使用以下三份文件，必须来自同一套导出参数：
+默认读取仓库内`data/yolov2_tiny/`，无需设置环境变量，样本后缀固定为`0000`；非空`YOLO_DATA_DIR`可选覆盖数据根目录，见[数据说明](data.md)。每层使用以下三份文件，必须来自同一套导出参数：
 
 - `trace/trace_<layer>_im2row_int8_0000.bin`：按 `y → tile_x → token` 的物理 Activation Pack。BIN 不带 mask，按行宽重建 `spatial_valid`。每个 Cout 块重新发送整层一次；不为块内每个 Cout Tile 重复发送。
 - `bins/<layer>_weight.bin`：按全局 Cout Tile 和 token 取本块的连续片段，原样恢复 signed INT8 lane；检查尾部补零，不改动 BIN 数据。

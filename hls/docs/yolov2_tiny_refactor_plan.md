@@ -9,7 +9,7 @@
 
 当前HLS计算与存储调度保留单套物理计算流水，已与Vivado、Vitis、摄像头和检测结果显示集成。后续变更接口或数值契约时仍需同步Python exporter、Golden Model和testbench；本轮仅整理工程，不改变现有实现和结构。
 
-软件参考为外部Python工程的`YOLOV2_TINY/`目录。使用其`export.py`冻结的整数权重BIN布局和`dump_trace.py`逐层整数数据做对照；运行路径统一通过`YOLO_DATA_DIR`指定，见[数据说明](data.md)。
+软件参考为外部Python工程的`YOLOV2_TINY/`目录。使用其`export.py`冻结的整数权重BIN布局和`dump_trace.py`逐层整数数据做对照；测试默认读取仓库内`data/yolov2_tiny/`，`YOLO_DATA_DIR`仅作可选覆盖，见[数据说明](data.md)。
 
 输入为 RGB，参考分辨率为 416×416，Batch 第一版为 1。下表的空间尺寸均采用 H×W：
 

@@ -1,4 +1,5 @@
 #include "../src/top/cnn_accel_ddr.h"
+#include "yolo_data_path.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -71,11 +72,8 @@ bool load_model(const std::string& root, std::vector<word_t>& weights,
 }  // namespace
 
 int main() {
-    const char* configured_path = std::getenv("YOLO_DATA_DIR");
-    if (!configured_path || !*configured_path) {
-        std::cerr << "请设置环境变量 YOLO_DATA_DIR，指向 YOLO generated 根目录。\n";
-        return 1;
-    }
+    const std::string configured_path = yolo_test_data_dir();
+    if (configured_path.empty()) return 1;
     const std::string root = configured_path;
     const auto& prediction = YOLO_TINY_GEOMETRIES[YOLO_TINY_LAYER_COUNT - 1];
     const int physical_channels = prediction.output_channel_groups * FEATURE_PACK_CHANNELS;

@@ -418,7 +418,7 @@ Cout 块重新调用 Im2Row；Im2Row 自身不依赖 DDR 地址或 Cout 数量�
 
 当前YOLO测试入口为`cnn_accelerator/testbench/test_im2row_pytorch.cpp`。HLS工程设置`im2row`为唯一Top，设计文件只需`src/im2row/im2row.cpp`及其头文件，testbench只加入这个文件，不加入其他含`main()`的测试。
 
-本测试读取`YOLO_DATA_DIR/trace/`中的真实样本`0000`。必须先设置`YOLO_DATA_DIR`为`generated/`根目录，未设置或为空时报错退出；切换样本时修改样本后缀。先在外部Python工程运行`export.py`和`dump_trace.py`，trace必须配套生成时的权重及量化参数，本测试本身不重新生成或修改它们。文件清单见[数据说明](data.md)。
+本测试默认读取仓库内`data/yolov2_tiny/trace/`中的真实样本`0000`，根据源码位置定位，不需要设置环境变量。非空`YOLO_DATA_DIR`可选覆盖数据根目录；切换样本时修改样本后缀。先在外部Python工程运行`export.py`和`dump_trace.py`，trace必须配套生成时的权重及量化参数，本测试本身不重新生成或修改它们。文件清单见[数据说明](data.md)。
 
 Python的`dump_trace.py`以导出的整数权重和参数进行数学参考计算，使用标准PyTorch unfold生成窗口；后续层输入来自整数参考，不是QAT浮点激活。2026-11-08已核对导出脚本、文档及现有样本：九层权重BIN与逻辑NPY一致，bias/M/S的BIN与相应NPY一致；所有Im2Row BIN和unfold BIN均与独立源坐标参考逐元素一致。这是数据契约检查，不是HLS DUT仿真结果。
 

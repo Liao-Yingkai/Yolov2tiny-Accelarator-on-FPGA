@@ -59,15 +59,15 @@ def quantization_parameters(scale):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metadata", type=Path,
-                        help="metadata.json路径；未指定时使用YOLO_DATA_DIR/metadata.json")
+                        help="metadata.json路径；默认仓库data/yolov2_tiny，可用YOLO_DATA_DIR覆盖")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] /
                         "vitis/cnn_accel_cam/src/camera_model_input.h")
     args = parser.parse_args()
     if args.metadata is None:
         data_dir = os.environ.get("YOLO_DATA_DIR")
-        if not data_dir:
-            parser.error("请指定--metadata，或设置YOLO_DATA_DIR为包含metadata.json的导出目录")
-        args.metadata = Path(data_dir) / "metadata.json"
+        # 显式参数优先，其次非空环境变量；默认位置与调用时工作目录无关。
+        default_dir = Path(__file__).resolve().parents[3] / "data/yolov2_tiny"
+        args.metadata = (Path(data_dir) if data_dir else default_dir) / "metadata.json"
     metadata = json.loads(args.metadata.read_text(encoding="utf-8"))
     if metadata.get("format_version") != 2 or metadata.get("weight_layout_version") != 3:
         raise ValueError("要求metadata format_version=2、weight_layout_version=3")
