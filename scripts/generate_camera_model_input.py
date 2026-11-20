@@ -58,7 +58,7 @@ def quantization_parameters(scale):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metadata", type=Path,
-                        default=Path(__file__).resolve().parents[3] / "data/yolov2_tiny/metadata.json",
+                        default=Path(__file__).resolve().parents[1] / "data/yolov2_tiny/metadata.json",
                         help="metadata.json路径；默认仓库data/yolov2_tiny/metadata.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] /
                         "vitis/cnn_accel_cam/src/camera_model_input.h")
@@ -90,7 +90,7 @@ def main():
         f" * conv1 input_scale={scale!r}; metadata v2 / weight layout v3。\n"
         f" * checkpoint SHA256: {metadata.get('checkpoint', {}).get('sha256', 'unknown')}\n"
         " * FP32 byte/255、FP32 reciprocal乘法、nearest-even及INT8饱和：256/256一致。\n"
-        " * 更新模型后重新运行tools/generate_camera_model_input.py，不要手改参数。 */\n"
+        " * 更新模型后重新运行scripts/generate_camera_model_input.py，不要手改参数。 */\n"
         "#ifndef CAMERA_MODEL_INPUT_H\n#define CAMERA_MODEL_INPUT_H\n"
         "#define CAMERA_MODEL_INPUT_ZERO_POINT 0\n"
         f"#define CAMERA_MODEL_INPUT_MULTIPLIER {multiplier}\n"

@@ -1,4 +1,4 @@
-# 相机模型配置生成
+# Python 辅助脚本：相机模型配置
 
 PS 将 416×416 的 BGR888 裁剪数据转换为 RGB INT8；取帧、DDR和推理流程见
 [应用说明](../vitis/cnn_accel_cam/README.md)。模型BIN从SD加载，输入量化与输出解码配置
@@ -10,7 +10,7 @@ PS 将 416×416 的 BGR888 裁剪数据转换为 RGB INT8；取帧、DDR和推�
 从仓库根目录计算；使用其他工作目录时，需要自行指定脚本文件的实际位置。
 
 - 默认输入：`data/yolov2_tiny/metadata.json`，不随Git克隆提供，须预先准备。
-- 默认输出：`vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/camera_model_input.h`及
+- 默认输出：`vitis/cnn_accel_cam/src/camera_model_input.h`及
   `camera_model_output.h`。
 - 默认输入、输出按脚本位置定位，不受启动目录影响；显式相对路径则按进程当前目录解释。
 - `--metadata` 可显式指定输入；`--output` 可另存结果，避免覆盖配置头。默认运行无需设置数据环境变量。
@@ -20,19 +20,19 @@ PS 将 416×416 的 BGR888 裁剪数据转换为 RGB INT8；取帧、DDR和推�
 Linux/Bash，使用Python 3解释器命令：
 
 ```bash
-python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
-python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
+python3 scripts/generate_camera_model_input.py
+python3 scripts/generate_camera_model_output.py
 ```
 
 Windows/PowerShell，安装Python Launcher时可使用：
 
 ```powershell
-py -3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
-py -3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
+py -3 scripts/generate_camera_model_input.py
+py -3 scripts/generate_camera_model_output.py
 ```
 
 解释器命令不是固定要求：若本机使用`python`或解释器完整路径，请确认其版本后替换命令。
-以上Windows示例是调用语法，不代表已完成Windows整套工程验证。导出文件清单及获取边界见[数据说明](../../../hls/docs/data.md)。
+以上Windows示例是调用语法，不代表已完成Windows整套工程验证。导出文件清单及获取边界见[数据说明](../hls/docs/data.md)。
 
 两个命令都会更新相应配置头。更换SD模型时，应从同一次导出的metadata同时生成两份头，
 然后重编译PS应用；不得将新BIN与旧scale、anchors或类别名混用。生成器不训练模型、

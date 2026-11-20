@@ -67,7 +67,7 @@ def generate(metadata, source):
         "/* 自动生成；来源: " + Path(source).name + "（与模型权重同批导出）\n"
         f" * checkpoint SHA256: {metadata.get('checkpoint', {}).get('sha256', 'unknown')}\n"
         f" * prediction output_scale={scales[0]!r}; FP32={scale_literal}。\n"
-        " * 更新模型后重新运行tools/generate_camera_model_output.py；勿手改。 */\n"
+        " * 更新模型后重新运行scripts/generate_camera_model_output.py；勿手改。 */\n"
         "#ifndef CAMERA_MODEL_OUTPUT_H\n#define CAMERA_MODEL_OUTPUT_H\n"
         f"#define CAMERA_MODEL_OUTPUT_SCALE {scale_literal}\n"
         "#define CAMERA_MODEL_OUTPUT_ZERO_POINT 0\n"
@@ -84,7 +84,7 @@ def generate(metadata, source):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metadata", type=Path,
-                        default=Path(__file__).resolve().parents[3] / "data/yolov2_tiny/metadata.json",
+                        default=Path(__file__).resolve().parents[1] / "data/yolov2_tiny/metadata.json",
                         help="metadata.json路径；默认仓库data/yolov2_tiny/metadata.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] /
                         "vitis/cnn_accel_cam/src/camera_model_output.h")

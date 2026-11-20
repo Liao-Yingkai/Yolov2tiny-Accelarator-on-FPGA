@@ -63,8 +63,9 @@ HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的�
 | [hls/roi_overlay](hls/roi_overlay) | 独立视频遮罩、检测框及文字叠加核 |
 | [hls/README.md](hls/README.md) | HLS 工程入口、测试运行方式与设计索引 |
 | [hls/docs/](hls/docs/) | 模块设计、DDR 契约和测试数据说明 |
-| [vivado/cnn_accel_cam](vivado/cnn_accel_cam) | 摄像头预览、YOLO/Overlay IP和Vitis PS应用 |
-| [vivado/cnn_accel_cam/tools](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md) | 从模型 metadata 生成 PS 输入/输出配置 |
+| [vivado/](vivado/README.md) | 摄像头、HDMI 和 YOLO 硬件工程 |
+| [vitis/](vitis/README.md) | Zynq 裸机平台、BSP 与 PS 应用 |
+| [scripts/](scripts/README.md) | Python 辅助脚本 |
 | [data/yolov2_tiny/](data/yolov2_tiny/README.md) | 模型和测试数据放置位置；仓库只跟踪目录说明 |
 | `build/hls/`、`build/ps/` | 本地检查、工程、日志和报告，不纳入版本管理 |
 
@@ -78,15 +79,14 @@ CNN 测试需要[配套模型和 trace](hls/docs/data.md)；Overlay 测试自行
 
 ## 打开板级工程
 
-[Vivado 工程说明](vivado/README.md)记录了OV5640 480p、HDMI预览与Vitis
-裸机工程的打开方式。[PS应用说明](vivado/cnn_accel_cam/vitis/cnn_accel_cam/README.md)
+[Vivado 工程说明](vivado/README.md)说明硬件工程；[Vitis 工程说明](vitis/README.md)说明软件平台和应用。[PS应用说明](vitis/cnn_accel_cam/README.md)
 列出27个BIN的SD目录、DDR拼接、ROI整数预处理、连续推理、解码/NMS、检测框显示和构建步骤；
 [Overlay设计](hls/docs/roi_overlay.md)说明显示与列表控制协议。当前 Overlay 使用
 `ap_ctrl_none` 和显式 FLP 流水，不调用 Start；CNN 则由 PS 按图像逐次启动。
 使用匹配当前硬件的XSA和BSP，Build Platform后再构建PS应用；软件检查和硬件Done不能代替板上数值及检测效果验证。
 
 首次在另一目录打开 Vitis 时需要重新关联本地 platform；工具生成物、BSP 库和 IDE 状态
-不随源码保存，具体恢复步骤见 Vivado 工程说明。不要为消除本机路径提示而改硬件参数。
+不随源码保存，具体恢复步骤见 Vitis 工程说明。不要为消除本机路径提示而改硬件参数。
 
 ## 贡献与验证
 

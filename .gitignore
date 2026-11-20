@@ -70,34 +70,38 @@
 # .gen 内容由 Vivado 重生成；当前摄像头工程的 wrapper 保存在 .srcs 内。
 /vivado/**/*.gen/**
 
-# Vitis 工作区：适用于所有 Vivado 工程及平台名称（含 system_wrappe）。
-/vivado/*/vitis/.workspace
-/vivado/*/vitis/.metadata/
-/vivado/*/vitis/.analytics
-/vivado/*/vitis/IDE.log
-/vivado/*/vitis/RemoteSystemsTempFiles/
-/vivado/*/vitis/**/Debug/
-/vivado/*/vitis/**/Release/
-/vivado/*/vitis/**/_ide/
+# Vitis 本地工作区及生成物。旧位置只允许本机路径兼容链接。
+/vivado/cnn_accel_cam/vitis
+/vitis/**/.nfs*
+/vitis/**/*.log
+/vitis/**/*.jou
+/vitis/.workspace
+/vitis/.metadata/
+/vitis/.analytics
+/vitis/IDE.log
+/vitis/RemoteSystemsTempFiles/
+/vitis/**/Debug/
+/vitis/**/Release/
+/vitis/**/_ide/
 # Vitis 生成的平台/FSBL工作副本；正式平台描述和FSBL源仍保留。
-/vivado/*/vitis/*/_platform/
-/vivado/*/vitis/**/.log/
-/vivado/*/vitis/**/tempdsa/
-/vivado/*/vitis/**/*.elf
-/vivado/*/vitis/*/export/
-/vivado/*/vitis/*/logs/
+/vitis/*/_platform/
+/vitis/**/.log/
+/vitis/**/tempdsa/
+/vitis/**/*.elf
+/vitis/*/export/
+/vitis/*/logs/
 # IDE包管理器的仓库索引，不是工程源码或启动镜像配置。
 /vivado/*/Packages/.repos.xml
 
 # 平台 hw 的解包副本可重生成；保留平台描述引用的内部硬件交接 XSA。
-/vivado/*/vitis/*/hw/*
-!/vivado/*/vitis/*/hw/*.xsa
+/vitis/*/hw/*
+!/vitis/*/hw/*.xsa
 
 # 仅排除 BSP 生成内容，不影响应用、自定义 IP 或 FSBL 自身源码。
-/vivado/*/vitis/*/ps7_cortexa9_0/*/bsp/*
-!/vivado/*/vitis/*/ps7_cortexa9_0/*/bsp/system.mss
-/vivado/*/vitis/*/zynq_fsbl/zynq_fsbl_bsp/*
-!/vivado/*/vitis/*/zynq_fsbl/zynq_fsbl_bsp/system.mss
+/vitis/*/ps7_cortexa9_0/*/bsp/*
+!/vitis/*/ps7_cortexa9_0/*/bsp/system.mss
+/vitis/*/zynq_fsbl/zynq_fsbl_bsp/*
+!/vitis/*/zynq_fsbl/zynq_fsbl_bsp/system.mss
 
 # NFS 延迟删除的工具临时文件；不删除本地正在使用的文件。
 /vivado/**/.nfs*

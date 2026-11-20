@@ -2,9 +2,9 @@
 
 应用保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理、YOLO推理、解码/NMS，并把检测列表发送给`roi_overlay`。Overlay在视频帧边界整批更新框、类别和置信度；没有目标时清除旧框。2026-11-19基线已完成测试及上板功能验证。
 
-本文文件路径以仓库根目录为基准，`src/`特指`vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/`。
+本文文件路径以仓库根目录为基准，`src/`特指`vitis/cnn_accel_cam/src/`。
 构建使用Vitis Classic IDE 2022.2及standalone Cortex-A9 BSP；工作区导入、平台重绑定和
-操作系统验证范围见[Vivado/Vitis说明](../../../README.md)。本应用运行于板上裸机，不能将
+操作系统验证范围见[Vitis 工程说明](../README.md)。本应用运行于板上裸机，不能将
 它与开发主机使用Linux还是Windows混为一谈，也不能作为普通桌面程序直接运行。
 
 `model_loader.c`负责SD加载；`camera_input.c`负责受保护的ROI复制；`camera_preprocess.c`负责RGB顺序和整数归一化/量化；`camera_cnn.c`负责DDR、单次启动、超时及缓存维护；`camera_postprocess.c`负责解码/NMS；`camera_display.c`负责坐标/文字打包、Overlay命令和确认。没有运行时JSON解析，也没有把大模型编译进ELF。
@@ -54,7 +54,7 @@ data/yolov2_tiny/bins/
 
 只需要这27个模型BIN；SD模型目录不需要`metadata.json`、NPY、trace或测试图片。不要将`conv1_quant.bin`拆成两个文件，也不要重新打包权重或补通道。所有文件必须来自同一次导出；长度检查不能识别两个相同网络、不同checkpoint之间的混用。
 
-这些BIN不随Git克隆提供，数据来源与准备边界见[模型与测试数据](../../../../hls/docs/data.md)。
+这些BIN不随Git克隆提供，数据来源与准备边界见[模型与测试数据](../../hls/docs/data.md)。
 可使用主机文件管理器复制到SD，过程不要求特定Shell；不要把`bins/`目录本身嵌套到`yolo/`下。
 
 若通过JTAG运行ELF，SD中只需上述模型目录；若从SD启动，根目录仍需匹配当前硬件和应用的`BOOT.BIN`，它与`yolo/`目录独立，不要覆盖原有启动文件。
@@ -85,7 +85,7 @@ data/yolov2_tiny/bins/
 
 读取时使用64 KiB对齐临时缓冲分块读取，复制到最终数组；文件大小、读返回值和实际读数都必须正确。每个文件仅打开一次；“启动时一次性加载”不意味着只能调用一次`f_read`。模型全部读完后才做CPU→PL缓存维护并设置基址，后续不再读取SD模型。缓存维护API没有成功/失败返回值，所以不打印虚构的flush成功或失败状态。
 
-PL侧地址单位与具体布局见[DDR设计](../../../../hls/docs/yolov2_tiny_ddr_io.md)。
+PL侧地址单位与具体布局见[DDR设计](../../hls/docs/yolov2_tiny_ddr_io.md)。
 
 ## ROI与整数预处理
 
@@ -100,9 +100,9 @@ q = clamp(round_nearest_even(FP32(pixel/255) * FP32(1/input_scale)), -128,127)
 以上是YOLO训练端`to_tensor`及`dump_trace.quantize_input`的离线参考；运行时使用整数M/S和最近偶数舍入，全部256种像素值必须一致。没有mean/std、灰度、反色、平均池化、resize、LUT或8通道补零。DDR保存紧凑RGB，尾通道由PL Loader补零。
 
 更换SD模型后，使用同批metadata运行`generate_camera_model_input.py`并重编译应用。
-Python解释器、Linux/Bash与Windows/PowerShell调用示例见[配置生成说明](../../tools/CAMERA_INPUT.md)。
+Python解释器、Linux/Bash与Windows/PowerShell调用示例见[配置生成说明](../../scripts/README.md)。
 
-默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本位置定位，无需环境变量；可通过 `--metadata` 指定输入文件。默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。数据组织见[模型与测试数据](../../../../hls/docs/data.md)。
+默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本位置定位，无需环境变量；可通过 `--metadata` 指定输入文件。默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。数据组织见[模型与测试数据](../../hls/docs/data.md)。
 
 ## 连续推理及DDR所有权
 
@@ -137,13 +137,13 @@ PS用float、expf及稳定sigmoid/softmax计算，不改变PL量化规则，不�
 `camera_postprocess(prediction, &detections)`返回本帧列表，count为0表示无目标，不沿用上一帧。每项有ROI内left/top/right/bottom、最终score和class_id；`camera_class_name()`返回模型类别名。列表独立于B区，直接交给Overlay控制模块；正常主循环不打印结果。
 
 更换模型时，还需从同一metadata运行`generate_camera_model_output.py`生成输出scale、
-anchors和类别名；调用方式及可选参数见[配置生成说明](../../tools/CAMERA_INPUT.md)。
+anchors和类别名；调用方式及可选参数见[配置生成说明](../../scripts/README.md)。
 
 默认生成`src/camera_model_output.h`，不增加SD文件或运行时JSON解析。两份小型配置头及SD的27个BIN必须来自同一次导出。
 
 ## Overlay控制与显示
 
-当前Overlay使用`ap_ctrl_none`自由运行及显式`PIPELINE II=1 style=flp`，不需要Start或AutoRestart；命令仍通过sequence ACK确认。此前为co-sim临时加入启动控制的接口不再使用，重新生成硬件时须保证IP、XSA、BSP和bitstream配套。详见[Overlay说明](../../../../hls/docs/roi_overlay.md)。
+当前Overlay使用`ap_ctrl_none`自由运行及显式`PIPELINE II=1 style=flp`，不需要Start或AutoRestart；命令仍通过sequence ACK确认。此前为co-sim临时加入启动控制的接口不再使用，重新生成硬件时须保证IP、XSA、BSP和bitstream配套。详见[Overlay说明](../../hls/docs/roi_overlay.md)。
 
 `camera_display_init()`在HDMI启动后执行，使用BSP生成的`XRoi_overlay`驱动，不硬编码AXI寄存器地址，也不调用Start（该核自由运行）。先读取当前command的sequence，等待视频已见SOF、旧命令已ACK且没有待提交批次，再从该sequence继续递增；随后提交空列表，清除上次运行留下的检测框。这样PS重新运行而PL未复位时，不会直接用sequence=1覆盖尚未完成的命令。
 
@@ -162,7 +162,7 @@ COMMIT的ACK表示新列表已在SOF生效，而非仅表示命令收到。核�
 
 HDMI显示ROI内实时图像、ROI外黑色、绿色检测框，类别及概率在框内左下角；空间不够时由HLS隐藏文字但保留边框。绘图位于VDMA的MM2S输出之后，不写回采集DDR，不影响CNN输入。框来自较早的快照，物体移动时会滞后；帧边界更新只避免半新半旧列表，不保证检测框与当前预览来自同一采集帧。
 
-完整字布局及命令字段见[Overlay设计](../../../../hls/docs/roi_overlay.md)。PS和HLS各自维护相同协议，修改其中一端时必须同步。
+完整字布局及命令字段见[Overlay设计](../../hls/docs/roi_overlay.md)。PS和HLS各自维护相同协议，修改其中一端时必须同步。
 
 ## 构建与运行边界
 

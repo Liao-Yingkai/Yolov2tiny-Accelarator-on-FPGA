@@ -96,15 +96,15 @@ Overlay 测试使用程序构造的视频与框，不需要模型目录。
 Linux/Bash：
 
 ```bash
-python3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
-python3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
+python3 scripts/generate_camera_model_input.py
+python3 scripts/generate_camera_model_output.py
 ```
 
 Windows/PowerShell（已安装Python Launcher时）：
 
 ```powershell
-py -3 vivado/cnn_accel_cam/tools/generate_camera_model_input.py
-py -3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
+py -3 scripts/generate_camera_model_input.py
+py -3 scripts/generate_camera_model_output.py
 ```
 
 没有`py`命令时，用本机Python 3解释器命令或可执行文件路径替换；脚本输入输出位置
@@ -121,4 +121,4 @@ py -3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
 
 板上只需把 `bins/` 下 27 个文件放到 SD 的 `0:/yolo/`，不要再嵌套 `bins/`；SD 不需要
 trace、NPY 或 metadata。JTAG 运行不要求 `BOOT.BIN`，SD 自启动时则另需匹配硬件的
-启动镜像。详细文件清单和 DDR 分配见 [PS 应用说明](../../vivado/cnn_accel_cam/vitis/cnn_accel_cam/README.md)。
+启动镜像。详细文件清单和 DDR 分配见 [PS 应用说明](../../vitis/cnn_accel_cam/README.md)。
