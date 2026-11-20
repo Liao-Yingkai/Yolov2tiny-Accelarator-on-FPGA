@@ -8,12 +8,7 @@
 
 // CNN testbench 共用的数据目录定位逻辑，不参与综合。
 inline std::string yolo_test_data_dir() {
-#ifdef YOLO_DEFAULT_DATA_DIR
-    // HLS 脚本只向测试文件传入此绝对路径，不改变 DUT 的编译选项。
-    return YOLO_DEFAULT_DATA_DIR;
-#else
-    // 手工工程使用原头文件的路径。若编译器记录的是相对路径，
-    // 则该路径在仿真工作目录中也必须可读。
+    // 优先使用编译器记录的原始头文件路径，例如仓库外手工创建的工程。
     std::string source = __FILE__;
     std::replace(source.begin(), source.end(), '\\', '/');
     const std::string suffix = "hls/cnn_accelerator/testbench/yolo_data_path.h";
@@ -25,10 +20,19 @@ inline std::string yolo_test_data_dir() {
             return source.substr(0, offset) + "data/yolov2_tiny";
         }
     }
-    std::cerr << "无法定位数据目录：请用仓库中的原始 testbench 源码，"
-                 "或在测试编译选项中指定 YOLO_DEFAULT_DATA_DIR。\n";
+    // Vitis HLS 可能复制或改写测试源路径。对仓库内的工程，
+    // 从 csim/build 或 sim 工作目录向上查找源文件以识别仓库。
+    std::string prefix;
+    for (int depth = 0; depth <= 16; ++depth) {
+        if (std::ifstream(prefix + suffix).good() &&
+            std::ifstream(prefix + "hls/cnn_accelerator/script/hls_ddr.tcl").good()) {
+            return prefix + "data/yolov2_tiny";
+        }
+        prefix += "../";
+    }
+    std::cerr << "无法定位仓库的数据目录；请通过 hls_ddr.tcl 启动测试，"
+                 "或使用仓库内的仿真工程及原始 testbench。\n";
     return {};
-#endif
 }
 
 #endif

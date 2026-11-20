@@ -72,8 +72,9 @@ vitis_hls -f ../../hls/roi_overlay/script/hls_roi_overlay.tcl
 YOLO_HLS_STAGE=csynth vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
 ```
 
-脚本按自身路径定位源码，不自动执行 RTL 协同仿真或导出 IP。CNN 脚本只给 testbench
-设置默认数据路径；移动仓库后请重新编译测试。
+脚本按自身路径定位源码，不自动执行 RTL 协同仿真或导出 IP。CNN testbench 自行定位
+数据目录，Tcl 不向 `-cflags` 写入数据路径。
+
 
 ## 手动模块工程与路径限制
 
@@ -91,12 +92,14 @@ YOLO_HLS_STAGE=csynth vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
 保留源码的相对目录关系及`yolo_data_path.h`，不要只将单个CPP复制到无关目录。CNN脚本
 使用10 ns目标时钟；Overlay独立工程不套用此配置，约束应与其视频系统匹配。
 
-不使用 Tcl 脚本时，测试从共享头文件的路径推导默认目录。请在工程中添加仓库内的原始源码；若编译器记录的是相对路径，该路径在仿真运行目录中也必须可读。工具复制源码或改变目录结构时，可在 testbench 编译选项中把 `YOLO_DEFAULT_DATA_DIR` 定义为指向数据目录的 C++ 字符串常量。该设置是编译宏，不是环境变量。
+测试优先从共享头文件的位置推导数据目录；若工具复制了头文件或记录的相对路径不可读，
+测试会从仿真工作目录向上查找仓库。手动建工程时，请引用仓库原始源码；如果工具会复制
+测试源码，建议将仿真工程建在仓库的 `build/hls/` 下。无需设置数据路径宏或环境变量。
 
 ### 操作系统边界
 
 - 本仓库HLS流程与路径检查在Linux完成验证。
-- Tcl 编译参数的引用按 POSIX shell 处理，本仓库未验证 Windows 端到端 HLS 构建。不要在 PowerShell 或 CMD 中直接使用文档中的 Bash 命令。
+- 本仓库未验证 Windows 端到端 HLS 构建。不要在 PowerShell 或 CMD 中直接使用文档中的 Bash 命令。
 
 这些限制属于软件验证入口，不改变PL接口或网络的数据契约。
 
