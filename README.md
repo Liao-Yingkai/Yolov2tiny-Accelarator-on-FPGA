@@ -8,6 +8,45 @@ FPGA 推理数据通路，不是任意网络的通用部署框架。
 整数预处理、PL 推理、PS 解码/NMS 和 HDMI 检测框显示。具体帧率、精度及最终资源
 应以对应版本的实测和实现报告为准，历史 HLS 估计不作为当前板测指标。
 
+## 首次使用：选择复现路径
+
+仓库提供的是**可重新构建的工程**，不是可直接烧录的发布包。它保留 Vivado 工程和已打包
+的自定义 IP、Vitis 平台与应用源码、配套 XSA（含 bitstream），以及两份已生成的
+PS 模型配置头。不提供已构建的应用 ELF、BSP 库、`BOOT.BIN`、模型 BIN、训练权重
+或仿真 trace。
+
+```mermaid
+flowchart TD
+    A["克隆工程，准备配套板卡与 2022.2 工具"] --> B{"是否从 Vivado 重建硬件？"}
+    B -->|"重建"| C["打开 cnn_accel_cam.xpr → Validate BD → Generate Bitstream"]
+    C --> D["Export Hardware，勾选 Include bitstream，得到 XSA"]
+    B -->|"使用仓库中的硬件快照"| E["直接使用 vitis/system_wrapper.xsa"]
+    D --> F["在 Vitis 导入已有工程并绑定 XSA"]
+    E --> F
+    F --> G["构建平台与 BSP → 绑定本地 XPFM → 构建应用 ELF"]
+    A --> H["取得与配置头配套的 27 个模型 BIN"]
+    H --> I["复制 BIN 到 SD 卡根目录的 yolo/"]
+    G --> J["JTAG：下载匹配的 bitstream，初始化 PS/DDR，运行 ELF"]
+    I --> J
+    J --> K["检查 UART 初始化日志与 HDMI 检测框"]
+```
+
+1. **准备数据。** 首次上板只需要同批导出的 27 个模型 BIN。取得文件后，将
+   `bins/` 中的文件直接复制到 SD 卡根目录的 `yolo/`，例如
+   `yolo/conv1_weight.bin`，不要放成 `yolo/bins/conv1_weight.bin`。
+   推荐 FAT32。只通过 JTAG 运行不需要 `BOOT.BIN`，也不需要 trace 或
+   `metadata.json`。**仓库目前没有公开模型数据下载地址**，仅克隆代码可构建，
+   但缺少配套 BIN 时不能完成板上推理。参见[数据清单与放置规则](hls/docs/data.md)。
+2. **准备硬件。** 从 Vivado 重建，按[硬件构建与 XSA 导出](vivado/README.md#打开和构建vivado)
+   操作；若使用仓库内的 XSA 且没有改硬件，可直接进入 Vitis。
+3. **构建和运行软件。** 按[Vitis 首次构建与下载](vitis/README.md#从干净克隆准备平台)导入
+   工程、构建 BSP 和 ELF，然后通过 JTAG 启动。使用仓库配套模型时保留
+   `camera_model_input.h`、`camera_model_output.h`，**无需运行 Python 脚本或重新生成 HLS IP**。
+
+如果只想验证 HLS，不需要接板或准备 SD 卡。CNN 的 BIN 对照测试从
+`data/yolov2_tiny/bins/`、`data/yolov2_tiny/trace/` 读取；Overlay 测试不读取外部数据。
+如果更换模型，才需要[生成与新模型配套的 PS 配置头](scripts/README.md)。
+
 ## 环境与路径约定
 
 本文中的“仓库根目录”指同时包含`README.md`、`hls/`和`vivado/`的目录，不是`hls/`。

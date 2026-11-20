@@ -34,6 +34,10 @@
 
 ## 脚本入口与运行产物
 
+这里的流程用于验证 HLS 源码。直接复现板上应用时，Vivado 已包含打包好的 CNN 和
+Overlay IP，**不需要先运行本目录脚本**。只有修改 HLS 源码并希望变更进入硬件时，
+才需要重新综合、导出 IP，并更新 Vivado 的 IP 仓库及 XSA。
+
 CNN 和 Overlay 两个工程均使用 `src/`、`script/` 和 `testbench/`。接口和实现说明集中在
 [`docs/`](docs/)。
 
@@ -48,7 +52,17 @@ Linux/Bash 示例。进入 `build/hls/` 是为了让工具启动日志也留在�
 ```bash
 mkdir -p build/hls
 cd build/hls
+```
+
+选择要运行的一个测试。CNN Top C 仿真在准备好 [BIN 与参考输出](docs/data.md)后运行：
+
+```bash
 vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
+```
+
+只验证 Overlay 时，无需数据即可运行：
+
+```bash
 vitis_hls -f ../../hls/roi_overlay/script/hls_roi_overlay.tcl
 ```
 

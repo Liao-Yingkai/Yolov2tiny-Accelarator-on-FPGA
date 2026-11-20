@@ -4,6 +4,14 @@ PS 将 416×416 的 BGR888 裁剪数据转换为 RGB INT8；取帧、DDR和推�
 [应用说明](../vitis/cnn_accel_cam/README.md)。模型BIN从SD加载，输入量化与输出解码配置
 从同一批metadata生成后编译进PS应用，不需要在PS上解析JSON。
 
+## 什么时候需要运行
+
+**复现仓库配套模型时不用运行。** Vitis 应用已跟踪
+[`camera_model_input.h`](../vitis/cnn_accel_cam/src/camera_model_input.h) 和
+[`camera_model_output.h`](../vitis/cnn_accel_cam/src/camera_model_output.h)，可直接构建。
+脚本只在使用与当前头文件不匹配的新模型导出，或需要从 metadata 重新生成配置时使用。
+脚本不会下载权重、生成模型 BIN 或生成 HLS trace。
+
 ## 运行前提与默认位置
 
 两个脚本要求Python 3.7或以上，仅使用标准库，不要求安装PyTorch。本文路径和命令
@@ -14,6 +22,9 @@ PS 将 416×416 的 BGR888 裁剪数据转换为 RGB INT8；取帧、DDR和推�
   `camera_model_output.h`。
 - 默认输入、输出按脚本位置定位，不受启动目录影响；显式相对路径则按进程当前目录解释。
 - `--metadata` 可显式指定输入；`--output` 可另存结果，避免覆盖配置头。默认运行无需设置数据环境变量。
+
+metadata 需要满足 `format_version=2`、`weight_layout_version=3`，并与要部署的
+27 个 BIN 属于同一次导出；这两个工具不会把任意 YOLO checkpoint 转成 FPGA 模型。
 
 ## 生成输入和输出配置
 

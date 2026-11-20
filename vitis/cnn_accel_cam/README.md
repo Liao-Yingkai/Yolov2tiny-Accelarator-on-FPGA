@@ -166,6 +166,11 @@ HDMI显示ROI内实时图像、ROI外黑色、绿色检测框，类别及概率�
 
 ## 构建与运行边界
 
+干净克隆后的平台导入、应用构建和 JTAG 下载顺序见 [Vitis 首次使用](../README.md)。
+复现配套模型时保留仓库已有的两个模型配置头，**不运行生成脚本**。
+若 UART 报 SD 挂载或文件错误，优先检查分区和 `yolo/` 目录结构；不要通过重建 FPGA
+来处理模型 BIN 缺失或长度不符。
+
 1. 使用与当前Vivado设计一致的XSA和bitstream。
 2. 在Vitis中Build Platform，确认应用实际使用的导出目录包含`ff.h`、`ffconf.h`以及`libxilffs.a`，而不只是BSP设置界面已勾选。
 3. 刷新应用并重新生成构建文件。Debug/Release的链接组均需包含`-lxilffs`和`-lm`。

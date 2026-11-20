@@ -13,9 +13,22 @@ Git保存HLS、PS源码及两份小型模型配置头，不跟踪训练checkpoin
 `YOLOV2_TINY/`、`export.py`和`dump_trace.py`用于标识外部参考工程及数据来源，
 不是要求使用者已经拥有作者的目录，也不是本仓库中可直接执行的入口。
 
-取得数据后，将导出目录中的`metadata.json`、`bins/`及`trace/`复制到下方位置。
-不再嵌套一层`generated/`；文件复制可以使用操作系统文件管理器，不要求特定Shell。
-HLS测试只读取这些结果，不自动训练、导出或改写模型。
+## 取得数据后放在哪里
+
+如果数据以压缩包提供，先解压；以包含 `bins/` 或 `trace/` 的目录为准，
+不要把压缩包、外层版本目录或 `generated/` 整个再套进去。按目标准备文件：
+
+| 目标 | 需要的文件及位置 |
+|---|---|
+| 上板运行仓库配套模型 | 27 个模型 BIN → SD 根目录 `yolo/`；不需要 metadata、trace 或 Python |
+| 整网 HLS C 仿真 | 27 个模型 BIN → `data/yolov2_tiny/bins/`；样本 `0000` 的输入与 Prediction 参考 BIN → `data/yolov2_tiny/trace/` |
+| 运行全部 CNN 模块测试 | 同一套模型 BIN 与样本 `0000` 的完整 trace，分别放入上述两个目录 |
+| 更换模型并生成 PS 配置头 | 配套的 `metadata.json` → `data/yolov2_tiny/metadata.json`，或通过脚本 `--metadata` 显式指定 |
+| Overlay C 仿真、仅做 HLS 综合 | 不需要模型文件 |
+
+如果既要仿真又要上板，`data/yolov2_tiny/bins/` 和 SD 的 `yolo/` 分别存同一份
+模型 BIN；两个位置不会自动同步。模型根目录不要混放不同 checkpoint 的文件。
+本仓库的 HLS 测试不会自动训练、导出或更改数据。
 
 ## 导出目录与路径
 
@@ -48,8 +61,9 @@ data/yolov2_tiny/             # 与外部工程的generated根目录内容对应
 
 手动建立模块工程时，测试从仓库中共享头文件的位置推导默认目录，不读取数据环境变量。若工具复制了源文件或其相对路径在仿真目录中不可读，可通过 testbench 编译选项指定目录；见[手动模块工程](../README.md#手动模块工程与路径限制)。
 
-用于五个CNN测试的样本`0000`参考文件集为`metadata.json`、27个模型BIN和43个trace BIN，
-合计71个文件；不需要NPY、checkpoint或完整训练数据集。文件名中的`0000`是样本编号，
+供五个 CNN 测试使用的样本 `0000` 文件集包含 27 个模型 BIN 和 43 个 trace BIN。
+`metadata.json` 是同批导出的说明和 PS 配置生成输入，CNN testbench 不读取它。
+不需要 NPY、checkpoint 或完整训练数据集。文件名中的`0000`是样本编号，
 不表示只验证第一层。更换模型时应整套更新，不能混用不同checkpoint的BIN和golden。
 当前两份PS配置头记录了checkpoint校验标识；使用其他模型时需按下文重新生成。
 

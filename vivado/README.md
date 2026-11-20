@@ -29,14 +29,24 @@
 
 ## 打开和构建Vivado
 
+如果只想运行仓库已有硬件，且板卡和硬件配置匹配，可以跳过本节，直接把
+[`vitis/system_wrapper.xsa`](../vitis/system_wrapper.xsa) 交给 Vitis。该 XSA 已包含
+`system_wrapper.bit`；仓库未单独提交 Vivado 实现缓存或独立的 `.bit` 输出目录。
+
 1. 启动Vivado 2022.2，通过Open Project选择上表中的XPR。
 2. 检查当前项目器件为`xc7z020clg400-2`，IP Repository解析到本工程的`ip_repo`，
    源文件列表中没有实际缺失的BD、wrapper或约束。
 3. 打开`system` BD，先检查Report IP Status，再执行Validate Design。
    如有locked IP，按报告中的锁定原因处理，不直接删除互联或盲目升级所有IP。
-4. 按需Generate Output Products，再执行综合、实现及生成bitstream。
-5. 导出包含bitstream的XSA，更新Vitis平台后再重建应用；不要只替换bitstream而保留
-   不配套的硬件描述、驱动或初始化代码。
+4. 对 `system` BD 执行 **Generate Output Products**。保留工程已引用的
+   `system_wrapper.v`；确认顶层是 `system_wrapper`，不需要另建一个同名 wrapper。
+5. 在 Flow Navigator 执行 **Generate Bitstream**。未完成的综合和实现会先运行；
+   检查运行状态、关键警告和实现时序报告。bitstream 通常位于
+   `vivado/cnn_accel_cam/cnn_accel_cam.runs/impl_1/system_wrapper.bit`（对应默认实现 run）。
+6. 选择 **File → Export → Export Hardware**，选择 **Include bitstream**，将 XSA
+   导出到独立的本地构建目录，例如 `build/ps/handoff/system_wrapper.xsa`。不要为一次本地试验
+   直接覆盖仓库快照。将这份新 XSA 通过 Vitis 平台的 **Update Hardware Specification**
+   导入，再重新构建平台、BSP 和应用。参见 [AMD 2022.2 XSA 导出说明](https://docs.amd.com/r/2022.2-English/ug1400-vitis-embedded/Creating-a-Hardware-Design-XSA-File)。
 
 部分XPR字段保存旧ImportPath、备用run或未启用增量缓存的历史位置，不应与当前实际
 文件依赖混为一谈。移植时先检查实际Source/IP Repository解析结果，不因看到旧目录名
