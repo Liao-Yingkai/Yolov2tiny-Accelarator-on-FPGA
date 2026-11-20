@@ -4,9 +4,8 @@
 [仓库说明](../../README.md)。文件路径以仓库根目录为基准；表中链接可直接定位源文件。
 系统验证基线为2026-11-19，各模块保留的历史检查只代表对应版本与检查范围。
 
-- [设计记录与待优化事项](yolov2_tiny_refactor_plan.md)：层表、数值契约、存储预算与后续优化。
-- [DDR Top](top.md)：顶层接口、层/块调度与已有整网检查记录。
-- [模型与测试数据](data.md)：导出目录、`YOLO_DATA_DIR`、BIN/trace及SD模型的对应关系。
+- [DDR Top](top.md)：网络层表、顶层接口与层/块调度。
+- [模型与测试数据](data.md)：导出目录、BIN/trace及SD模型的对应关系。
 - [Loader、Writer 与层间 DDR 缓冲](yolov2_tiny_ddr_io.md)：模型布局、紧凑 RGB、NHWC 写回与 A/B 屏障。
 - [Im2Row](im2row.md)、[OS Systolic](systolic_os.md)、[ConvPostProcess](conv_postprocess.md)、[Pool](pool.md)：模块接口、实现与各自验证边界。
 
@@ -31,7 +30,7 @@
 
 测试使用同一次模型导出的BIN/trace，样本为`0000`。默认目标目录是`data/yolov2_tiny/`，
 但它不随Git提供，须先准备数据。所有测试只打印统计和有限错误，不写CSV，失败返回非零。
-完整文件清单及可选覆盖方式见[数据说明](data.md)。
+完整文件清单见[数据说明](data.md)。
 
 ## 脚本入口与运行产物
 
@@ -60,20 +59,12 @@ Linux/Bash调用示例见[仓库说明](../../README.md#运行-hls-验证)。
 保留源码的相对目录关系及`yolo_data_path.h`，不要只将单个CPP复制到无关目录。CNN脚本
 使用10 ns目标时钟；Overlay独立工程不套用此配置，约束应与其视频系统匹配。
 
-不使用脚本宏时，CNN测试从`yolo_data_path.h`的源码位置推导仓库。Linux下绝对源码路径
-可以直接定位；相对路径需要在仿真运行目录中仍能解析。若自建工程改变了编译/执行位置，
-可在testbench编译选项中将`YOLO_DEFAULT_DATA_DIR`定义为数据目录的C++字符串常量。
-宏引用语法取决于所用工具的参数传递方式，不是环境变量。非空`YOLO_DATA_DIR`可覆盖已
-成功编译程序的运行时数据位置，但不能修复编译阶段的路径兼容问题。
+不使用 Tcl 脚本时，测试从共享头文件的路径推导默认目录。请在工程中添加仓库内的原始源码；若编译器记录的是相对路径，该路径在仿真运行目录中也必须可读。工具复制源码或改变目录结构时，可在 testbench 编译选项中把 `YOLO_DEFAULT_DATA_DIR` 定义为指向数据目录的 C++ 字符串常量。该设置是编译宏，不是环境变量。
 
 ### 操作系统边界
 
 - 本仓库HLS流程与路径检查在Linux完成验证。
-- Windows的Vitis HLS自身有MinGW命令行入口，但本仓库尚未完成Windows重建验证。
-  `yolo_data_path.h`的无宏回退使用POSIX `realpath`及Unix路径判断，Tcl中的宏引用也按
-  POSIX shell处理。仅设置运行时环境变量不能让不兼容的源码分支免于编译。
-- 因此不能将Linux的Bash命令直接当成PowerShell/CMD命令，也不能仅因为工具支持Windows
-  就宣称本项目已跨平台。Windows移植需处理这些测试/脚本限制，再重新验证。
+- Tcl 编译参数的引用按 POSIX shell 处理，本仓库未验证 Windows 端到端 HLS 构建。不要在 PowerShell 或 CMD 中直接使用文档中的 Bash 命令。
 
 这些限制属于软件验证入口，不改变PL接口或网络的数据契约。
 

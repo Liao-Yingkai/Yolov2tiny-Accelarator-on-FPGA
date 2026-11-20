@@ -3,7 +3,6 @@
 import argparse
 import json
 import math
-import os
 import struct
 import sys
 from pathlib import Path
@@ -85,15 +84,13 @@ def generate(metadata, source):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metadata", type=Path,
-                        help="metadata.json路径；默认仓库data/yolov2_tiny，可用YOLO_DATA_DIR覆盖")
+                        default=Path(__file__).resolve().parents[3] / "data/yolov2_tiny/metadata.json",
+                        help="metadata.json路径；默认仓库data/yolov2_tiny/metadata.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] /
                         "vitis/cnn_accel_cam/src/camera_model_output.h")
     args = parser.parse_args()
-    if args.metadata is None:
-        data_dir = os.environ.get("YOLO_DATA_DIR")
-        # 显式参数优先，其次非空环境变量；默认位置与调用时工作目录无关。
-        default_dir = Path(__file__).resolve().parents[3] / "data/yolov2_tiny"
-        args.metadata = (Path(data_dir) if data_dir else default_dir) / "metadata.json"
+    if not args.metadata.is_file():
+        parser.error(f"找不到 {args.metadata}；请按 hls/docs/data.md 准备数据，或指定 --metadata")
     metadata = json.loads(args.metadata.read_text(encoding="utf-8"))
     # 完整校验与格式化成功后才替换头文件；错误metadata不破坏已有产物。
     header = generate(metadata, args.metadata.resolve())

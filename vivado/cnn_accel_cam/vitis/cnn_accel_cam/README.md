@@ -1,6 +1,6 @@
 # YOLO相机预处理与推理
 
-应用保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理、YOLO推理、解码/NMS，并把检测列表发送给`roi_overlay`。Overlay在视频帧边界整批更新框、类别和置信度；没有目标时清除旧框。2026-11-19基线已完成测试及上板功能验证；本文末尾历史软件检查不作为当前帧率或检测精度报告。
+应用保留640×480摄像头和HDMI预览，启动时从SD一次性加载模型，随后连续执行416×416 ROI抓拍、RGB整数预处理、YOLO推理、解码/NMS，并把检测列表发送给`roi_overlay`。Overlay在视频帧边界整批更新框、类别和置信度；没有目标时清除旧框。2026-11-19基线已完成测试及上板功能验证。
 
 本文文件路径以仓库根目录为基准，`src/`特指`vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/`。
 构建使用Vitis Classic IDE 2022.2及standalone Cortex-A9 BSP；工作区导入、平台重绑定和
@@ -102,7 +102,7 @@ q = clamp(round_nearest_even(FP32(pixel/255) * FP32(1/input_scale)), -128,127)
 更换SD模型后，使用同批metadata运行`generate_camera_model_input.py`并重编译应用。
 Python解释器、Linux/Bash与Windows/PowerShell调用示例见[配置生成说明](../../tools/CAMERA_INPUT.md)。
 
-默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本位置定位，无需环境变量；`--metadata`或非空`YOLO_DATA_DIR`可选覆盖，命令行参数优先。默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。数据组织见[模型与测试数据](../../../../hls/docs/data.md)。
+默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本位置定位，无需环境变量；可通过 `--metadata` 指定输入文件。默认输出`src/camera_model_input.h`。生成器穷举256值，无法生成32位安全且严格等价的参数就拒绝更新。当前输入scale为`0.007842701859772205`，生成`M=524317、SHIFT=20`。数据组织见[模型与测试数据](../../../../hls/docs/data.md)。
 
 ## 连续推理及DDR所有权
 
@@ -201,56 +201,3 @@ YOLO model ready; accelerator not started
 文件错误会打印具体路径、FRESULT，或者预期/实际长度与读取偏移；主入口随后打印初始化失败原因。没有逐块读取进度、逐像素日志、正常flush提示或耗时刷屏。
 
 `camera_model_input.h`保存YOLO输入系数，`camera_model_output.h`保存解码配置；模型权重及bias/M/S从SD加载。
-
-## 历史软件检查
-
-以下记录保留开发时的检查范围和失败边界，部分当时的配置（例如16框上限）已更新。
-当前运行方式和阈值以上文及源码为准；旧记录中的“尚未上板”只指对应检查当时，不否定后续完成的板上功能验证。`build/`日志为本机产物，不随仓库提供。
-
-<details>
-<summary>展开2026-11-15～16软件检查记录</summary>
-
-### 模型加载软件检查（2026-11-15）
-
-- 当前构建范围的8个应用C文件通过ARM Cortex-A9编译；使用现有链接脚本和Xilinx specs完成ELF链接。只有未修改的`vdma_api.c`保留原有的有符号/无符号比较警告。
-- 当时平台导出目录尚缺FatFs头文件和库，检查在独立目录中按当前BSP配置重建`libxilffs.a`，与已导出的`libxil.a`链接；没有改写原BSP和IDE生成文件。该结果不代表平台已完成Build Platform。
-- ELF中的模型、Feature、视频帧和临时读取缓冲均落在DDR，大小、64字节对齐和互不重叠检查通过。
-- 主机文件系统模拟检查逐字节核对全部27个真实BIN的权重/参数DDR拼接，覆盖缺文件、大小不符、成功返回但实际短读、读取错误及容量不足。失败块不复制到目标区，挂载只执行一次。该检查没有连接真实SD控制器或CNN。
-- 应用工程XML和该次修改范围的差异检查通过，平台/FSBL配置未改动。
-
-记录位于仓库根忽略目录`build/ps/sd_model_loader_check_20261115/`，包括ARM ELF/map、独立xilffs库和主机检查；不提交生成物。尚未下载ELF或进行板上SD读取、长文件名访问、HDMI及DDR总线实测。
-
-### 预处理与推理软件检查（2026-11-15）
-
-- 当前9个应用C文件完成ARM编译和ELF链接，使用当前平台实际导出的BSP及xilffs库；没有改动BSP、RTL或bitstream。
-- C输入量化与独立binary32参考对全部256种字节一致；对416×416有规律BGR快照核对全部173,056个像素的RGB输出顺序及缓冲边界。Release对应的`-O2`预处理对象中量化已内联，未见浮点运算或数学helper依赖。
-- 抓拍主机模拟核对精确ROI行偏移、两个帧事件、源帧invalidate，以及复制后所有权失败仍解除停车；不等于真实VDMA时序已验证。
-- 推理主机模拟核对清旧Done、输入flush、屏障、Start、Done轮询、结果invalidate和屏障的顺序；重复调用均返回B视图，启动后没有额外IsIdle读取。超时后输出为空、输入不可写、不允许再次启动，异常Busy也锁住访问。
-- 正常逐帧日志和对应计数器已移除，保留初始化、错误状态变化、恢复和停机日志。最新ELF不含逐帧打印。
-- 该次检查生成物均保存在忽略目录`build/ps/yolo_camera_infer_check_20261115/`；Git工作区只保留必要源码、配置和文档变更，未自动提交。
-
-以上是软件构建和模拟接口检查，尚未下载新ELF或执行真实摄像头→YOLO推理，不声明板上帧率或检测精度。该次检查没有运行HLS综合、C-sim或RTL co-sim。
-
-完整检查记录：`build/ps/yolo_camera_infer_check_20261115/validation.log`（仓库根目录下，本机生成，不提交）。
-
-### 解码/NMS软件检查（2026-11-15）
-
-- 10个应用C文件使用当前导出BSP、xilffs及libm完成ARM编译和链接；仅未修改的`vdma_api.c`保留原有符号比较警告。没有修改HLS、BSP或bitstream。
-- 将真实`trace_prediction_postprocess_int8_hwc_0000.bin`的HWC125数据补成物理HWC128后，C与独立NumPy解码/NMS参考均保留1个检测；类别一致，分数/坐标在`rtol=3e-5、atol=2e-4`范围内一致。当前环境没有PyTorch/torchvision，因此没有直接执行其NMS内核。
-- 空结果、已知网格/anchor/通道地址、填充通道污染、多类别候选、同类抑制/异类保留、裁边、零面积过滤、2,535个过阈值候选、16框上限、INT8极值、无效参数及连续调用清空结果检查均通过。
-- 模型输出配置重新生成后与提交用头文件逐字节一致。候选数组为473,200字节静态DDR，与模型、Feature、视频缓冲和结果列表互不重叠；当前链接的newlib qsort无堆分配调用。
-- 正常循环仍无逐帧UART日志，SD文件组织不变。Git差异检查通过；生成物只在忽略目录`build/ps/yolo_decode_nms_check_20261115/`，没有自动提交。
-
-该轮尚未上板验证后处理耗时、精度或检测效果，当时没有接入Overlay传输。检查记录：`build/ps/yolo_decode_nms_check_20261115/validation.log`。
-
-### Overlay接入软件检查（2026-11-16）
-
-- 当前11个应用C文件使用现有Vitis 2022.2 ARM工具链和BSP完成编译、链接；新增代码无警告，仅保留旧`vdma_api.c:134`的符号比较警告。
-- 软件驱动模拟覆盖延迟ACK、旧命令未完成时的启动同步、sequence回绕、16框与空列表、坐标裁剪/取整/偏移、类别/百分比打包、非法列表拒绝、协议错误及超时锁存；再次启用地址和未定义行为检查后通过。
-- Debug/Release均重新纳入`camera_display.c`；工程XML、主循环调用顺序、无逐帧UART和Git差异检查通过。现有忽略规则已覆盖全部检查生成物，无需新增忽略项。
-
-上述模拟只验证PS软件的命令组织和错误处理，不验证实际RTL绘图、SOF时序或AXI互联。该次检查没有修改HLS/Vivado/BSP，没有运行HLS仿真或综合，也没有下载上板。需在Vitis刷新并重新生成应用构建文件、Build Release，再使用匹配当前硬件的bitstream和ELF检查显示效果。
-
-检查记录：`build/ps/yolo_overlay_check_20261115/validation.log`（目录沿用检查启动时命名，生成物不提交）。
-
-</details>

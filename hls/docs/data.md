@@ -6,8 +6,7 @@
 ## 数据获取边界
 
 Git保存HLS、PS源码及两份小型模型配置头，不跟踪训练checkpoint、图像数据集、模型BIN
-或逐层trace。`data/yolov2_tiny/`由`.gitignore`排除，克隆仓库不会自动创建或填充它；
-文件被Git忽略不代表文件已从磁盘删除。
+或逐层trace。`data/yolov2_tiny/` 只跟踪目录说明，克隆后需自行放入数据。
 
 当前仓库没有提供数据包下载地址、自动下载脚本或完整训练/export工程。因此仅克隆代码
 不能完成依赖BIN的功能测试，必须另行取得与本设计匹配的导出产物。文档中的
@@ -47,33 +46,7 @@ data/yolov2_tiny/             # 与外部工程的generated根目录内容对应
 寻找同名文件夹。通过`hls_ddr.tcl`运行Top时，脚本在编译测试文件时传入绝对默认路径；
 移动仓库后须重新执行脚本并重新编译，不沿用旧位置的测试可执行文件。
 
-手动建立模块工程时，测试会尝试从源码路径回退定位仓库。该实现含POSIX `realpath`和
-Unix绝对路径判断；相对源码路径只有在仿真运行目录中仍可解析时才有效。不能据此保证
-所有手动工程都与运行目录无关，更不能宣称Windows路径已适配。说明见
-[HLS入口与平台限制](README.md#手动模块工程与路径限制)。
-
-数据查找优先级为：非空的`YOLO_DATA_DIR`可选覆盖 → 仓库内默认目录。变量未设置或
-为空时尝试使用默认目录；源码路径无法定位、数据缺失或文件不匹配都会报错。覆盖目录应包含
-`bins/`、`trace/`和`metadata.json`，当前样本后缀固定为`0000`。
-
-只有想读取另一套外部导出时才需配置。以下示例明确区分Shell，路径是占位示例，不能照抄为
-作者的目录；建议使用绝对路径。Windows示例只说明环境变量语法，不代表HLS流程已验证。
-
-Linux/Bash，在运行工具的同一终端中：
-
-```bash
-export YOLO_DATA_DIR="/absolute/path/to/generated"
-```
-
-Windows/PowerShell，在启动工具前：
-
-```powershell
-$env:YOLO_DATA_DIR = "D:/datasets/yolov2_tiny/generated"
-```
-
-不再需要覆盖时，Bash使用`unset YOLO_DATA_DIR`，PowerShell使用
-`Remove-Item Env:YOLO_DATA_DIR -ErrorAction SilentlyContinue`。这些操作只影响相应终端
-及其后续子进程，不改变已运行的HLS进程。默认目录正常使用时不需要上述设置。
+手动建立模块工程时，测试从仓库中共享头文件的位置推导默认目录，不读取数据环境变量。若工具复制了源文件或其相对路径在仿真目录中不可读，可通过 testbench 编译选项指定目录；见[手动模块工程](README.md#手动模块工程与路径限制)。
 
 用于五个CNN测试的样本`0000`参考文件集为`metadata.json`、27个模型BIN和43个trace BIN，
 合计71个文件；不需要NPY、checkpoint或完整训练数据集。文件名中的`0000`是样本编号，
@@ -138,13 +111,12 @@ py -3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
 不因更换解释器命令而改变。此处给出调用语法，不声称已完成Windows端到端构建验证。
 
 两脚本默认读取仓库内`data/yolov2_tiny/metadata.json`，根据脚本所在位置定位，与启动
-目录无关。可用`--metadata /path/to/metadata.json`显式指定文件，或用非空
-`YOLO_DATA_DIR`指定外部数据根目录；优先级为命令行参数 → 环境变量 → 仓库默认目录。
+目录无关。读取另一份 metadata 时，用 `--metadata` 指定文件。
 输出分别为 `camera_model_input.h` 和 `camera_model_output.h`，保存量化
 标量、Prediction scale、anchors、类别及 checkpoint 校验标识；不保存大模型或 LUT。
 更新模型后，两份头和 27 个 BIN 必须同步，重新编译 PS 应用。
 
-显式的相对`--metadata`、`--output`或相对`YOLO_DATA_DIR`按进程当前目录解释；
+显式传入的相对 `--metadata`、`--output` 路径按进程当前目录解释；
 只有默认路径按脚本位置定位。外部覆盖建议传绝对路径，以免在IDE和终端中指向不同文件。
 
 板上只需把 `bins/` 下 27 个文件放到 SD 的 `0:/yolo/`，不要再嵌套 `bins/`；SD 不需要

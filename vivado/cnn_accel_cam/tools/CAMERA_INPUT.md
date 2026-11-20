@@ -1,6 +1,6 @@
 # 相机模型配置生成
 
-PS预处理接收416×416 RGB INT8输入；取帧、DDR和推理流程见
+PS 将 416×416 的 BGR888 裁剪数据转换为 RGB INT8；取帧、DDR和推理流程见
 [应用说明](../vitis/cnn_accel_cam/README.md)。模型BIN从SD加载，输入量化与输出解码配置
 从同一批metadata生成后编译进PS应用，不需要在PS上解析JSON。
 
@@ -13,8 +13,7 @@ PS预处理接收416×416 RGB INT8输入；取帧、DDR和推理流程见
 - 默认输出：`vivado/cnn_accel_cam/vitis/cnn_accel_cam/src/camera_model_input.h`及
   `camera_model_output.h`。
 - 默认输入、输出按脚本位置定位，不受启动目录影响；显式相对路径则按进程当前目录解释。
-- 优先级为`--metadata`文件参数 → 非空`YOLO_DATA_DIR`数据根目录 → 仓库默认目录。
-  正常使用默认目录无需设置环境变量；`--output`可另存结果，避免覆盖现有配置头。
+- `--metadata` 可显式指定输入；`--output` 可另存结果，避免覆盖配置头。默认运行无需设置数据环境变量。
 
 ## 生成输入和输出配置
 
@@ -33,8 +32,7 @@ py -3 vivado/cnn_accel_cam/tools/generate_camera_model_output.py
 ```
 
 解释器命令不是固定要求：若本机使用`python`或解释器完整路径，请确认其版本后替换命令。
-以上Windows示例是调用语法，不代表已完成Windows整套工程验证。外部数据覆盖的两种Shell
-示例、导出文件清单及获取边界见[数据说明](../../../hls/docs/data.md)。
+以上Windows示例是调用语法，不代表已完成Windows整套工程验证。导出文件清单及获取边界见[数据说明](../../../hls/docs/data.md)。
 
 两个命令都会更新相应配置头。更换SD模型时，应从同一次导出的metadata同时生成两份头，
 然后重编译PS应用；不得将新BIN与旧scale、anchors或类别名混用。生成器不训练模型、

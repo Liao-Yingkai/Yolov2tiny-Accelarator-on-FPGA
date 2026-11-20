@@ -186,7 +186,7 @@ void systolic_OS(hls::stream<activation_pack_t>& activation_stream,
 #pragma HLS BIND_STORAGE variable=activation_bank type=ram_1p impl=bram
 
     // 权重 stream 已按 local_cout_tile -> token 排列，按地址顺序装入即可。
-    // 首版不做预取；直到本块权重全部写完，才消费第一笔 Im2Row activation。
+    // 当前块的权重全部写入缓存后，才读取第一笔 Im2Row activation。
     for (yolo_weight_address_t address = 0; address < weight_packs; ++address) {
 #pragma HLS PIPELINE II=1
         const weight_pack_t weight = weight_stream.read();

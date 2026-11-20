@@ -44,12 +44,12 @@ HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的�
 - 单层按最多 32 Cout 驻留。每个 Cout 块重新扫描 Feature，权重和参数按整层供流。
   层内通过 stream 流水，层与层之间通过 DDR A/B 两区交替，九层复用
   一套 Im2Row、Systolic、PostProcess 和 Pool。
-- 唯一系统入口是 `cnn_accelerator_ddr(feature, weights, params)`，不再有独立
-  stream Core。PS 把紧凑 RGB 放在 Feature A 区，结果在 B 区；逻辑形状
+- CNN 顶层入口是 `cnn_accelerator_ddr(feature, weights, params)`。
+  PS 把紧凑 RGB 放在 Feature A 区，结果在 B 区；逻辑形状
   为 `13×13×125`，每像素物理步长 128 B。Top 不做检测框解码或 NMS。
 
-详细契约见 [Top 设计](hls/docs/top.md)、[DDR 搬运与布局](hls/docs/yolov2_tiny_ddr_io.md)
-和 [YOLOv2-tiny 设计记录](hls/docs/yolov2_tiny_refactor_plan.md)。模块文档：
+详细契约见 [Top 设计](hls/docs/top.md)、[DDR 搬运与布局](hls/docs/yolov2_tiny_ddr_io.md)。
+模块文档：
 [Im2Row](hls/docs/im2row.md)、[OS Systolic](hls/docs/systolic_os.md)、
 [ConvPostProcess](hls/docs/conv_postprocess.md)、[Pool](hls/docs/pool.md)。
 
@@ -64,7 +64,7 @@ HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的�
 | [hls/docs](hls/docs/README.md) | 模块设计、DDR 契约和测试数据说明 |
 | [vivado/cnn_accel_cam](vivado/cnn_accel_cam) | 摄像头预览、YOLO/Overlay IP和Vitis PS应用 |
 | [vivado/cnn_accel_cam/tools](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md) | 从模型 metadata 生成 PS 输入/输出配置 |
-| `data/yolov2_tiny/` | 默认模型及测试数据位置，需要自行准备，不纳入版本管理 |
+| [data/yolov2_tiny/](data/yolov2_tiny/README.md) | 模型和测试数据放置位置；仓库只跟踪目录说明 |
 | `build/hls/`、`build/ps/` | 本地检查、工程、日志和报告，不纳入版本管理 |
 
 仓库目录名可以自选；Vivado/Vitis内部的工程名称沿用现有配置，不能仅重命名文件夹后
@@ -102,9 +102,8 @@ YOLO_HLS_STAGE=csynth vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
 错误，不写 CSV。模块级测试须各自选择对应 Top，不要将多个 `main()` 加入同一工程；
 入口对照见 [HLS 文档索引](hls/docs/README.md)。
 
-使用上述Tcl入口时无需手动设置数据环境变量：脚本向Top testbench传入默认数据路径。
+使用上述 Tcl 入口无需设置数据环境变量；脚本自动配置测试数据目录。
 手动建立模块工程时，源码路径回退存在条件，详见[HLS入口与平台限制](hls/docs/README.md)。
-非空的`YOLO_DATA_DIR`可选覆盖默认目录，建议使用绝对路径；它不是首次运行的必填项。
 
 C++ 对照可以验证逐元素输出和 DDR 软件地址计算；单实例、有限 FIFO 反压、
 AXI 写回顺序和板级时序需要分别检查综合报告、RTL 仿真与实现。
@@ -120,3 +119,9 @@ AXI 写回顺序和板级时序需要分别检查综合报告、RTL 仿真与实
 
 首次在另一目录打开 Vitis 时需要重新关联本地 platform；工具生成物、BSP 库和 IDE 状态
 不随源码保存，具体恢复步骤见 Vivado 工程说明。不要为消除本机路径提示而改硬件参数。
+
+## 贡献与验证
+
+- 修改计算行为或数据布局时，同步更新相关接口说明和对应 testbench；涉及模型输出或 trace 时，说明所用的模型与导出版本。
+- 提交时注明实际运行过的检查（C 仿真、RTL 协同仿真、综合或上板）。不要把静态检查或综合估计当成运行结果。
+- 不提交工具缓存、个人工作区配置或本地模型数据。硬件变更涉及导出 IP、XSA 或 BSP 时，按[板级工程说明](vivado/README.md)核对它们是否配套。

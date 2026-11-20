@@ -18,7 +18,7 @@ if {!$run_synthesis} {
     append cpp_flags " -O3"
 }
 file mkdir $build_dir
-# 默认数据位置只传给测试文件；运行时仍允许 YOLO_DATA_DIR 覆盖。
+# 固定测试数据位置只传给测试文件，不依赖仿真进程的工作目录。
 set default_data_dir [file join $repo_dir data yolov2_tiny]
 # 将整个宏参数作为一个 shell 单词，保留 C++ 字符串引号和目录中的空格。
 set default_data_define "-DYOLO_DEFAULT_DATA_DIR=\"$default_data_dir\""
