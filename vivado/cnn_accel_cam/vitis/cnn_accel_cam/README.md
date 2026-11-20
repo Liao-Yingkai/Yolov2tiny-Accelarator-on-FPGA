@@ -143,7 +143,7 @@ anchors和类别名；调用方式及可选参数见[配置生成说明](../../t
 
 ## Overlay控制与显示
 
-当前Overlay使用`ap_ctrl_none`自由运行及显式`PIPELINE II=1 style=flp`，不需要Start或AutoRestart；命令仍通过sequence ACK确认。此前为co-sim临时加入启动控制的接口不再使用，重新生成硬件时须保证IP、XSA、BSP和bitstream配套。详见[Overlay说明](../../../../hls/roi_overlay/README.md)。
+当前Overlay使用`ap_ctrl_none`自由运行及显式`PIPELINE II=1 style=flp`，不需要Start或AutoRestart；命令仍通过sequence ACK确认。此前为co-sim临时加入启动控制的接口不再使用，重新生成硬件时须保证IP、XSA、BSP和bitstream配套。详见[Overlay说明](../../../../hls/docs/roi_overlay.md)。
 
 `camera_display_init()`在HDMI启动后执行，使用BSP生成的`XRoi_overlay`驱动，不硬编码AXI寄存器地址，也不调用Start（该核自由运行）。先读取当前command的sequence，等待视频已见SOF、旧命令已ACK且没有待提交批次，再从该sequence继续递增；随后提交空列表，清除上次运行留下的检测框。这样PS重新运行而PL未复位时，不会直接用sequence=1覆盖尚未完成的命令。
 
@@ -162,7 +162,7 @@ COMMIT的ACK表示新列表已在SOF生效，而非仅表示命令收到。核�
 
 HDMI显示ROI内实时图像、ROI外黑色、绿色检测框，类别及概率在框内左下角；空间不够时由HLS隐藏文字但保留边框。绘图位于VDMA的MM2S输出之后，不写回采集DDR，不影响CNN输入。框来自较早的快照，物体移动时会滞后；帧边界更新只避免半新半旧列表，不保证检测框与当前预览来自同一采集帧。
 
-完整字布局及命令字段见[Overlay设计](../../../../hls/roi_overlay/README.md)。PS和HLS各自维护相同协议，修改其中一端时必须同步。
+完整字布局及命令字段见[Overlay设计](../../../../hls/docs/roi_overlay.md)。PS和HLS各自维护相同协议，修改其中一端时必须同步。
 
 ## 构建与运行边界
 

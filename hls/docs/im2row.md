@@ -368,7 +368,7 @@ Systolic在Replay其他Cout计算Tile时不需要新Activation，Im2Row可以利
 
 测试入口是仓库根目录下的`hls/cnn_accelerator/testbench/test_im2row_pytorch.cpp`。HLS工程设置`im2row`为唯一Top，设计文件选`hls/cnn_accelerator/src/im2row/im2row.cpp`及其头文件，testbench只加入该测试，不加入其他含`main()`的文件。
 
-本测试默认目标是仓库内`data/yolov2_tiny/trace/`的样本`0000`。手动工程的路径回退与操作系统限制见[HLS入口说明](README.md#手动模块工程与路径限制)，不能将默认目标理解为所有环境均可自动定位。测试前须取得配套权重、参数及整数trace，本测试不提供exporter或自动导出功能。文件清单见[数据说明](data.md)。
+本测试默认目标是仓库内`data/yolov2_tiny/trace/`的样本`0000`。手动工程的路径回退与操作系统限制见[HLS入口说明](../README.md#手动模块工程与路径限制)，不能将默认目标理解为所有环境均可自动定位。测试前须取得配套权重、参数及整数trace，本测试不提供exporter或自动导出功能。文件清单见[数据说明](data.md)。
 
 Python的`dump_trace.py`以导出的整数权重和参数进行数学参考计算，使用标准PyTorch unfold生成窗口；后续层输入来自整数参考，不是QAT浮点激活。packed 窗口与逻辑 unfold 是两种独立索引格式，测试同时按各自布局核对。
 

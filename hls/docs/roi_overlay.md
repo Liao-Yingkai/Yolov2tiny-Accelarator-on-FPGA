@@ -2,7 +2,8 @@
 
 本目录只提供独立HLS源码，不修改现有CNN、Vivado或Vitis工程。顶层为`roi_overlay`，输入输出均为`ap_axiu<24,1,0,0>`的AXI4-Stream，双向接口寄存器启用。核使用 `ap_ctrl_none`，复位释放后随视频流持续运行。RGB从高到低字节为R、G、B，所有旁带原样透传。
 
-文件包括：`roi_overlay.h`（接口与配置）、`roi_overlay.cpp`（叠加核）、`font.h`（字模）、`test_roi_overlay.cpp`（独立测试台）和本说明。综合脚本与生成物保存在源码目录之外。
+源码位于 [`hls/roi_overlay/src/`](../roi_overlay/src)，测试位于
+[`testbench/`](../roi_overlay/testbench)，运行脚本和工程入口见 [HLS 总览](../README.md)。
 
 系统视频接线预期为`MM2S → roi_overlay → video_out`，PS控制口接AXI4-Lite；插入叠加核不改变摄像头和DDR的数据处理职责。
 
@@ -112,7 +113,11 @@ PS仍独立完成裁剪、坐标换算、量化、推理及文本格式化；相
 
 ## 测试入口与验证边界
 
-使用 Vitis HLS 建立独立工程：Top 选择 `roi_overlay`，设计源文件加入 `roi_overlay.cpp`，testbench 加入 `test_roi_overlay.cpp`。保留同目录的接口定义和字模头文件。
+使用 [Overlay C 仿真脚本](../roi_overlay/script/hls_roi_overlay.tcl)，或在 Vitis HLS
+中建立独立工程：Top 设为 `roi_overlay`，设计文件选择
+[`src/roi_overlay.cpp`](../roi_overlay/src/roi_overlay.cpp)，测试文件选择
+[`testbench/test_roi_overlay.cpp`](../roi_overlay/testbench/test_roi_overlay.cpp)。
+测试自行构造视频和命令，不需要模型 BIN 或 trace。
 
 C++测试台直接调用`roi_overlay()`，一次调用对应一个像素事务，检查绘图、旁带、命令ACK和错误处理；它不能证明流水风格及RTL反压行为。完整测试约215万个像素事务，不输出CSV。
 

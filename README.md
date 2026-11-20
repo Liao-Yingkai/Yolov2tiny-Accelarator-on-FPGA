@@ -17,7 +17,7 @@ FPGA 推理数据通路，不是任意网络的通用部署框架。
 |---|---|
 | FPGA | `xc7z020clg400-2`；引脚、DDR及外设配置针对现有板级工程，不代表所有Zynq板卡可直接使用 |
 | 开发工具 | Vivado、Vitis HLS、Vitis Classic IDE 2022.2；不是新版Vitis Unified IDE流程 |
-| HLS运行环境 | 当前脚本与测试路径处理在Linux验证；下方命令明确使用Bash |
+| HLS运行环境 | 当前脚本与测试路径处理在 Linux 验证；HLS 总览中的命令使用 Bash |
 | Windows | 工具本身提供Windows入口，但本仓库的HLS路径回退和编译参数引用尚未完成Windows验证，不能按“一键复现”承诺 |
 | Python | 使用Python 3，辅助脚本要求3.7或以上，仅依赖标准库；解释器命令可能是`python3`、`python`或`py -3` |
 | 模型数据 | 另行准备配套的模型BIN、metadata及所需trace；不随Git克隆提供 |
@@ -61,7 +61,8 @@ HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的�
 | [hls/cnn_accelerator/testbench](hls/cnn_accelerator/testbench) | 模块级测试与 YOLO Top BIN 对照 |
 | [hls/cnn_accelerator/script](hls/cnn_accelerator/script) | Vitis HLS 工程入口 |
 | [hls/roi_overlay](hls/roi_overlay) | 独立视频遮罩、检测框及文字叠加核 |
-| [hls/docs](hls/docs/README.md) | 模块设计、DDR 契约和测试数据说明 |
+| [hls/README.md](hls/README.md) | HLS 工程入口、测试运行方式与设计索引 |
+| [hls/docs/](hls/docs/) | 模块设计、DDR 契约和测试数据说明 |
 | [vivado/cnn_accel_cam](vivado/cnn_accel_cam) | 摄像头预览、YOLO/Overlay IP和Vitis PS应用 |
 | [vivado/cnn_accel_cam/tools](vivado/cnn_accel_cam/tools/CAMERA_INPUT.md) | 从模型 metadata 生成 PS 输入/输出配置 |
 | [data/yolov2_tiny/](data/yolov2_tiny/README.md) | 模型和测试数据放置位置；仓库只跟踪目录说明 |
@@ -72,48 +73,15 @@ HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的�
 
 ## 运行 HLS 验证
 
-需要 Vitis HLS 2022.2，以及同一次 Python 模型导出的 `metadata.json`、`bins/` 和
-`trace/`。将这些内容放入`data/yolov2_tiny/`；该目录由Git忽略，不会因克隆仓库而自动出现。
-当前没有随仓库提供数据下载入口或完整训练/export工程，文件要求和准备边界见
-[测试与模型数据](hls/docs/data.md)。
-
-以下是**Linux/Bash**命令，不是PowerShell或Windows CMD命令。先在该终端初始化
-Vitis HLS 2022.2环境，确保`vitis_hls`可执行；若使用安装目录的`settings64.sh`，将路径
-替换为实际安装位置。工具环境设置与可选的模型路径覆盖不是同一项配置。
-
-在仓库根目录执行C仿真：
-
-```bash
-mkdir -p build/hls
-cd build/hls
-vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
-```
-
-脚本默认只跑C仿真，工程写到`build/hls/cnn_yolo_ddr/`。仅做HLS综合时，在上述
-`build/hls/`目录中改用：
-
-```bash
-YOLO_HLS_STAGE=csynth vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
-```
-
-该前缀赋值语法属于Bash。脚本不自动运行RTL co-sim或导出IP，末尾`exit`会结束工具
-会话，不应当作无副作用的查询脚本在已有GUI工程中随意执行。
-五个 CNN testbench 默认读取仓库内的 `data/yolov2_tiny/`，使用样本 `0000`，只打印统计和有限
-错误，不写 CSV。模块级测试须各自选择对应 Top，不要将多个 `main()` 加入同一工程；
-入口对照见 [HLS 文档索引](hls/docs/README.md)。
-
-使用上述 Tcl 入口无需设置数据环境变量；脚本自动配置测试数据目录。
-手动建立模块工程时，源码路径回退存在条件，详见[HLS入口与平台限制](hls/docs/README.md)。
-
-C++ 对照可以验证逐元素输出和 DDR 软件地址计算；单实例、有限 FIFO 反压、
-AXI 写回顺序和板级时序需要分别检查综合报告、RTL 仿真与实现。
+[HLS 总览](hls/README.md#脚本入口与运行产物)列出 CNN 和 Overlay 的构建与测试入口。
+CNN 测试需要[配套模型和 trace](hls/docs/data.md)；Overlay 测试自行构造输入，不需要模型数据。
 
 ## 打开板级工程
 
 [Vivado 工程说明](vivado/README.md)记录了OV5640 480p、HDMI预览与Vitis
 裸机工程的打开方式。[PS应用说明](vivado/cnn_accel_cam/vitis/cnn_accel_cam/README.md)
 列出27个BIN的SD目录、DDR拼接、ROI整数预处理、连续推理、解码/NMS、检测框显示和构建步骤；
-[Overlay设计](hls/roi_overlay/README.md)说明显示与列表控制协议。当前 Overlay 使用
+[Overlay设计](hls/docs/roi_overlay.md)说明显示与列表控制协议。当前 Overlay 使用
 `ap_ctrl_none` 和显式 FLP 流水，不调用 Start；CNN 则由 PS 按图像逐次启动。
 使用匹配当前硬件的XSA和BSP，Build Platform后再构建PS应用；软件检查和硬件Done不能代替板上数值及检测效果验证。
 
