@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="393" viewBox="0 0 960 393" role="img" aria-labelledby="title desc">
+<title id="title">One CNN pipeline, reused across nine layers</title>
+<desc id="desc">The feature loader rescans the input for each resident output-channel block. Model streams are separate from the data path.</desc>
+<g font-family="system-ui, 'DejaVu Sans', sans-serif">
+<rect x="1" y="1" width="958" height="391" rx="19" fill="#f8fbff" stroke="#cbd8e8"/>
+<text x="30" y="40" fill="#152943" font-size="27" font-weight="750" text-anchor="start">One CNN pipeline, reused across nine layers</text>
+<rect x="32" y="70" width="288" height="74" rx="12" fill="#f0f4fa" stroke="#526480"/>
+<text x="176" y="98" fill="#526480" font-size="19" font-weight="700" text-anchor="middle">DDR input feature</text>
+<text x="176" y="120" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">NHWC · Feature A or B</text>
+<rect x="344" y="70" width="280" height="74" rx="12" fill="#f0f4fa" stroke="#526480"/>
+<text x="484" y="98" fill="#526480" font-size="19" font-weight="700" text-anchor="middle">Weight Loader</text>
+<text x="484" y="120" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">one linear stream per layer</text>
+<rect x="648" y="70" width="280" height="74" rx="12" fill="#f0f4fa" stroke="#526480"/>
+<text x="788" y="98" fill="#526480" font-size="19" font-weight="700" text-anchor="middle">Parameter Loader</text>
+<text x="788" y="120" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">bias + requantization</text>
+<rect x="32" y="192" width="132" height="76" rx="12" fill="#e6f6f0" stroke="#16785e"/>
+<text x="98" y="220" fill="#16785e" font-size="16" font-weight="700" text-anchor="middle">Feature Loader</text>
+<text x="98" y="242" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">8 Cin per pack</text>
+<rect x="185" y="192" width="127" height="76" rx="12" fill="#e6f6f0" stroke="#16785e"/>
+<text x="248.5" y="220" fill="#16785e" font-size="19" font-weight="700" text-anchor="middle">Im2Row</text>
+<text x="248.5" y="242" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">3×3 / 1×1</text>
+<rect x="333" y="192" width="149" height="76" rx="12" fill="#e6f6f0" stroke="#16785e"/>
+<text x="407.5" y="220" fill="#16785e" font-size="19" font-weight="700" text-anchor="middle">OS Systolic</text>
+<text x="407.5" y="242" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">4 spatial × 4 Cout</text>
+<rect x="503" y="192" width="135" height="76" rx="12" fill="#e6f6f0" stroke="#16785e"/>
+<text x="570.5" y="220" fill="#16785e" font-size="19" font-weight="700" text-anchor="middle">PostProcess</text>
+<text x="570.5" y="242" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">INT32 → INT8</text>
+<rect x="659" y="192" width="118" height="76" rx="12" fill="#e6f6f0" stroke="#16785e"/>
+<text x="718" y="220" fill="#16785e" font-size="19" font-weight="700" text-anchor="middle">MaxPool</text>
+<text x="718" y="242" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">stride 1 / 2</text>
+<rect x="798" y="192" width="130" height="76" rx="12" fill="#e6f6f0" stroke="#16785e"/>
+<text x="863" y="220" fill="#16785e" font-size="19" font-weight="700" text-anchor="middle">Writer</text>
+<text x="863" y="242" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">NHWC store</text>
+<path d="M98 144 V192" fill="none" stroke="#526480" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#526480" points="98,192 102.5,183 93.5,183"/>
+<path d="M408 144 V192" fill="none" stroke="#526480" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#526480" points="408,192 412.5,183 403.5,183"/>
+<path d="M690 144 V164 H570 V192" fill="none" stroke="#526480" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#526480" points="570,192 574.5,183 565.5,183"/>
+<path d="M164 230 H185" fill="none" stroke="#16785e" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#16785e" points="185,230 176,225.5 176,234.5"/>
+<path d="M312 230 H333" fill="none" stroke="#16785e" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#16785e" points="333,230 324,225.5 324,234.5"/>
+<path d="M482 230 H503" fill="none" stroke="#16785e" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#16785e" points="503,230 494,225.5 494,234.5"/>
+<path d="M638 230 H659" fill="none" stroke="#16785e" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#16785e" points="659,230 650,225.5 650,234.5"/>
+<path d="M777 230 H798" fill="none" stroke="#16785e" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#16785e" points="798,230 789,225.5 789,234.5"/>
+<rect x="654" y="304" width="274" height="59" rx="12" fill="#f0f4fa" stroke="#526480"/>
+<text x="791" y="340" fill="#526480" font-size="19" font-weight="700" text-anchor="middle">DDR output feature</text>
+<path d="M863 268 V304" fill="none" stroke="#526480" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#526480" points="863,304 867.5,295 858.5,295"/>
+<path d="M654 334 H98 V268" fill="none" stroke="#526480" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="6 5"/>
+<polygon fill="#526480" points="98,268 93.5,277 102.5,277"/>
+<text x="377" y="321" fill="#526480" font-size="16" font-weight="650" text-anchor="middle">Next layer: swap A / B after writeback</text>
+<text x="112" y="172" fill="#526480" font-size="15" font-weight="600" text-anchor="start">Rescan per Cout block</text>
+</g>
+</svg>

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="404" viewBox="0 0 960 404" role="img" aria-labelledby="title desc">
+<title id="title">Camera-to-HDMI detection</title>
+<desc id="desc">VDMA preview runs independently from PS-controlled CNN inference. The overlay combines the video and detection streams.</desc>
+<g font-family="system-ui, 'DejaVu Sans', sans-serif">
+<rect x="1" y="1" width="958" height="402" rx="19" fill="#f8fbff" stroke="#cbd8e8"/>
+<text x="30" y="40" fill="#152943" font-size="27" font-weight="750" text-anchor="start">Camera-to-HDMI detection</text>
+<text x="32" y="83" fill="#1d6098" font-size="15" font-weight="750" text-anchor="start">VIDEO PATH</text>
+<rect x="32" y="96" width="130" height="67" rx="12" fill="#eaf4ff" stroke="#1d6098"/>
+<text x="97" y="124" fill="#1d6098" font-size="19" font-weight="700" text-anchor="middle">OV5640</text>
+<text x="97" y="146" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">640 × 480</text>
+<rect x="192" y="96" width="134" height="67" rx="12" fill="#eaf4ff" stroke="#1d6098"/>
+<text x="259" y="124" fill="#1d6098" font-size="19" font-weight="700" text-anchor="middle">VDMA</text>
+<text x="259" y="146" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">capture / read</text>
+<rect x="356" y="96" width="176" height="67" rx="12" fill="#f0f4fa" stroke="#526480"/>
+<text x="444" y="124" fill="#526480" font-size="19" font-weight="700" text-anchor="middle">DDR frame slots</text>
+<text x="444" y="146" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">3 circular buffers</text>
+<rect x="628" y="96" width="156" height="67" rx="12" fill="#eaf4ff" stroke="#1d6098"/>
+<text x="706" y="124" fill="#1d6098" font-size="19" font-weight="700" text-anchor="middle">ROI Overlay</text>
+<text x="706" y="146" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">boxes + labels</text>
+<rect x="818" y="96" width="110" height="67" rx="12" fill="#eaf4ff" stroke="#1d6098"/>
+<text x="873" y="124" fill="#1d6098" font-size="19" font-weight="700" text-anchor="middle">HDMI</text>
+<text x="873" y="146" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">preview</text>
+<path d="M162 130 H192" fill="none" stroke="#1d6098" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#1d6098" points="192,130 183,125.5 183,134.5"/>
+<path d="M326 130 H356" fill="none" stroke="#1d6098" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#1d6098" points="356,130 347,125.5 347,134.5"/>
+<path d="M532 130 H628" fill="none" stroke="#1d6098" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#1d6098" points="628,130 619,125.5 619,134.5"/>
+<text x="580" y="119" fill="#1d6098" font-size="13" font-weight="600" text-anchor="middle">VDMA read</text>
+<path d="M784 130 H818" fill="none" stroke="#1d6098" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#1d6098" points="818,130 809,125.5 809,134.5"/>
+<text x="32" y="214" fill="#a04824" font-size="15" font-weight="750" text-anchor="start">DETECTION PATH</text>
+<rect x="32" y="232" width="130" height="70" rx="12" fill="#f0f4fa" stroke="#526480"/>
+<text x="97" y="260" fill="#526480" font-size="19" font-weight="700" text-anchor="middle">SD card</text>
+<text x="97" y="282" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">27 model BINs</text>
+<rect x="192" y="232" width="145" height="70" rx="12" fill="#fff1e7" stroke="#a04824"/>
+<text x="264.5" y="260" fill="#a04824" font-size="19" font-weight="700" text-anchor="middle">PS loader</text>
+<text x="264.5" y="282" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">FatFs → DDR</text>
+<rect x="370" y="232" width="148" height="70" rx="12" fill="#fff1e7" stroke="#a04824"/>
+<text x="444" y="260" fill="#a04824" font-size="19" font-weight="700" text-anchor="middle">PS preprocess</text>
+<text x="444" y="282" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">416 × 416 RGB</text>
+<rect x="548" y="232" width="146" height="70" rx="12" fill="#e6f6f0" stroke="#16785e"/>
+<text x="621" y="260" fill="#16785e" font-size="19" font-weight="700" text-anchor="middle">CNN in PL</text>
+<text x="621" y="282" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">9 INT8 layers</text>
+<rect x="724" y="232" width="204" height="70" rx="12" fill="#fff1e7" stroke="#a04824"/>
+<text x="826" y="260" fill="#a04824" font-size="19" font-weight="700" text-anchor="middle">PS decode + NMS</text>
+<text x="826" y="282" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">from Prediction</text>
+<path d="M162 267 H192" fill="none" stroke="#526480" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#526480" points="192,267 183,262.5 183,271.5"/>
+<path d="M444 163 V232" fill="none" stroke="#a04824" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#a04824" points="444,232 448.5,223 439.5,223"/>
+<text x="456" y="207" fill="#a04824" font-size="15" font-weight="600" text-anchor="start">ROI snapshot</text>
+<path d="M518 267 H548" fill="none" stroke="#16785e" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#16785e" points="548,267 539,262.5 539,271.5"/>
+<path d="M694 267 H724" fill="none" stroke="#16785e" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#16785e" points="724,267 715,262.5 715,271.5"/>
+<path d="M826 232 V196 H706 V163" fill="none" stroke="#a04824" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="6 5"/>
+<polygon fill="#a04824" points="706,163 701.5,172 710.5,172"/>
+<text x="770" y="190" fill="#a04824" font-size="13" font-weight="650" text-anchor="middle">box list / AXI-Lite</text>
+<path d="M265 302 V338 H596 V302" fill="none" stroke="#526480" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#526480" points="596,302 591.5,311 600.5,311"/>
+<text x="415" y="329" fill="#526480" font-size="15" font-weight="600" text-anchor="middle">DDR weights + params</text>
+<text x="32" y="377" fill="#526480" font-size="17" font-weight="400" text-anchor="start">PS starts CNN once per image via AXI-Lite; feature and model data move over DDR.</text>
+</g>
+</svg>

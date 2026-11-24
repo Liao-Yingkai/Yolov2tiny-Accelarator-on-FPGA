@@ -1,134 +1,125 @@
 # YOLOv2-tiny INT8 FPGA Accelerator
 
-基于 Vitis HLS / Zynq-7000 的 YOLOv2-tiny VOC 目标检测工程，包含 HLS 计算模块、
-Vivado 摄像头/HDMI 工程和 Vitis 裸机应用。网络采用固定九层结构，面向学习与实现
-FPGA 推理数据通路，不是任意网络的通用部署框架。
+在 Zynq-7000 上运行 YOLOv2-tiny VOC 的 FPGA 目标检测工程：**OV5640 实时采集，PL 完成九层 INT8 卷积推理，PS 完成检测解码和 NMS，HDMI 叠加检测结果。** 工程包含 Vitis HLS 源码、Vivado 板级工程和 Vitis 裸机应用。网络固定为 416×416 RGB、batch=1、20 类，不是通用模型部署框架。
 
-当前已完成测试及上板功能验证（2026-11-19验证基线），能够连续执行摄像头取帧、
-整数预处理、PL 推理、PS 解码/NMS 和 HDMI 检测框显示。具体帧率、精度及最终资源
-应以对应版本的实测和实现报告为准，历史 HLS 估计不作为当前板测指标。
+[系统架构](#系统架构) · [网络结构](#网络结构) · [卷积数据流](#卷积数据流) · [资源与性能](#资源与性能) · [构建与上板](#构建与上板) · [HLS 验证](#hls-验证)
 
-## 首次使用：选择复现路径
+## 系统架构
 
-仓库提供的是**可重新构建的工程**，不是可直接烧录的发布包。它保留 Vivado 工程和已打包
-的自定义 IP、Vitis 平台与应用源码、配套 XSA（含 bitstream），以及两份已生成的
-PS 模型配置头。不提供已构建的应用 ELF、BSP 库、`BOOT.BIN`、模型 BIN、训练权重
-或仿真 trace。
+![系统架构：摄像头通过 VDMA 写入 DDR，PS 取帧并启动 CNN；DDR 的预览路径经 ROI Overlay 输出到 HDMI。](docs/images/system-architecture.svg)
 
-```mermaid
-flowchart TD
-    A["克隆工程，准备配套板卡与 2022.2 工具"] --> B{"是否从 Vivado 重建硬件？"}
-    B -->|"重建"| C["打开 cnn_accel_cam.xpr → Validate BD → Generate Bitstream"]
-    C --> D["Export Hardware，勾选 Include bitstream，得到 XSA"]
-    B -->|"使用仓库中的硬件快照"| E["直接使用 vitis/system_wrapper.xsa"]
-    D --> F["在 Vitis 导入已有工程并绑定 XSA"]
-    E --> F
-    F --> G["构建平台与 BSP → 绑定本地 XPFM → 构建应用 ELF"]
-    A --> H["取得与配置头配套的 27 个模型 BIN"]
-    H --> I["复制 BIN 到 SD 卡根目录的 yolo/"]
-    G --> J["JTAG：下载匹配的 bitstream，初始化 PS/DDR，运行 ELF"]
-    I --> J
-    J --> K["检查 UART 初始化日志与 HDMI 检测框"]
+系统有两条并行路径：**视频路径**持续输出预览；**检测路径**每轮从稳定的 VDMA 帧槽抓取一份 ROI，完成推理和解码后更新画面上的检测框。预览不必等待推理结束，也不会把绘制后的像素送回 CNN。
+
+| 阶段 | 哪里运行 | 做什么 |
+|---|---|---|
+| 采集与预览 | PL：OV5640 Capture、VDMA、视频输出 IP | 捕获 640×480 视频，经 VDMA 在 DDR 三帧缓冲中循环写入和读出；从视频输出侧叠加显示 |
+| 启动与模型加载 | PS：Cortex-A9 裸机应用 | 通过 FatFs 从 SD 卡读取 27 个模型 BIN；按层将权重和量化参数放进 DDR，只在启动时加载 |
+| 图像预处理 | PS | 独立抓取 416×416 ROI，按 RGB 通道做整数归一化和量化，在 Feature A 区生成紧凑的 INT8 NHWC 输入 |
+| CNN 推理 | PL：`cnn_accelerator_ddr` | PS 初始化时通过 AXI-Lite 设置 Feature、权重和参数的 DDR 基址，每幅图单独启动并轮询完成位；CNN 通过 AXI Master 搬运数据 |
+| 解码与显示 | PS + PL：`roi_overlay` | PS 等待推理完成，从 Feature B 区读取 Prediction，完成解码、阈值筛选和 NMS；Overlay 在视频帧边界应用检测列表，绘制框、类别和概率，ROI 外填黑 |
+
+CNN 按图像逐次启动，下一轮开始前 PS 已读完本轮输出；没有固定 10 fps 的节拍，也不逐帧打印 UART。Overlay 自由运行（`ap_ctrl_none`），PS 提交检测列表，不启动 Overlay 数据通路。
+
+### Vivado Block Design
+
+[![Vivado 2022.2 的 system Block Design 实际截图，点击查看原图。](docs/images/vivado-block-design.png)](docs/images/vivado-block-design.png)
+
+BD 中，PS 从 `M_AXI_GP0` 发出 AXI-Lite 配置访问；CNN 的三个 AXI Master 与 VDMA 的读写 Master 经内存互联接到 PS 的 `S_AXI_HP0`，共享 DDR。视频流从 `axi_vdma_0/M_AXIS_MM2S` 进入 `roi_overlay_0`，再送到 AXI4-Stream 视频输出模块及 DVI/HDMI 发送端。完整连线、时钟与复位见 [Vivado 工程说明](vivado/README.md)。
+
+## 网络结构
+
+输入为 **416×416×3 signed INT8 RGB**。Conv1–Conv8 使用 stride=1、padding=1 的 3×3 卷积。后处理先加 bias，再按结果正负选择重定标系数，把 LeakyReLU（α=0.1）合在一次整数重定标中。Prediction 使用 stride=1、padding=0 的 1×1 卷积，重定标后直接输出，不加激活。
+
+| 层 | 卷积 | Cin → Cout | MaxPool | 层输出 H×W×C（池化后） |
+|---|---|---:|---|---|
+| Conv1 | 3×3 | 3 → 16 | 2×2 / stride 2 | 208×208×16 |
+| Conv2 | 3×3 | 16 → 32 | 2×2 / stride 2 | 104×104×32 |
+| Conv3 | 3×3 | 32 → 64 | 2×2 / stride 2 | 52×52×64 |
+| Conv4 | 3×3 | 64 → 128 | 2×2 / stride 2 | 26×26×128 |
+| Conv5 | 3×3 | 128 → 256 | 2×2 / stride 2 | 13×13×256 |
+| Conv6 | 3×3 | 256 → 512 | 2×2 / stride 1，右/下补边 | 13×13×512 |
+| Conv7 | 3×3 | 512 → 1024 | 旁路 | 13×13×1024 |
+| Conv8 | 3×3 | 1024 → 1024 | 旁路 | 13×13×1024 |
+| Prediction | 1×1 | 1024 → 125 | 旁路 | 13×13×125 |
+
+最后一层每个网格位置有 5 个锚框，每个锚框包含 4 个坐标量、1 个目标置信度 logit 和 20 个类别 logit。125 是逻辑通道数；DDR 每位置步长为 128 B，末尾 3 字节为零。Sigmoid、类别 Softmax 和 NMS 在 PS 上执行。固定层表见 [`config.h`](hls/cnn_accelerator/src/config.h)。
+
+## 卷积数据流
+
+![CNN 数据流：DDR 输入经 Feature Loader、Im2Row、Systolic、PostProcess、Pool 和 Writer；权重与参数分别供给 Systolic 和 PostProcess。](docs/images/cnn-datapath.svg)
+
+| 模块 | 主要职责 |
+|---|---|
+| [Feature / Weight / Param Loader](hls/docs/yolov2_tiny_ddr_io.md) | Feature 按 NHWC 从 DDR 读出，内部每个 Pack 携带 8 个 Cin；首层的 RGB 在这里扩成 8 路。不改变 DDR 中紧凑 RGB 的布局。Weight、Param 按整层的导出顺序供流 |
+| [Im2Row](hls/docs/im2row.md) | 3×3 路径用行缓冲和滑窗在线取数，处理空间补零；1×1 路径只组装相邻空间位置。不在 DDR 或片上生成整张展开矩阵 |
+| [OS Systolic](hls/docs/systolic_os.md) | 4 个同一行的连续空间位置 × 4 个输出通道，形成 16 个 PE；每个 PE 对 8 路 Cin 做点积，结果在 PE 内累加为 INT32。激活横向传播，权重纵向传播 |
+| [ConvPostProcess](hls/docs/conv_postprocess.md) | 每 Cout 加 bias，按整数 multiplier/shift 重定标，并按层配置应用 LeakyReLU，输出 signed INT8 |
+| [MaxPool](hls/docs/pool.md) | 处理 2×2 stride 2、2×2 stride 1 或旁路；行缓存只保留当前 Cout 块所需数据 |
+| [Feature Writer](hls/docs/yolov2_tiny_ddr_io.md) | 根据空间坐标和全局 Cout 写回 NHWC；流按 Cout 块先后到达，不是按整张图的最终地址顺序到达 |
+
+**层内：** 每次驻留最多 32 个 Cout 的权重，阵列仍只并行计算 4 个 Cout。每个驻留块要从 DDR 重扫一次本层输入，Im2Row 重新建立滑窗。块内，同一个空间 Tile 的窗口只从 Im2Row 读一次，其余 4-Cout Tile 从本地激活缓存回放。权重先装入当前块缓存，再在所有空间 Tile 上复用。这样不用在片上保存整层权重，代价是重读输入并重复生成窗口。
+
+**层间：** 九层顺序复用同一套计算模块，不是九套卷积 IP。Feature A/B 是同一个 DDR 分配中的两段，各 692,224 B。Conv1 读 A 写 B，Conv2 读 B 写 A，之后继续交替；整层完成并写回后才启动下一层。第九层结果落在 B。详细调度见 [DDR Top](hls/docs/top.md)。
+
+## 资源与性能
+
+下表为 **Vivado 2022.2、XC7Z020-2（CLG400）** 的完整 `system_wrapper` 实现（2026-11-18），包括 CNN、摄像头/HDMI 视频链路、Overlay 和 AXI 互联。该次生成的 bitstream 与仓库 XSA 内的 bitstream 一致。资源取自布局后报告，时序取自布线后报告，均不是单独 CNN 的 HLS 估算。
+
+| 指标 | 使用量 / 总量 | 占用 |
+|---|---:|---:|
+| Slice LUT | 32,990 / 53,200 | 62.01% |
+| Slice Register | 48,017 / 106,400 | 45.13% |
+| BRAM Tile（36 Kb 等效） | 136.5 / 140 | 97.50% |
+| DSP | 155 / 220 | 70.45% |
+
+CNN 连接到 **125 MHz** 的 PS FCLK0（周期 8.000 ns）。布线后整工程报告 **WNS +0.405 ns、TNS 0 ns、WHS +0.025 ns**，报告中的用户时序约束满足。BRAM 是该版余量最小的资源；LUT/DSP 尚有余量，不等于可以同比扩大阵列。
+
+- **计算量：** 固定九层约 **3.49 GMAC/图**（只计有效逻辑通道的卷积 MAC，1 MAC 计 1）。按层表、空间/Cout Tile 数、归约步数和每 Tile 6 步的阵列排空计算，全网约 **3,527 万个阵列推进步**；其中 Conv7 和 Conv8 合计约 66%。
+- **理想化参考：** 假定每个阵列推进步均为一个周期，125 MHz 下约 **282 ms/图（约 3.54 图/s）**。这是仅计阵列推进的估算，未计权重装载、DDR 仲裁/反压、行缓冲预填、PS 预处理及解码等开销，**不是板测 FPS**。已验证摄像头、推理、解码和 HDMI 显示功能；这里没有发布端到端帧率或精度基准。
+
+报告来源：Vivado `impl_1` 的 `system_wrapper_utilization_placed.rpt` 与 `system_wrapper_timing_summary_routed.rpt`，在本地实现目录生成，不随源码提交。阵列推进步的估算可用上面的层表复算：逐层累加 `H × ceil(W/4) × ceil(Cout/4) × (Kh × Kw × ceil(Cin/8) + 6)`，其中 H、W 是卷积输出尺寸，未经过池化。
+
+## 构建与上板
+
+![首次上板流程：使用自带或自行导出的 XSA 构建 Vitis 平台和 ELF；另行准备包含模型 BIN 的 SD 卡，最后通过 JTAG 启动。](docs/images/board-quickstart.svg)
+
+**准备环境。** 使用 Vivado / Vitis Classic 2022.2；重建自定义 IP 才需要 Vitis HLS 2022.2。验证目标是 `xc7z020clg400-2` 板级工程和 OV5640、HDMI、UART、JTAG、SD 卡。相同 FPGA 型号不代表板卡兼容，移植前应核对 DDR/MIO、时钟及引脚约束。以下路径均以仓库根目录为基准。
+
+1. **准备模型 SD 卡。** 使用 FAT32，把同一次模型导出的 27 个 BIN（九层各有 weight、bias、quant 文件）直接放到 SD 根目录的 `yolo/`，例如 `yolo/conv1_weight.bin`。不要保留额外的 `bins/` 层。模型 BIN、训练权重和 trace 不随 Git 提供，目前也没有公开模型下载地址；**仅克隆仓库可以构建工程，但缺少配套 BIN 时不能完成板上检测**。详见 [模型与测试数据](hls/docs/data.md)。
+2. **选择硬件。** 对匹配的板卡，可直接使用仓库提供的 [`vitis/system_wrapper.xsa`](vitis/system_wrapper.xsa)，内含 bitstream。若要重建，打开 [Vivado XPR](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，按 [Vivado 构建步骤](vivado/README.md#打开和构建vivado)检查 IP、Validate BD、生成 bitstream，导出 XSA 时勾选 **Include bitstream**。板级工程已带两套打包 IP，这两条路径都不要求先运行 HLS。
+3. **构建 Vitis 平台和应用。** 导入 `system_wrapper`、`cnn_accel_cam` 和 `cnn_accel_cam_system`。首次导入先右键平台 `system_wrapper` → **Update Hardware Specification**，重新选择本地 XSA，再 Build Platform。应用关联本地生成的 XPFM，确认 BSP 启用 `xilffs` 和长文件名。在应用 **Properties → C/C++ Build → Settings → Tool Settings → ARM v7 gcc linker → Libraries** 检查当前配置有 `m`，再构建 ELF。用配套模型时保留仓库中两个 `camera_model_*.h`，无需运行 Python。
+4. **通过 JTAG 启动。** 接好摄像头、HDMI、JTAG、UART 并插入模型 SD 卡。在应用启动配置 **Target Setup** 勾选 **Program FPGA**；若 **Bitstream File** 没有自动识别，手动 **Search…** 或 **Browse…** 选择与 XSA 匹配的 `system_wrapper.bit`，同时使用配套的 PS 初始化和刚构建的 ELF。JTAG 流程不需要 `BOOT.BIN`。
+5. **确认运行。** 串口设为 115200、8N1；应看到 `Model: all 27 files loaded` 和 `[APP] Continuous YOLO detection/overlay ready`。HDMI 应显示 ROI 实时画面；出现通过筛选的目标时叠加检测框及文字。没有逐帧 UART 日志属于正常行为。
+
+完整界面步骤见 [Vitis 首次构建和下载](vitis/README.md)。更换权重模型时，应按 [脚本说明](scripts/README.md) 从同一份导出 metadata 更新 PS 的输入/输出配置头，不能混用不同模型的头文件和 BIN。
+
+## HLS 验证
+
+下列命令是从仓库根目录开始的 Linux/Bash 示例。先加载 Vitis HLS 2022.2 环境：
+
+```bash
+mkdir -p build/hls
+cd build/hls
+vitis_hls -f ../../hls/roi_overlay/script/hls_roi_overlay.tcl
 ```
 
-1. **准备数据。** 首次上板只需要同批导出的 27 个模型 BIN。取得文件后，将
-   `bins/` 中的文件直接复制到 SD 卡根目录的 `yolo/`，例如
-   `yolo/conv1_weight.bin`，不要放成 `yolo/bins/conv1_weight.bin`。
-   推荐 FAT32。只通过 JTAG 运行不需要 `BOOT.BIN`，也不需要 trace 或
-   `metadata.json`。**仓库目前没有公开模型数据下载地址**，仅克隆代码可构建，
-   但缺少配套 BIN 时不能完成板上推理。参见[数据清单与放置规则](hls/docs/data.md)。
-2. **准备硬件。** 从 Vivado 重建，按[硬件构建与 XSA 导出](vivado/README.md#打开和构建vivado)
-   操作；若使用仓库内的 XSA 且没有改硬件，可直接进入 Vitis。
-3. **构建和运行软件。** 按[Vitis 首次构建与下载](vitis/README.md#从干净克隆准备平台)导入
-   工程、构建 BSP 和 ELF，然后通过 JTAG 启动。使用仓库配套模型时保留
-   `camera_model_input.h`、`camera_model_output.h`，**无需运行 Python 脚本或重新生成 HLS IP**。
+上面只运行 Overlay 的 C 仿真，会自行构造视频和检测数据。CNN 的验证需要按 [数据契约](hls/docs/data.md) 把配套模型和 golden trace 分别放在 `data/yolov2_tiny/bins/`、`data/yolov2_tiny/trace/`，然后在同一目录运行：
 
-如果只想验证 HLS，不需要接板或准备 SD 卡。CNN 的 BIN 对照测试从
-`data/yolov2_tiny/bins/`、`data/yolov2_tiny/trace/` 读取；Overlay 测试不读取外部数据。
-如果更换模型，才需要[生成与新模型配套的 PS 配置头](scripts/README.md)。
-
-## 环境与路径约定
-
-本文中的“仓库根目录”指同时包含`README.md`、`hls/`和`vivado/`的目录，不是`hls/`。
-除非另有说明，文件路径和命令的起始位置均以仓库根目录为基准；不要求仓库使用特定名称。
-
-| 项目 | 要求或验证范围 |
-|---|---|
-| FPGA | `xc7z020clg400-2`；引脚、DDR及外设配置针对现有板级工程，不代表所有Zynq板卡可直接使用 |
-| 开发工具 | Vivado、Vitis HLS、Vitis Classic IDE 2022.2；不是新版Vitis Unified IDE流程 |
-| HLS运行环境 | 当前脚本与测试路径处理在 Linux 验证；HLS 总览中的命令使用 Bash |
-| Windows | 工具本身提供Windows入口，但本仓库的HLS路径回退和编译参数引用尚未完成Windows验证，不能按“一键复现”承诺 |
-| Python | 使用Python 3，辅助脚本要求3.7或以上，仅依赖标准库；解释器命令可能是`python3`、`python`或`py -3` |
-| 模型数据 | 另行准备配套的模型BIN、metadata及所需trace；不随Git克隆提供 |
-
-AMD提供Windows Vitis HLS命令行入口，并说明其使用MinGW环境；这与本仓库是否完成
-跨平台验证是两回事。参见[HLS命令行说明](https://docs.amd.com/r/2022.2-English/ug1399-vitis-hls/Running-Vitis-HLS-from-the-Command-Line)。
-
-## 系统分工
-
-```text
-OV5640 → VDMA / DDR → PS：裁切416×416 ROI、RGB整数归一化/量化
-                  → PL：九层卷积 / LeakyReLU / Pool → DDR Prediction
-                  → PS：sigmoid / softmax / NMS → Overlay → HDMI
+```bash
+vitis_hls -f ../../hls/cnn_accelerator/script/hls_ddr.tcl
 ```
 
-HDMI 保留实时预览；Overlay 位于视频输出路径，不写回 CNN 的采集数据。
-模型在启动时从 SD 一次性加载，之后连续推理，不固定为 10 fps，也不逐帧打印 UART。
+CNN 脚本默认运行 C 仿真；设置 `YOLO_HLS_STAGE=csynth` 可单独跑综合。无需设置测试数据路径环境变量。模块级 Top、testbench 对应关系及手动工程设置见 [HLS 说明](hls/README.md)。HLS 命令和路径定位已在 Linux 验证；Windows 的端到端构建未验证，请勿在 PowerShell/CMD 中直接执行上述 Bash 命令。
 
-## HLS 计算结构
+## 仓库导航
 
-- 目标器件为 `xc7z020-clg400-2`，工具版本为 Vitis HLS 2022.2。
-- 输入为 `416×416×3` 紧凑 RGB INT8，内部使用 8 通道 Pack、4 个空间位置
-  并行、4 个 Cout 并行的 OS Systolic。激活和权重为 signed INT8，累加为 INT32。
-- 单层按最多 32 Cout 驻留。每个 Cout 块重新扫描 Feature，权重和参数按整层供流。
-  层内通过 stream 流水，层与层之间通过 DDR A/B 两区交替，九层复用
-  一套 Im2Row、Systolic、PostProcess 和 Pool。
-- CNN 顶层入口是 `cnn_accelerator_ddr(feature, weights, params)`。
-  PS 把紧凑 RGB 放在 Feature A 区，结果在 B 区；逻辑形状
-  为 `13×13×125`，每像素物理步长 128 B。Top 不做检测框解码或 NMS。
-
-详细契约见 [Top 设计](hls/docs/top.md)、[DDR 搬运与布局](hls/docs/yolov2_tiny_ddr_io.md)。
-模块文档：
-[Im2Row](hls/docs/im2row.md)、[OS Systolic](hls/docs/systolic_os.md)、
-[ConvPostProcess](hls/docs/conv_postprocess.md)、[Pool](hls/docs/pool.md)。
-
-## 工程目录
-
-| 目录 | 内容 |
+| 入口 | 内容 |
 |---|---|
-| [hls/cnn_accelerator/src](hls/cnn_accelerator/src) | HLS 模块、固定几何、DDR 布局和系统入口 |
-| [hls/cnn_accelerator/testbench](hls/cnn_accelerator/testbench) | 模块级测试与 YOLO Top BIN 对照 |
-| [hls/cnn_accelerator/script](hls/cnn_accelerator/script) | Vitis HLS 工程入口 |
-| [hls/roi_overlay](hls/roi_overlay) | 独立视频遮罩、检测框及文字叠加核 |
-| [hls/README.md](hls/README.md) | HLS 工程入口、测试运行方式与设计索引 |
-| [hls/docs/](hls/docs/) | 模块设计、DDR 契约和测试数据说明 |
-| [vivado/](vivado/README.md) | 摄像头、HDMI 和 YOLO 硬件工程 |
-| [vitis/](vitis/README.md) | Zynq 裸机平台、BSP 与 PS 应用 |
-| [scripts/](scripts/README.md) | Python 辅助脚本 |
-| [data/yolov2_tiny/](data/yolov2_tiny/README.md) | 模型和测试数据放置位置；仓库只跟踪目录说明 |
-| `build/hls/`、`build/ps/` | 本地检查、工程、日志和报告，不纳入版本管理 |
+| [hls/](hls/README.md) | CNN 与 Overlay 的源码、测试和构建方式；[模块设计](hls/docs/) |
+| [vivado/](vivado/README.md) | 板级工程、约束、已打包 IP 和 XSA 导出 |
+| [vitis/](vitis/README.md) | 平台、BSP、裸机摄像头/YOLO 应用及上板流程 |
+| [scripts/](scripts/README.md) | 从模型导出 metadata 生成 PS 配置头；使用配套模型复现时可跳过 |
+| [data/yolov2_tiny/](data/yolov2_tiny/README.md) | 模型与仿真数据的目录约定 |
+| `build/` | 本地工程、日志和报告，不纳入版本管理 |
 
-仓库目录名可以自选；Vivado/Vitis内部的工程名称沿用现有配置，不能仅重命名文件夹后
-假定平台关联、项目标识和硬件交接文件会自动同步。
-
-## 运行 HLS 验证
-
-[HLS 总览](hls/README.md#脚本入口与运行产物)列出 CNN 和 Overlay 的构建与测试入口。
-CNN 测试需要[配套模型和 trace](hls/docs/data.md)；Overlay 测试自行构造输入，不需要模型数据。
-
-## 打开板级工程
-
-[Vivado 工程说明](vivado/README.md)说明硬件工程；[Vitis 工程说明](vitis/README.md)说明软件平台和应用。[PS应用说明](vitis/cnn_accel_cam/README.md)
-列出27个BIN的SD目录、DDR拼接、ROI整数预处理、连续推理、解码/NMS、检测框显示和构建步骤；
-[Overlay设计](hls/docs/roi_overlay.md)说明显示与列表控制协议。当前 Overlay 使用
-`ap_ctrl_none` 和显式 FLP 流水，不调用 Start；CNN 则由 PS 按图像逐次启动。
-使用匹配当前硬件的XSA和BSP，Build Platform后再构建PS应用；软件检查和硬件Done不能代替板上数值及检测效果验证。
-
-首次在另一目录打开 Vitis 时需要重新关联本地 platform；工具生成物、BSP 库和 IDE 状态
-不随源码保存，具体恢复步骤见 Vitis 工程说明。不要为消除本机路径提示而改硬件参数。
-
-## 贡献与验证
-
-- 修改计算行为或数据布局时，同步更新相关接口说明和对应 testbench；涉及模型输出或 trace 时，说明所用的模型与导出版本。
-- 提交时注明实际运行过的检查（C 仿真、RTL 协同仿真、综合或上板）。不要把静态检查或综合估计当成运行结果。
-- 不提交工具缓存、个人工作区配置或本地模型数据。硬件变更涉及导出 IP、XSA 或 BSP 时，按[板级工程说明](vivado/README.md)核对它们是否配套。
+修改 HLS 功能或布局时，请同步更新接口文档和对应 testbench。影响硬件时，重新导出对应 IP 和 XSA，并用更新后的平台/BSP 构建 PS 应用。提交验证结果时应区分 C 仿真、RTL 协同仿真、综合、布局布线和板测。
