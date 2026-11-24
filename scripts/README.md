@@ -6,11 +6,12 @@ PS 将 416×416 的 BGR888 裁剪数据转换为 RGB INT8；取帧、DDR和推�
 
 ## 什么时候需要运行
 
-**复现仓库配套模型时不用运行。** Vitis 应用已跟踪
+**使用 Release 的配套模型 BIN 时不用运行。** Vitis 应用已跟踪
 [`camera_model_input.h`](../vitis/cnn_accel_cam/src/camera_model_input.h) 和
 [`camera_model_output.h`](../vitis/cnn_accel_cam/src/camera_model_output.h)，可直接构建。
 脚本只在使用与当前头文件不匹配的新模型导出，或需要从 metadata 重新生成配置时使用。
-脚本不会下载权重、生成模型 BIN 或生成 HLS trace。
+脚本不会下载权重、生成模型 BIN 或生成 HLS trace。新模型的 BIN 和 metadata 先在
+[配套 PyTorch 工程中导出](../hls/docs/data.md#从-pytorch-工程生成数据)，再在本仓库运行下列脚本。
 
 ## 运行前提与默认位置
 

@@ -11,6 +11,11 @@
 
 ## SD模型文件布局
 
+默认用本项目 GitHub Releases 提供的配套 BIN，直接复制到 SD 卡即可，不需要 PyTorch 或更新配置头。
+只有更换为自己导出的模型时，才需要[从 PyTorch 导出同一批模型 BIN 和 metadata](../../hls/docs/data.md#从-pytorch-工程生成数据)，
+再用 [PS 配置头生成脚本](../../scripts/README.md)更新输入量化和输出解码配置，并重新构建应用。
+SD 卡只需要模型 BIN，板上不会读取 metadata 或仿真 trace。
+
 使用当前xilffs支持的分区格式，建议FAT32。在SD卡根目录创建小写`yolo`文件夹，将以下27个文件直接放进去，不要再套一层`bins`目录：
 
 ```text

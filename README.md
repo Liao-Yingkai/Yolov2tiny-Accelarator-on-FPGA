@@ -85,13 +85,23 @@ CNN 连接到 **125 MHz** 的 PS FCLK0（周期 8.000 ns）。布线后整工程
 
 **准备环境。** 使用 Vivado / Vitis Classic 2022.2；重建自定义 IP 才需要 Vitis HLS 2022.2。验证目标是 `xc7z020clg400-2` 板级工程和 OV5640、HDMI、UART、JTAG、SD 卡。相同 FPGA 型号不代表板卡兼容，移植前应核对 DDR/MIO、时钟及引脚约束。以下路径均以仓库根目录为基准。
 
-1. **准备模型 SD 卡。** 使用 FAT32，把同一次模型导出的 27 个 BIN（九层各有 weight、bias、quant 文件）直接放到 SD 根目录的 `yolo/`，例如 `yolo/conv1_weight.bin`。不要保留额外的 `bins/` 层。模型 BIN、训练权重和 trace 不随 Git 提供，目前也没有公开模型下载地址；**仅克隆仓库可以构建工程，但缺少配套 BIN 时不能完成板上检测**。详见 [模型与测试数据](hls/docs/data.md)。
+1. **准备模型 SD 卡。** 从本项目 GitHub 的 **Releases** 获取与所用代码版本配套的模型 BIN。发布包中的 27 个 BIN（九层各有 weight、bias、quant 文件）直接放到 FAT32 SD 卡根目录的 `yolo/`，例如 `yolo/conv1_weight.bin`，不要再套一层 `bins/`。这些文件随 Release 单独分发，不在 Git 克隆或源码压缩包里。**复现配套模型不需要安装 PyTorch、训练或重新导出。** 详见 [模型与测试数据](hls/docs/data.md)。
 2. **选择硬件。** 对匹配的板卡，可直接使用仓库提供的 [`vitis/system_wrapper.xsa`](vitis/system_wrapper.xsa)，内含 bitstream。若要重建，打开 [Vivado XPR](vivado/cnn_accel_cam/cnn_accel_cam.xpr)，按 [Vivado 构建步骤](vivado/README.md#打开和构建vivado)检查 IP、Validate BD、生成 bitstream，导出 XSA 时勾选 **Include bitstream**。板级工程已带两套打包 IP，这两条路径都不要求先运行 HLS。
 3. **构建 Vitis 平台和应用。** 导入 `system_wrapper`、`cnn_accel_cam` 和 `cnn_accel_cam_system`。首次导入先右键平台 `system_wrapper` → **Update Hardware Specification**，重新选择本地 XSA，再 Build Platform。应用关联本地生成的 XPFM，确认 BSP 启用 `xilffs` 和长文件名。在应用 **Properties → C/C++ Build → Settings → Tool Settings → ARM v7 gcc linker → Libraries** 检查当前配置有 `m`，再构建 ELF。用配套模型时保留仓库中两个 `camera_model_*.h`，无需运行 Python。
 4. **通过 JTAG 启动。** 接好摄像头、HDMI、JTAG、UART 并插入模型 SD 卡。在应用启动配置 **Target Setup** 勾选 **Program FPGA**；若 **Bitstream File** 没有自动识别，手动 **Search…** 或 **Browse…** 选择与 XSA 匹配的 `system_wrapper.bit`，同时使用配套的 PS 初始化和刚构建的 ELF。JTAG 流程不需要 `BOOT.BIN`。
 5. **确认运行。** 串口设为 115200、8N1；应看到 `Model: all 27 files loaded` 和 `[APP] Continuous YOLO detection/overlay ready`。HDMI 应显示 ROI 实时画面；出现通过筛选的目标时叠加检测框及文字。没有逐帧 UART 日志属于正常行为。
 
 完整界面步骤见 [Vitis 首次构建和下载](vitis/README.md)。更换权重模型时，应按 [脚本说明](scripts/README.md) 从同一份导出 metadata 更新 PS 的输入/输出配置头，不能混用不同模型的头文件和 BIN。
+
+### 可选：自行训练、修改和导出模型
+
+[INT8 CNN PyTorch 配套工程](https://github.com/Liao-Yingkai/INT8-CNN-Trainer-for-CNN-Accelarator) 是训练和导出工具，仅在自行训练、修改网络或重新生成模型及参考数据时使用。其 [`YOLOV2_TINY/` 流程](https://github.com/Liao-Yingkai/INT8-CNN-Trainer-for-CNN-Accelarator/tree/main/YOLOV2_TINY) 对应本硬件的 416×416 RGB 输入和 VOC 20 类检测。若修改网络结构，还需在 FPGA 端同步调整层表与数据接口；重新导出 BIN 不会自动更新硬件。
+
+- **从头训练：** 准备 VOC 数据，先训练 FP32 模型，再做量化感知训练（QAT）。已有兼容的 QAT checkpoint 时可直接导出，不需要重新训练。
+- **生成板上模型：** 用 `export.py` 生成九层的 27 个模型 BIN 和 `metadata.json`。BIN 放进 SD 卡的 `yolo/`；若更换模型，从同批 metadata [更新 PS 配置头](scripts/README.md)，再重新构建 Vitis 应用。
+- **生成仿真参考：** 用 `dump_trace.py` 读取同批导出的整数参数，生成输入图像和逐模块参考输出。把 `bins/` 和 `trace/` 放到本仓库的 `data/yolov2_tiny/`，供 HLS testbench 使用。
+
+具体命令和目录对应关系见[模型与测试数据](hls/docs/data.md#从-pytorch-工程生成数据)。
 
 ## HLS 验证
 

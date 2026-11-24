@@ -6,4 +6,6 @@
 [SD 卡文件清单](../../vitis/cnn_accel_cam/README.md#sd模型文件布局)直接把模型 BIN
 放入卡根目录的 `yolo/`，不需要先填充本目录。
 
-文件清单、格式和数据获取边界见[模型与测试数据](../../hls/docs/data.md)。
+配套模型 BIN 从本项目的 GitHub Releases 获取。仿真可使用发布版提供的同批 trace（如有）；
+仅在自行导出模型或生成未提供的 trace 时，才按 [PyTorch 导出说明](../../hls/docs/data.md#从-pytorch-工程生成数据)操作。
+完整文件清单和格式见[模型与测试数据](../../hls/docs/data.md)。

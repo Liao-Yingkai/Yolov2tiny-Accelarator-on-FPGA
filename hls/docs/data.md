@@ -3,15 +3,34 @@
 本文路径以仓库根目录（包含`README.md`、`hls/`、`vivado/`的目录）为基准。
 默认数据位置是根目录下的`data/yolov2_tiny/`，不是`hls/data/`。
 
-## 数据获取边界
+## 从 Release 获取配套数据
 
 Git保存HLS、PS源码及两份小型模型配置头，不跟踪训练checkpoint、图像数据集、模型BIN
 或逐层trace。`data/yolov2_tiny/` 只跟踪目录说明，克隆后需自行放入数据。
 
-当前仓库没有提供数据包下载地址、自动下载脚本或完整训练/export工程。因此仅克隆代码
-不能完成依赖BIN的功能测试，必须另行取得与本设计匹配的导出产物。文档中的
-`YOLOV2_TINY/`、`export.py`和`dump_trace.py`用于标识外部参考工程及数据来源，
-不是要求使用者已经拥有作者的目录，也不是本仓库中可直接执行的入口。
+配套上板模型的 27 个 BIN 通过本项目的 GitHub Releases 附件分发。选择与代码版本配套
+的附件，按下文清单放入 SD 卡即可；Vitis 应用已包含配套的 PS 配置头，不需要 PyTorch、
+checkpoint 或额外的导出操作。模型附件与 GitHub 自动生成的源码压缩包是分开的。
+
+CNN 功能仿真还需要同一模型的 golden trace；若所用发布版本同时提供 trace，可直接使用。
+只有在自行训练、修改模型、重新导出，或需要生成未随发布版提供的 trace 时，才需要下文的
+[PyTorch 配套仓库](https://github.com/Liao-Yingkai/INT8-CNN-Trainer-for-CNN-Accelarator)。
+
+## 从 PyTorch 工程生成数据
+
+按 [YOLOv2-tiny 使用说明](https://github.com/Liao-Yingkai/INT8-CNN-Trainer-for-CNN-Accelarator/tree/main/YOLOV2_TINY)
+安装依赖；需要训练或生成图像 trace 时，按说明准备 VOC 数据。已有兼容的
+`single_postprocess_v1` QAT checkpoint 时，可跳过训练，直接从 **PyTorch 仓库根目录**执行：
+
+```text
+python YOLOV2_TINY/export.py --checkpoint YOLOV2_TINY/checkpoints/qat_model_best.pth
+python YOLOV2_TINY/dump_trace.py --num-samples 1 --seed 1
+```
+
+将示例 checkpoint 路径替换为实际文件。第一条命令在默认的 `YOLOV2_TINY/generated/`
+下写出 `bins/` 和 `metadata.json`。第二条只在需要仿真参考时运行，它读取刚导出的
+整数参数，在同一目录的 `trace/` 生成样本 `0000`。重新导出模型后也要重新生成配套
+trace；若旧文件仍在，先将它们另存或给导出和 trace 生成指定一个新的输出目录，以免混用。
 
 ## 取得数据后放在哪里
 

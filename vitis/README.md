@@ -54,8 +54,9 @@
 
 ## 首次通过 JTAG 运行
 
-1. 按[应用的 SD 文件清单](cnn_accel_cam/README.md#sd模型文件布局)准备 FAT32 SD 卡：
-   将 27 个模型 BIN 放到卡根目录的 `yolo/`。先接好 OV5640、HDMI 显示器、JTAG 和 UART，
+1. 从本项目的 GitHub Releases 获取配套模型，按[应用的 SD 文件清单](cnn_accel_cam/README.md#sd模型文件布局)
+   将 27 个模型 BIN 放到 FAT32 卡根目录的 `yolo/`。无需安装 PyTorch 或自行导出。
+   先接好 OV5640、HDMI 显示器、JTAG 和 UART，
    按板卡说明设置 JTAG 启动方式，再给板卡上电。
 2. 在应用项目打开 **Run Configurations** 或 **Debug Configurations**，选择对应的
    硬件启动配置。进入 **Target Setup**，确认目标为 Cortex-A9 核 0，**手动勾选 Program FPGA**。
