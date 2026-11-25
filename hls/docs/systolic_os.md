@@ -1,13 +1,6 @@
 # 传统 Output-Stationary 脉动阵列
 
-本文件对应 `cnn_accelerator/src/systolic/systolic_OS.cpp`，记录 YOLO 按块实现。模块已接入完成测试及上板功能验证的[YOLO DDR Top](top.md)；下文独立开发阶段的存储预算和旧检查结果不替代当前版本的性能实测。
-
-## 当前实现
-
-2026-11-09 确认的首版范围：固定九层 YOLOv2-tiny VOC、单套 OS 阵列、一次调用处理
-一个 Cout 驻留块。各层统一按**最多 32 个 Cout 驻留**，Conv8 也按 32 设计；实际综合后再决定是否缩小。
-当前使用单份权重驻留缓存，不实现预取。权重加载重叠保留为后续性能优化，本轮整理不改变该调度。
-全网调度见 [YOLOv2-tiny 重构总案](yolov2_tiny_refactor_plan.md)。
+实现：[`systolic_OS.cpp`](../cnn_accelerator/src/systolic/systolic_OS.cpp)。阵列处理一个不超过 32 个输出通道的权重块，计算并行度为 4 个输出通道。权重在计算前加载，不预取。全网调度见 [DDR Top](top.md)。
 
 ### 阵列与归约
 
@@ -47,7 +40,7 @@
 本地权重地址     = local_cout_tile * R + token
 ```
 
-- **Weight Buffer**：Systolic 独占一份缓存，按 4 个 64-bit Cout Lane Bank 组织，每路逻辑深度 `8*1152=9216`，实现为 `8192` 主段和 `1024` 尾段两个单口 BRAM。计算时每路取同一逻辑地址的一字，合计提供 256 bit/步。首版整块预加载后才计算，写入与读取分阶段；逻辑载荷仍为 288 KiB。Loader 不另留一份完整块缓存。
+- **Weight Buffer**：Systolic 独占一份缓存，按 4 个 64-bit Cout Lane Bank 组织，每路逻辑深度 `8*1152=9216`，实现为 `8192` 主段和 `1024` 尾段两个单口 BRAM。计算时每路取同一逻辑地址的一字，合计提供 256 bit/步。整块预加载后才计算，写入与读取分阶段；逻辑载荷仍为 288 KiB。Loader 不另留一份完整块缓存。
 - **Activation Replay**：4 个 64-bit Spatial Lane Bank，每 Bank 最大深度 1152，逻辑载荷 36 KiB。只缓存一个 Spatial Tile，不保存完整 Feature Map。`spatial_valid` 从该 Tile 首 token 取出、单独保存。`B=1` 可跳过 Replay 写入，但支持多 Tile 的同一份硬件仍需预留该缓存。
 - 深度使用 `config.h` 的 YOLO 派生容量，地址递增不要求内循环每步乘法；不将本地 8 个 Cout Tile 展开成 8 套 RAM 或 PE。实际 BRAM 数量、读延迟、地址对齐和 `II=1` 需综合确认，逻辑载荷不等于器件占用。
 
@@ -66,33 +59,17 @@
 - **`cout_valid`** 是 4-bit 的计算 Tile mask。在每个本地 Cout Tile 开始时，以 `global_tile=first_cout_tile+local_cout_tile` 判断是否为整层最后一个 Tile；若是则取 `geometry.last_cout_valid_mask`，否则为 `1111`。注入时令权重 lane 的传播 valid 等于 `注入有效归约 token && cout_valid[lane]`，随权重一起错拍、向下传播。排空只停止注入新的有效 token，不丢弃已在传播中的数据。PE 保留激活、权重与空间有效条件；无效 Cout 不更新累加器，输出为零。不删减 token 或结果事务，也不因此减少物理乘法器数。
 - Prediction 的最后一块仍有 8 个物理计算 Tile、29 个逻辑 Cout；仅整层最后一个计算 Tile 的 `cout_valid=0001`，只对应 C124。不能将这个 4-lane mask 与 Writer 的 8 通道末组（5 个有效通道）混用。
 
-结果契约为 INT32 `value[spatial_lane][cout_lane]` 加 `spatial_valid` 和 `cout_valid`，块内顺序 `y → tile_x → local_cout_tile`。块起点与 Tile 数是调用级配置，坐标不必随每个事务发送。Systolic 不缓存整图输出、不重排、不访问 DDR；Param Loader 在取 bias/M/S 前检查通道边界，PostProcess 只为有效 lane 应用参数。Pool 或 Bypass 后，由 **Writer** 按最终空间坐标和全局 Cout 写回。见 [首版 DDR 布局与 Writer 规格](yolov2_tiny_ddr_io.md)。
-
-### 后续性能优化：重叠权重加载
-
-**保留为后续实施项，不作为首版功能验收前置条件。** 每个 Cout 块开始时的整块装载等待会跨各层累积。此前约 **20 ms** 是九层合计约 **15.12 MiB/图** 的权重，在 **100 MHz、64-bit 接口每拍持续传一字、加载完全不与计算重叠**时的理想传输估算，不是单层耗时，也不是板测值。实际开销还取决于 burst 效率、块启动和 DDR 争用。基线应分层记录权重装载周期、计算周期、阵列等权重/Activation 及下游反压，再比较整图延迟。
-
-1. **优先评估首 Spatial Tile 边算边填。** 首遍的权重 Pack 旁路进入阵列，同时写入 Weight Buffer，随后空间位置只读缓存。该方案不增加第二份块缓存，也不要求 Weight Buffer 同拍读写。必须验证权重和 Activation 两路在任意先后到达、暂停或反压时仍按 token 对齐，不漏读、不重复写、不提前推进。加载慢于阵列时，首遍仍会等待，只能隐藏可重叠的部分。
-2. **再评估跨块预取。** 若上一项后仍有显著启动开销，再研究当前块计算时预取下一块。完整双缓冲在 Conv8 最坏情况下仅权重就需 576 KiB 逻辑容量，不作为 Z-7020 默认方案。分段预取或用完即覆盖必须证明旧地址已不再被使用，并测量 DDR 读写竞争；需要额外资源与调度评估。
-
-### 历史实现过程与后续复核
-
-1. 独立重构 OS（已实现）：接入块配置、可变 R、单缓存预加载、Replay 和两种结果 mask。Im2Row 与 Python BIN 格式不变。独立实现阶段通过 G++ 和 Vitis HLS 2022.2 Clang 的 C++14 静态语法检查；该阶段未运行 testbench 或综合。后续整网集成记录见 [Top](top.md)。
-2. 已编写真实 BIN 对照 testbench，见下节。定向非零无效 lane 的屏蔽测试留待补充，不篡改真实 trace，也不把该测试误当成允许违反 Cin 补零契约。
-3. 以 `xc7z020-clg400-2`、10 ns 为评估基线，综合确认单套 `4×4×8` 数据通路、四 Bank 读带宽、实际 BRAM 余量、归约 II 和时序；RTL co-sim 验证输入气泡、输出反压、BRAM 返回与波前排空。32 Cout 为首版目标，不是整机资源已通过的结论。若放不下，优先评估仅 Conv8 降为 16、其余层仍最多 32，保持导出格式不变。
-4. PostProcess、Pool、Loader/Writer 已接入 Top；后续测量整网基线，再按上节评估加载重叠、FIFO 深度、板级带宽和最终 fps。
+结果契约为 INT32 `value[spatial_lane][cout_lane]` 加 `spatial_valid` 和 `cout_valid`，块内顺序 `y → tile_x → local_cout_tile`。块起点与 Tile 数是调用级配置，坐标不必随每个事务发送。Systolic 不缓存整图输出、不重排、不访问 DDR；Param Loader 在取 bias/M/S 前检查通道边界，PostProcess 只为有效 lane 应用参数。Pool 或 Bypass 后，由 **Writer** 按最终空间坐标和全局 Cout 写回。见 [DDR 布局与 Writer 规格](yolov2_tiny_ddr_io.md)。
 
 ### 真实 BIN 对照 testbench
 
 HLS 工程的 Top 设为 `systolic_OS`，设计文件使用 `systolic_OS.cpp`，testbench 仅加入 [`test_systolic_pytorch.cpp`](../cnn_accelerator/testbench/test_systolic_pytorch.cpp)。
 
-默认读取仓库内`data/yolov2_tiny/`，无需设置环境变量，样本后缀固定为`0000`；非空`YOLO_DATA_DIR`可选覆盖数据根目录，见[数据说明](data.md)。每层使用以下三份文件，必须来自同一套导出参数：
+默认数据目标是仓库内`data/yolov2_tiny/`，样本后缀固定为`0000`；手动工程的定位条件及操作系统限制见[HLS入口说明](../README.md#手动模块工程与路径限制)。文件准备见[数据说明](data.md)。每层使用以下三份文件，必须来自同一套导出参数：
 
 - `trace/trace_<layer>_im2row_int8_0000.bin`：按 `y → tile_x → token` 的物理 Activation Pack。BIN 不带 mask，按行宽重建 `spatial_valid`。每个 Cout 块重新发送整层一次；不为块内每个 Cout Tile 重复发送。
 - `bins/<layer>_weight.bin`：按全局 Cout Tile 和 token 取本块的连续片段，原样恢复 signed INT8 lane；检查尾部补零，不改动 BIN 数据。
 - `trace/trace_<layer>_systolic_int32_hwc_0000.bin`：按 `(y*W+x)*Cout+oc` 索引 bias 前的 signed little-endian INT32 结果。尾空间或尾 Cout 直接期望零，先判界再访问，不重排整个 DUT 输出。
 
 默认依次验证九层的全部 100 个 Cout 块，覆盖 Conv8 的 `8191 → 8192` 权重地址分段、Prediction 的 1×1 和 `cout_valid=0001`、空间行尾和连续块调用。逐元素核对两个 mask、无效输出清零及事务守恒。当前配置预计输出 371072 个 Tile；完整 RTL co-sim 的阵列推进量约 3500 万步，另有加载和握手开销，耗时不能按 Im2Row 的测试规模估算。
-
-测试不导出CSV或其他数据文件，不创建`simulation_data/`；终端打印各层事务数与PASS/FAIL，失败返回非零。逐元素比较、尾通道补零检查及事务计数保持不变。独立实现阶段已核对27个BIN的字节数，并通过静态语法检查；2026-11-19清理测试路径/输出时仅做静态检查，没有重新运行testbench、仿真或综合。
 

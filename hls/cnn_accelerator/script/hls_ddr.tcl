@@ -18,12 +18,6 @@ if {!$run_synthesis} {
     append cpp_flags " -O3"
 }
 file mkdir $build_dir
-# 默认数据位置只传给测试文件；运行时仍允许 YOLO_DATA_DIR 覆盖。
-set default_data_dir [file join $repo_dir data yolov2_tiny]
-# 将整个宏参数作为一个 shell 单词，保留 C++ 字符串引号和目录中的空格。
-set default_data_define "-DYOLO_DEFAULT_DATA_DIR=\"$default_data_dir\""
-set quoted_data_define [string map [list "'" "'\\''"] $default_data_define]
-set tb_flags "$cpp_flags '$quoted_data_define'"
 cd $build_dir
 open_project cnn_yolo_ddr
 set_top cnn_accelerator_ddr
@@ -33,7 +27,9 @@ add_files -cflags $cpp_flags [file join $src_dir postprocess/conv_postprocess.cp
 add_files -cflags $cpp_flags [file join $src_dir pool/pool.cpp]
 add_files -cflags $cpp_flags [file join $src_dir axi/ddr_io.cpp]
 add_files -cflags $cpp_flags [file join $src_dir top/cnn_accel_ddr.cpp]
-add_files -cflags $tb_flags -tb [file join $accelerator_dir testbench test_cnn_accel_ddr.cpp]
+# 让测试代码查找数据。GUI 导出的 Tcl 会重新引用 -cflags，
+# 因此不将文件路径作为带双引号的宏放入编译选项。
+add_files -cflags $cpp_flags -tb [file join $accelerator_dir testbench test_cnn_accel_ddr.cpp]
 open_solution solution1 -flow_target vivado
 set_part {xc7z020-clg400-2}
 create_clock -period 10 -name default

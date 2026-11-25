@@ -87,7 +87,7 @@ void conv_postprocess(hls::stream<yolo_acc_tile_t>& input_stream,
          first_cout_tile += block_capacity) {
         const int block_tiles = config_min(block_capacity, layer_cout_tiles - first_cout_tile);
 
-        // 首版只准备当前块，不覆盖仍在使用的缓存，也不预取下一块。
+        // 当前块独占参数缓存，不预取下一块。
         for (int local_tile = 0; local_tile < block_tiles; ++local_tile) {
             const postprocess_param_pack_t pack = param_stream.read();
             const int first_channel = (first_cout_tile + local_tile) * SYSTOLIC_COUT_PAR;

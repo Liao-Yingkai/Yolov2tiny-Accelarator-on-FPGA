@@ -1,39 +1,38 @@
 #ifndef YOLO_TESTBENCH_DATA_PATH_H
 #define YOLO_TESTBENCH_DATA_PATH_H
 
-#include <cstdlib>
+#include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <string>
 
-// 仅供软件测试使用；默认目录不依赖 csim/build 的当前工作目录。
+// CNN testbench 共用的数据目录定位逻辑，不参与综合。
 inline std::string yolo_test_data_dir() {
-    const char* override_dir = std::getenv("YOLO_DATA_DIR");
-    if (override_dir && override_dir[0]) return override_dir;
-#ifdef YOLO_DEFAULT_DATA_DIR
-    // HLS 脚本只向测试文件传入此绝对路径，不改变 DUT 的编译选项。
-    return YOLO_DEFAULT_DATA_DIR;
-#else
-    // 手工 HLS 工程可能保留相对源码路径；先从运行目录规范化真实源码路径。
+    // 优先使用编译器记录的原始头文件路径，例如仓库外手工创建的工程。
     std::string source = __FILE__;
-    if (source.empty() || source[0] != '/') {
-        char* absolute_source = ::realpath(source.c_str(), nullptr);
-        if (absolute_source) {
-            source = absolute_source;
-            std::free(absolute_source);
+    std::replace(source.begin(), source.end(), '\\', '/');
+    const std::string suffix = "hls/cnn_accelerator/testbench/yolo_data_path.h";
+    if (source.size() >= suffix.size()) {
+        const auto offset = source.size() - suffix.size();
+        if ((offset == 0 || source[offset - 1] == '/') &&
+            source.compare(offset, suffix.size(), suffix) == 0 &&
+            std::ifstream(source).good()) {
+            return source.substr(0, offset) + "data/yolov2_tiny";
         }
     }
-    if (source.empty() || source[0] != '/') {
-        std::cerr << "无法由源码路径定位默认数据；请以绝对路径添加测试源文件，"
-                     "或设置 YOLO_DATA_DIR / YOLO_DEFAULT_DATA_DIR。\n";
-        return std::string();
+    // Vitis HLS 可能复制或改写测试源路径。对仓库内的工程，
+    // 从 csim/build 或 sim 工作目录向上查找源文件以识别仓库。
+    std::string prefix;
+    for (int depth = 0; depth <= 16; ++depth) {
+        if (std::ifstream(prefix + suffix).good() &&
+            std::ifstream(prefix + "hls/cnn_accelerator/script/hls_ddr.tcl").good()) {
+            return prefix + "data/yolov2_tiny";
+        }
+        prefix += "../";
     }
-    for (int level = 0; level < 4; ++level) {
-        const std::string::size_type slash = source.find_last_of('/');
-        if (slash == std::string::npos) return std::string();
-        source.resize(slash);
-    }
-    return source + "/data/yolov2_tiny";
-#endif
+    std::cerr << "无法定位仓库的数据目录；请通过 hls_ddr.tcl 启动测试，"
+                 "或使用仓库内的仿真工程及原始 testbench。\n";
+    return {};
 }
 
 #endif

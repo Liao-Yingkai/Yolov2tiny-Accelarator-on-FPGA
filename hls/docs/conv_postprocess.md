@@ -1,6 +1,6 @@
 # YOLOv2-tiny ConvPostProcess 设计
 
-将 Systolic 的 INT32 累加结果转换为 Pool/Bypass 使用的 INT8 Tile，已接入 [YOLO DDR Top](top.md)。
+将 Systolic 的 INT32 累加结果转换为 Pool/Bypass 使用的 INT8 Tile。层级调用顺序见 [DDR Top](top.md)。
 
 ```cpp
 void conv_postprocess(hls::stream<yolo_acc_tile_t>& input_stream,
@@ -29,11 +29,17 @@ for 每个 Cout 块：
 
 每块读 `B` 个参数 Pack 和 `spatial_tiles*B` 个累加 Tile，写同样多的 INT8 Tile。整层读 `geometry.cout_tiles` 个参数 Pack，输入输出各 `geometry.spatial_tiles*geometry.cout_tiles` 个 Tile。块边界由计数确定，不额外发送块头或坐标。参数流按全局 Cout Tile 递增；BIN 里只有逻辑 Cout 个 bias/M/S，Loader 先按 `oc=(first+local_cout_tile)*4+lane` 判界再读，无效 lane 在 Pack 内填零，不读越界地址。Prediction 最后一个 Pack 只含 C124 一个有效 lane。
 
-Systolic 现有 OS 入口仍一次处理一块，不因本次 PostProcess 重构而改变。整网集成时，上游层级调度依次调用 OS，把各块接续到同一条输出流；PostProcess 同时按整层运行，不能让上游等待整层 PostProcess 返回后才供给下一块。Loader 须保证对应块参数可以到达，不能先因写满累加路径相关的浅 FIFO 而停在参数发送之前。Pool/Writer 按同一块顺序消费，层切换仍等待整层写回完成。
+Systolic OS入口一次处理一个Cout缓存块。整网集成时，上游层级调度依次调用 OS，把各块接续到同一条输出流；PostProcess 同时按整层运行，不能让上游等待整层 PostProcess 返回后才供给下一块。Loader 须保证对应块参数可以到达，不能先因写满累加路径相关的浅 FIFO 而停在参数发送之前。Pool/Writer 按同一块顺序消费，层切换仍等待整层写回完成。
 
 ## 2. 参数缓存与一次 signed requant
 
-首版只保留当前块的 `bias`、`M_pos`、`M_neg`、`S`，最多 32 通道，不保存整层参数或 Feature Map。块内按 4 Cout lane 并行读，local Cout Tile 为缓存地址。参数加载阶段用共享运算路径逐通道派生 `M_neg`，不复制 32 份常量乘法器：
+配套模型在 Conv1–Conv8 的 LeakyReLU 之后量化，不在卷积与激活之间插入 activation
+FakeQuant；Pool 沿用输入 scale。Prediction 无激活，采用卷积输出的量化 scale。
+导出器为每个输出通道近似
+`input_scale × weight_scale[channel] / output_scale ≈ M / 2^S`，
+只导出一组 `M, S`。带激活前量化边界的 checkpoint 不能直接视为等价输入。
+
+模块只缓存当前块的 `bias`、`M_pos`、`M_neg`、`S`，最多 32 通道，不保存整层参数或 Feature Map。块内按 4 Cout lane 并行读，local Cout Tile 为缓存地址。参数加载阶段用共享运算路径逐通道派生 `M_neg`，不复制 32 份常量乘法器：
 
 ```text
 M_pos = 导出的 M
@@ -46,15 +52,13 @@ out = clamp((INT64(a) * m) 算术右移 S, -128, 127)
 
 负支系数只在装载时计算一次；`+2^33` 仅用于系数派生，逐元素乘移不舍入。正负支共用 S，且只做一次逐元素乘法。Prediction 装载时直接设置 `M_neg=M_pos`，不派生 LeakyReLU 系数，逐元素路径不再判断层模式。bias 相加须满足 INT32 契约；`S>=64` 按符号扩展。任一 mask 无效时，lane 不加 bias、不做乘移，输出零但不删掉 Tile。参数缓存仅在 Cout lane 维分区；每个 Tile 取一次本地参数，供四个空间 lane 复用。保留 4 路 Cout 并行、逐 spatial lane 处理；循环目标 `II=1`，实际 Tile 间隔、DSP 和移位器 LUT 留待综合确认。
 
-## 3. 参数预取：首版不做，后续优化
+## 3. 参数加载与缓存复用
 
-**首版先加载并准备当前块的全部参数，再消费该块首个累加 Tile。** 当前块最后一个 INT8 Tile 成功写入输出流后，才覆盖缓存、读下一块参数。无需等 Pool/Writer 写完 DDR 才复用参数缓存：写出的 Tile 已经是完整 INT8 结果，不再引用缓存。首版不读取下一块参数、不做 ping-pong；当前块等待时使用 stream 自然反压。
-
-**后续实施项：**测量每块参数加载和负支系数准备有多少时间暴露在关键路径上，其中部分可能与上游 Systolic 的权重加载重叠。若仍有明显切块等待，优先评估两份小参数缓存：当前块只读活跃缓存，后台读入下一块并生成负支系数，当前块最后一个结果提交后才切换到已就绪缓存。也可对比首 Spatial Tile 边读参数边计算、随后缓存复用的方案。两者都须验证参数顺序、块边界、阻塞及输出一致性；不改变 Python BIN 或 Systolic 的 Tile 顺序。
+模块先加载当前块的参数，再消费该块的首个累加 Tile。最后一个 INT8 Tile 写出后即可覆盖缓存，无需等待 DDR 写回。参数不预取、不使用双缓冲；等待期间由 stream 传递反压。
 
 ## 4. 验证
 
-HLS Top 设为 `conv_postprocess`，设计源文件选 `conv_postprocess.cpp`，testbench 只加入 [`test_conv_postprocess_pytorch.cpp`](../cnn_accelerator/testbench/test_conv_postprocess_pytorch.cpp)。默认读取仓库内`data/yolov2_tiny/`，无需设置环境变量，使用样本`0000`；非空`YOLO_DATA_DIR`可选覆盖根目录，数据准备见[数据说明](data.md)。每层读取同一套导出的四个文件：
+HLS Top设为`conv_postprocess`，设计源文件选`hls/cnn_accelerator/src/postprocess/conv_postprocess.cpp`，testbench只加入[`test_conv_postprocess_pytorch.cpp`](../cnn_accelerator/testbench/test_conv_postprocess_pytorch.cpp)。默认数据目标是仓库内`data/yolov2_tiny/`，样本为`0000`；路径定位条件见[HLS入口说明](../README.md#手动模块工程与路径限制)。数据准备见[数据说明](data.md)。每层读取同一套导出的四个文件：
 
 - `trace/trace_<layer>_systolic_int32_hwc_0000.bin`：bias 前的 little-endian INT32 HWC 输入。
 - `bins/<layer>_bias.bin`、`bins/<layer>_quant.bin`：参数按逻辑 Cout 排布；quant 先存全部 `M`，再存全部 `S`，均为 little-endian INT32。组包时先判 Cout 边界再读文件。
@@ -64,4 +68,4 @@ HLS Top 设为 `conv_postprocess`，设计源文件选 `conv_postprocess.cpp`，
 
 **testbench 只读 BIN，不导出 CSV 或其他数据文件。** 终端输出每层事务数、验证元素数、错误数和 PASS/FAIL，错误详情限前 10 条，失败返回非零。Im2Row、Systolic、Pool和Top测试采用相同规则。
 
-独立实现阶段的历史记录：样本 `0000` 通过 G++ 主机功能测试，9 层、100 个 Cout 块、371072 个输出 Tile，共核对 5937152 个物理 lane 元素，错误数为 0，两个 mask 和事务数检查均通过；Vitis HLS 2022.2 Clang 静态检查通过。当时未运行 RTL co-sim 或综合，不覆盖 RTL 时序和反压。后续整网状态见[Top](top.md)。
+C 仿真不检查 RTL 时序和反压；修改流水或缓存后须独立验证这些行为。

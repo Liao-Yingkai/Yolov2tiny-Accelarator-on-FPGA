@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="354" viewBox="0 0 960 354" role="img" aria-labelledby="title desc">
+<title id="title">First board run</title>
+<desc id="desc">Select committed or rebuilt hardware, build the Vitis platform and ELF, and prepare the SD card. Both tracks meet at JTAG.</desc>
+<g font-family="system-ui, 'DejaVu Sans', sans-serif">
+<rect x="1" y="1" width="958" height="352" rx="19" fill="#f8fbff" stroke="#cbd8e8"/>
+<text x="30" y="40" fill="#152943" font-size="27" font-weight="750" text-anchor="start">First board run</text>
+<rect x="32" y="72" width="206" height="71" rx="12" fill="#eaf4ff" stroke="#1d6098"/>
+<text x="135" y="100" fill="#1d6098" font-size="19" font-weight="700" text-anchor="middle">Bundled XSA</text>
+<text x="135" y="122" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">bitstream included</text>
+<rect x="32" y="170" width="206" height="71" rx="12" fill="#eaf4ff" stroke="#1d6098"/>
+<text x="135" y="198" fill="#1d6098" font-size="19" font-weight="700" text-anchor="middle">Rebuild in Vivado</text>
+<text x="135" y="220" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">generate bit → export XSA</text>
+<rect x="302" y="72" width="217" height="71" rx="12" fill="#fff1e7" stroke="#a04824"/>
+<text x="410.5" y="100" fill="#a04824" font-size="19" font-weight="700" text-anchor="middle">Vitis platform</text>
+<text x="410.5" y="122" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">update hardware spec</text>
+<rect x="582" y="72" width="220" height="71" rx="12" fill="#fff1e7" stroke="#a04824"/>
+<text x="692" y="100" fill="#a04824" font-size="19" font-weight="700" text-anchor="middle">Build PS application</text>
+<text x="692" y="122" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">link libm → ELF</text>
+<rect x="302" y="224" width="217" height="75" rx="12" fill="#f0f4fa" stroke="#526480"/>
+<text x="410.5" y="252" fill="#526480" font-size="19" font-weight="700" text-anchor="middle">Prepare FAT32 SD</text>
+<text x="410.5" y="274" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">27 BINs in /yolo/</text>
+<rect x="582" y="224" width="220" height="75" rx="12" fill="#e6f6f0" stroke="#16785e"/>
+<text x="692" y="252" fill="#16785e" font-size="19" font-weight="700" text-anchor="middle">Launch over JTAG</text>
+<text x="692" y="274" fill="#314761" font-size="15" font-weight="400" text-anchor="middle">program FPGA + run ELF</text>
+<path d="M238 107 H302" fill="none" stroke="#1d6098" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#1d6098" points="302,107 293,102.5 293,111.5"/>
+<path d="M238 205 H268 V119 H302" fill="none" stroke="#1d6098" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#1d6098" points="302,119 293,114.5 293,123.5"/>
+<path d="M519 107 H582" fill="none" stroke="#a04824" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#a04824" points="582,107 573,102.5 573,111.5"/>
+<path d="M692 143 V224" fill="none" stroke="#a04824" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#a04824" points="692,224 696.5,215 687.5,215"/>
+<path d="M519 262 H582" fill="none" stroke="#526480" stroke-width="2.5" stroke-linejoin="round"/>
+<polygon fill="#526480" points="582,262 573,257.5 573,266.5"/>
+<text x="764" y="328" fill="#16785e" font-size="17" font-weight="700" text-anchor="middle">Check UART + HDMI</text>
+</g>
+</svg>

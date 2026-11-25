@@ -1,12 +1,10 @@
 # YOLOv2-tiny Im2Row 设计
 
-当前模块已接入完成测试及上板功能验证的YOLO系统；整网状态见[Top](top.md)。本文保留独立开发阶段的设计、端口推导和历史检查数据，2026-11-02的II=1、52个BRAM_18K等结果不作为当前配置的资源或性能报告。2026-11-19整理只更新文档和testbench的数据路径/输出，不改DUT实现。
+Im2Row 将 DDR Loader 提供的 HWC 数据流转换为卷积窗口流。网络层表和调用顺序见 [DDR Top](top.md)。
 
-本文描述 YOLOv2-tiny VOC 的接口、存储契约和源码实现。独立模块阶段的检查与综合记录保留如下；后续整网集成结果见 [DDR Top](top.md)，不以静态检查代替仿真、综合或RTL反压验证。总体背景见[YOLOv2-tiny设计记录](yolov2_tiny_refactor_plan.md)。
+## 1. 支持范围
 
-## 1. 已确定的范围
-
-- 只支持总草案列出的416×416输入的YOLOv2-tiny层表，不承诺其他网络、分辨率或任意H/W/Cin组合。
+- 只支持固定层表列出的416×416输入YOLOv2-tiny，不承诺其他网络、分辨率或任意H/W/Cin组合。
 - 单套物理Im2Row，空间并行度P=4，通道并行度8，signed INT8，量化零点0。
 - 输入一个事务是一个空间位置的一个8通道组，即64 bit；输出一个事务是4个空间位置的同一8通道组，即256 bit数据与4-bit spatial_valid。
 - 3×3模式：stride=1、四侧Padding=1；1×1模式：stride=1、无Padding。不扩展其他kernel、stride、dilation或Padding组合。
@@ -200,7 +198,7 @@ Top重叠复制可放在输出Middle时，Middle重叠复制可放在输出Botto
 
 真正需要排查的是：某个物理Bank同拍是否超过一读一写、是否同地址依赖，以及返回值是否在首次使用前到达。不能仅凭操作名称认定冲突，也不能仅凭双Strip就认定所有返回均已就绪。
 
-## 7. 3×3候选调度
+## 7. 3×3 调度
 
 ### 7.1 q和group分开计数
 
@@ -233,7 +231,7 @@ Bottom首次输出前，相应数据必须已写入且可读；真实RAM延迟�
 
 ### 7.3 同行切Tile
 
-下面是候选工作分配，不是已验证的逐拍RTL：
+下表描述源码的逻辑事件，不是 RTL 的逐周期时序：
 
 | 当前输出q | 当前使用的Strip行 | 允许评估的准备工作 |
 |---:|---|---|
@@ -311,7 +309,7 @@ Bottom首次输出前，相应数据必须已写入且可读；真实RAM延迟�
 
 而一个输出Pack需要位置0～3的同一个group。输入4G个64-bit Pack、输出G个256-bit Pack完全正确，没有数据量错误。
 
-### 10.1 推荐评估：最后位置到来时直接输出
+### 10.1 最后位置到来时直接输出
 
 不必先收齐4G个Pack，再单独花G拍输出。可以：
 
@@ -323,7 +321,7 @@ G=128时暂存前三个位置的数据量为3 KiB，可评估复用Strip的3个�
 
 尾Tile有r个真实位置时，只缓存前r-1个位置，最后一个位置直接参与输出；W=13的最后Tile有r=1，可直接将输入放在Lane0，其余Lane为零。
 
-源码已采用此方案，以一个连续输入事务循环维护position/group/tile，跨Tile和行不重新启动流水；2026-11-02上一版本HLS报告该输入事务循环II=1，但不是每拍持续输出：满Tile仍须4G个输入事务才产生G个输出。本次简化未重新综合，实际流控吞吐尚未通过RTL验证。若要求输出不受最后位置输入气泡影响，则需完整Gather或额外预取缓冲，另算存储与延迟。
+1×1 路径用一个连续输入循环维护 position、group 和 tile，跨 Tile 和行不重启该循环。满 Tile 消费 `4G` 个输入事务并产生 `G` 个输出事务，因此即使输入循环达到 II=1，也不能据此推断每拍输出一个 Pack。
 
 ### 10.2 “收集间隙”不等于PE必然空闲
 
@@ -351,44 +349,12 @@ Systolic在Replay其他Cout计算Tile时不需要新Activation，Im2Row可以利
 
 阻塞stream保证事务握手，具体流水寄存器与RAM在途访问如何暂停仍须RTL验证，不能单凭 `write()` 的源码位置认定所有状态同拍冻结。
 
-## 12. 实现约束与后续修改检查项
-
-已确定仅支持YOLO层表、采用ConvGeometry、保留8通道接口；这些不再作为待选问题。
-
-以下是独立实现阶段的结果和后续修改时仍应复核的边界，不是当前整网尚未完成的功能清单：
-
-1. 本轮HLS确认BRAM组织及latency=1，资源为52个BRAM_18K；68 KiB是数据容量，物理资源预算仍须纳入全系统。目标周期10 ns、uncertainty 2.7 ns，HLS组合路径预算7.3 ns；实际布局布线时序尚未验证。
-2. 18-Bank、Ping-Pong合并地址的一读一写组织在本轮HLS中达到所有流水循环II=1，未增加LUTRAM或复制存储；真实握手下的端口时序仍须RTL co-sim验证。
-3. 3×3主循环HLS II=1已确认；G=1、行尾、最后Group及反压下的实际启动/Tile间隔仍须仿真测量，不能仅由II推断。
-4. 1×1已采用前三位置缓存、最后位置直接输出；不保证与输入气泡隔离的整段G连续输出，后者需要额外预取保证。
-5. ConvGeometry统一构造及固定表前提的编译期校验已实现；当前测试与Top均使用固定YOLO配置，整网验证边界见 [Top](top.md)。
-
-首版 DDR 布局和重扫边界见 [DDR 搬运规格](yolov2_tiny_ddr_io.md)。Top 在每个
-Cout 块重新调用 Im2Row；Im2Row 自身不依赖 DDR 地址或 Cout 数量。
-
-## 13. 后续验证与本次范围
-
-后续修改须先完成每Bank逐拍读请求、返回和写入排表。不要以 `DEPENDENCE false` 隐藏真实依赖，不将G维完全展开，也不新增完整Im2Row矩阵或整张Padding缓存。
-
-按后续获准阶段进行：
-
-- 静态检查：ConvGeometry字段一致、固定数组容量、地址与终点位宽、函数签名。
-- 功能测试：只针对层表工作配置，覆盖G=1/2/128、RGB poison、九个kernel位置、1×1无Padding、W=13尾Tile、输入/输出事务守恒及连续模式切换。
-- 综合：真实RAM映射、Bank端口、BRAM/LUT/FF、输出循环II、单套物理实例。
-- co-sim：输入气泡、输出反压、预取返回跨角色切换、最后Group/行/调用排空；同时测量启动、Tile间隔与层内平均速率。
-
-定向测试可使用简单确定性数据和源坐标reference，不让reference复刻Strip调度。当前真实BIN testbench见第14节。
-
-### 13.1 本轮源码优化及待复核项
-
-前一版综合报告显示主3×3循环II=2，Top overlap copy与预取返回的不同store在ST9/ST8形成WAW；输入使能路径还包含32-bit的`base+5 → min(width) → bottom_x比较`。旧报告共13 DSP，其中顶层三个32×32乘法各占3 DSP，主循环3 DSP、首行预装1 DSP。
-
-本轮源码针对这些来源做以下改变，HLS报告结果见本节末表：
+## 12. 流水依赖与验证
 
 - 主循环全部Strip写（重叠copy、Line预取、Bottom输入、Padding零）先进入固定18 Bank的当前事务`WriteBeat`，每Bank独立enable/address/data；全部数据采集结束后，在本迭代末尾由每Bank唯一store入口提交，再推进状态。每迭代新建零默认值的`next`，无效Bank的数据不保留旧值，地址仍由统一逻辑译码。enable/address在数据分支之前按每Bank独立布尔公式生成，数据分支只填data，不让大分支汇合的phi拖后写使能。写命令不随G增长。实际BRAM返回寄存器及copy/prefetch的数据、标签对齐由HLS按latency=1和真实RAW生成，不人为增加持久`returned`及跨迭代提前消费约束；因此也不需要额外尾部flush。未添加`DEPENDENCE inter false`。
 - 输出选择采用9个独立kernel位置比较、按行三个offset掩码OR、再三行OR，而非9级优先switch；每Bank在当前地址只读一次，overlap copy复用这些Bank返回，不增加第二读口。Top只在q0..3读、Middle只在q3..6读、Bottom只在q6..8读，不让Bottom准备阶段的无用读引入额外存储反馈。q8的Bottom overlap直接转发Bank4/5，不穿过输出选择树。
 - `bottom_end`只在Tile切换时更新。输入握手只比较已寄存的窄`bottom_x`与终点；独立3-bit `bottom_column`维护目标Strip列，不在写使能路径计算`bottom_x-base+1`。坐标9 bit（含416及预取偏移）、Tile7 bit（含104）、Group8 bit（含128）、Line地址10 bit（含512 one-past）、Strip地址8 bit。输入/输出事务循环计数位宽由固定层表最大事务数及one-past推导。
-- 上一版调用准备阶段把G=1/2/.../128译为shift；本次改为直接读取层表编译期生成的`cin_group_shift`。扫描中的Line地址仍由移位加Group生成，首行预装使用递增块地址。首行预装改单事务while，1×1改单连续输入事务for，避免多层flatten根据运行时边界生成通用乘法；未将乘法简单绑定到fabric。
+- `cin_group_shift` 由层表在编译期生成。扫描时用移位和 Group 索引计算 Line 地址，首行预装则递增块地址；首行预装和 1×1 路径都以单事务循环推进。
 - G=1关键逻辑顺序：最后Bottom输入q4采集并提交，q6首次读取；Top copy在q3采集并提交；换行q6准备列1..4及左Padding，q7准备列5；q8准备下一Tile的Bottom，下一Tile q0只读取Top。提交均位于所属迭代的数据采集之后，真实RAW必须由HLS满足；此为源码依赖排表，不是RTL逐拍验证结论。
 - 仅3×3主循环声明`#pragma HLS DEPENDENCE variable=strip inter RAW distance=2 true`，保留真实RAW而明确其最短迭代距离，绝非`inter false`。证明覆盖所有Bank：G=1时最紧的是Bottom最后新输入q4写→q6首次读，以及换行Top列5 q7写→下一Tile q0全列读取，均相隔2次迭代；Top换行q6写→下一Tile q0为3，同列同行copy/prefetch与Middle/Bottom首次读更远。G>1的相同Group访问间隔不会缩短。此结论依赖固定层表、q事件位置及行读门控；改变它们须重新证明。`distance`用于`inter true`的语义见[AMD UG1399 2022.2](https://www.xilinx.com/support/documents/sw_manuals/xilinx2022_2/ug1399-vitis-hls.pdf)。
 - Line写入对固定物理Bank做UNROLL使能译码：首行4列Bank、Bottom两行×4列Bank。动态值只进入写使能和窄RAM地址，不改变物理结构、写事务总数或每Bank一读一写需求。
@@ -396,33 +362,17 @@ Cout 块重新调用 Im2Row；Im2Row 自身不依赖 DDR 地址或 Cout 数量�
 
 存储仍为`line[2][4][512]`及`strip[3][6][256]`，均保持BRAM、latency=1、一读一写；kernel_pos→group顺序、在线Padding、W=13尾Lane及阻塞stream契约不变。
 
-以下为2026-11-02上一版本的综合对比（Vitis HLS 2022.2，xc7z020-clg400-2），不是2026-11-03本次源码的综合结果：
+综合时检查每 Bank 读写端口及 II；RTL 测试应覆盖输入间隙、反压、行尾和连续调用。
 
-| 指标 | 优化前 | 本轮优化后 |
-|---|---:|---:|
-| 3×3主循环II | 2 | 1 |
-| Top HLS估计周期 | 7.508 ns | 7.212 ns |
-| 7.3 ns预算余量 | -0.208 ns | +0.088 ns |
-| BRAM_18K | 52 | 52 |
-| DSP | 13 | 0 |
-| FF | 12733 | 4065 |
-| LUT | 13982 | 13718 |
+## 13. 整数参考对照
 
-优化后所有流水循环均II=1、循环约束满足，无WARNING/ERROR；3×3主循环路径约6.51 ns，预算余量约0.79 ns。上述数值来自HLS估计，不是Vivado布局布线后的routed timing；尤其Top仅0.088 ns估计余量，不代表最终硬件时序已收敛。1×1循环II=1只表示连续输入事务，满Tile的平均速率仍为4G输入/G输出，不是持续每拍输出一个Pack。
+测试入口是仓库根目录下的`hls/cnn_accelerator/testbench/test_im2row_pytorch.cpp`。HLS工程设置`im2row`为唯一Top，设计文件选`hls/cnn_accelerator/src/im2row/im2row.cpp`及其头文件，testbench只加入该测试，不加入其他含`main()`的文件。
 
-该轮综合脚本、日志和工程位于源码树外`build/hls/im2row_yolo_optimize/`（项目根目录下，不随仓库提供）；日志为`final_synth.log`，报告位于`project/optimized/syn/report/`。独立基线工程未被覆盖。系统G++与Vitis Clang 3.9静态语法检查、差异检查通过；该轮未实现或修改TB，也未运行C simulation或RTL co-simulation。后续修改跨Tile返回、G=1换行、W=13边界或连续调用逻辑时，仍应重新验证输入气泡/输出反压及调用切换。
+本测试默认目标是仓库内`data/yolov2_tiny/trace/`的样本`0000`。手动工程的路径回退与操作系统限制见[HLS入口说明](../README.md#手动模块工程与路径限制)，不能将默认目标理解为所有环境均可自动定位。测试前须取得配套权重、参数及整数trace，本测试不提供exporter或自动导出功能。文件清单见[数据说明](data.md)。
 
-2026-11-03本次额外简化：1×1仅Prediction使用，尾收集Lane固定为表内常量0；`spatial_lane<last_gather_lane`已保证索引至多2，删除重复`<3`判断。不改变收集循环、缓存、输出及任何真实边界保护。3×3的RAW distance=2 true、RAM尺寸/Bank、pragma和q调度不变。本次检查日志位于项目根目录`build/hls/yolo_fixed_geometry/`，仅G++及Vitis Clang 3.9的`-fsyntax-only`和编译期值断言，不运行程序、仿真或综合。
+Python的`dump_trace.py`以导出的整数权重和参数进行数学参考计算，使用标准PyTorch unfold生成窗口；后续层输入来自整数参考，不是QAT浮点激活。packed 窗口与逻辑 unfold 是两种独立索引格式，测试同时按各自布局核对。
 
-## 14. 真实PyTorch导出数据testbench
-
-当前YOLO测试入口为`cnn_accelerator/testbench/test_im2row_pytorch.cpp`。HLS工程设置`im2row`为唯一Top，设计文件只需`src/im2row/im2row.cpp`及其头文件，testbench只加入这个文件，不加入其他含`main()`的测试。
-
-本测试默认读取仓库内`data/yolov2_tiny/trace/`中的真实样本`0000`，根据源码位置定位，不需要设置环境变量。非空`YOLO_DATA_DIR`可选覆盖数据根目录；切换样本时修改样本后缀。先在外部Python工程运行`export.py`和`dump_trace.py`，trace必须配套生成时的权重及量化参数，本测试本身不重新生成或修改它们。文件清单见[数据说明](data.md)。
-
-Python的`dump_trace.py`以导出的整数权重和参数进行数学参考计算，使用标准PyTorch unfold生成窗口；后续层输入来自整数参考，不是QAT浮点激活。2026-11-08已核对导出脚本、文档及现有样本：九层权重BIN与逻辑NPY一致，bias/M/S的BIN与相应NPY一致；所有Im2Row BIN和unfold BIN均与独立源坐标参考逐元素一致。这是数据契约检查，不是HLS DUT仿真结果。
-
-### 14.1 各层输入来源
+### 13.1 各层输入来源
 
 | 当前Im2Row配置 | 上游BIN边界（省略`trace_`和`_0000.bin`） |
 |---|---|
@@ -434,7 +384,7 @@ Python的`dump_trace.py`以导出的整数权重和参数进行数学参考计�
 
 每层独立读取自己的上游HWC文件，不串接其他HLS模块。原始输入仅含`H*W*Cin`个signed INT8字节：按`y→x→group`组装输入事务，通道`c=group*8+cin_lane`，索引为`(y*W+x)*Cin+c`。Conv1的逻辑输入为RGB三通道，不是单通道；组内其余五通道填零，空间Padding不作为输入发送。
 
-### 14.2 输出比较与事务检查
+### 13.2 输出比较与事务检查
 
 输出按`y→tile_x→kh→kw→group`直接消费，不缓存完整输出再重排。每个事务顺序读取`trace_<层名>_im2row_int8_0000.bin`的32个字节，其偏移为：
 
@@ -450,5 +400,3 @@ byte_offset = 32*((y*T+tile_x)*R+token)+8*spatial_lane+cin_lane
 BIN不保存`spatial_valid`或C++结构体。掩码独立根据`tile_x*4+lane<W`计算，W=26每行末Tile为`0011`、W=13为`0001`，卷积Padding不改变它。每层检查输入`H*W*G`和输出`H*T*R`的事务数、stream清空、BIN精确长度和读取状态。九层之后再次运行Conv1，检查Prediction/G128到3×3/G1的连续调用切换。
 
 测试不导出CSV或其他数据文件，也不创建`simulation_data/`。终端仅输出事务数、验证元素数、错误数和PASS/FAIL；失败返回非零，错误详情限制前若干项。packed/unfold交叉核对、DUT逐元素检查和重复调用覆盖保留。
-
-2026-11-19整理未运行C-sim、RTL co-sim或综合；测试数据路径和输出清理通过静态语法检查，不构成新增功能或性能结论。真实接口气泡、反压、RAM调度和时序仍应在后续实现变化时重新验证。

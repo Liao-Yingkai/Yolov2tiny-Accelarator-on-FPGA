@@ -1,7 +1,6 @@
 # YOLOv2-tiny Loader、Writer 与层间 DDR 缓冲
 
-三个 Loader 和 Writer 已接入 [YOLO DDR Top](top.md)，按张量或模型段基址
-访问 DDR。Top 负责层级调度和 A/B 交换；源码顺序与 AXI 实际完成时序须分别验证。
+三个 Loader 和 Writer 按张量或模型段基址访问 DDR，调用关系见 [DDR Top](top.md)。Top 负责层级调度和 A/B 交换；源码顺序与 AXI 实际完成时序须分别验证。
 
 ## 1. 层与 Cout 块的控制
 
@@ -37,7 +36,7 @@ DDR 首图采用紧凑 RGB INT8 HWC：每像素连续三个字节 `R,G,B`，共
 Loader 一次读一遍真实输入，按 `y → x → cin_group` 发送
 `H × W × ceil(Cin/8)` 个 `channel_pack_t`。一个 Pack 永远是**同一个像素**
 的 8 个通道槽位，不跨像素取数据来填尾槽。有效通道放低 lane，最后一组超出逻辑
-Cin 的槽位写零。DDR 输入的有效通道字节偏移为 `(y*W+x)*Cin+c`。对首版
+Cin 的槽位写零。DDR 输入的有效通道字节偏移为 `(y*W+x)*Cin+c`。对
 固定层表，同一个 Loader 有两条读取路径：
 
 - **紧凑 RGB**：连续读取 3 个 64-bit 字，拆成 8 个 RGB 像素，发出 8 个
@@ -62,7 +61,7 @@ Pack 的起始字节偏移为 `32*k`，低地址的字节占低位。物理 Cin/
 
 Systolic 单次只消费当前块的 `block_tiles × R` 个 Pack，装入自己的驻留
 缓存。计算期间不读权重；FIFO 填满后 Loader 由反压暂停，下一块开始装载时从
-原位置继续。整层权重只读一遍。首版不引入整块权重双缓冲。
+原位置继续。整层权重只读一遍。不引入整块权重双缓冲。
 
 **参数。** DDR 保留每层连续的 `[bias 全部][M 全部][S 全部]` INT32，可分别
 复制 `bias.bin` 和 `quant.bin` 得到；三个字段按逻辑 Cout 定长，不插入物理
@@ -124,24 +123,8 @@ Pool1 的 `208×208×16`。建议两区基址按 64 B 对齐；权重、参数�
 
 只有**整层所有 Cout 块写回完成、AXI 写入完成**后才交换 A/B，并允许下一层
 发读请求。最后一个 Pool Tile 产生、Writer 收到最后一个 Tile、甚至最后一个
-写请求发出，都不能单独作为层间屏障。首版不用跨层预读或原地覆盖。
+写请求发出，都不能单独作为层间屏障。不用跨层预读或原地覆盖。
 
-## 6. 检查入口与历史记录
+## 6. 验证
 
-当前整网已完成测试及上板功能验证，见[Top](top.md)。以下先记录独立实现阶段结果，再列出后续修改应重新核对的边界，不表示本轮运行了这些流程。
-
-独立实现阶段通过 G++ 功能检查和 Vitis HLS 2022.2 Clang 静态检查。
-九层均检查了 Loader 的顺序与尾槽、Writer 的 NHWC 地址和范围外哨兵；
-首层另用 PyTorch BIN 验证紧凑 RGB 经 Feature Loader、Im2Row 后的逐元素结果。
-检查不导出 CSV，该阶段未运行综合或 RTL co-sim。
-
-1. 先独立验证三个 Loader 和 Writer：RGB 跨字拆包与尾零、参数末组不越界、
-   多 Cout 块写同一像素、池化后行尾和 Prediction 末字。与逻辑 HWC golden
-   逐元素比对，同时检查事务数和 DDR 目标区外的哨兵值。不导出 CSV。
-2. 再接一层多 Cout 块，验证 Feature 每块从基址读一遍、Im2Row 每块重新启动，
-   权重和参数却只各供一次整层；在 RTL co-sim 检查浅 FIFO 反压和排空。
-3. 接连续两层，确认下一层首个 DDR 读不会越过上一层写回屏障。综合核对计算
-   实例数、Writer 暂存映射和 AXI burst，再记录等窗口、等权重及写回停顿。
-
-AXI bundle 分组、FIFO 深度、outstanding 数量和实际 burst 长度留到集成验证。
-不把首版布局、独立模块 II 或顺序地址视作整机吞吐已达标。
+[DDR Top 测试](top.md#验证入口)逐元素核对写回结果，包括尾槽与缓冲区外的哨兵。调整 AXI 参数或调度后，应在 RTL 检查短 burst、FIFO 反压与层间写回屏障。

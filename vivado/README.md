@@ -1,75 +1,63 @@
-# Vivado 与 Vitis 工程
+# Vivado 硬件工程
 
-当前工程已完成摄像头 → YOLO 推理 → 解码/NMS → HDMI 叠加的上板功能验证
-（2026-11-19，用户确认）。硬件目标为 `xc7z020clg400-2`，使用 Vivado / Vitis
-2022.2。模型、SD 文件及应用流程见 [PS 应用说明](cnn_accel_cam/vitis/cnn_accel_cam/README.md)。
+本目录包含摄像头、HDMI 与 YOLO 加速器的硬件工程。验证基线使用
+`xc7z020clg400-2`、Vivado/Vitis 2022.2，已完成摄像头、YOLO推理、解码/NMS及显示功能验证。
+本文路径均相对于仓库根目录；模型、SD文件和应用流程见
+[Vitis 工程说明](../vitis/README.md)。
 
-## 保留的工程结构
+## 环境与硬件前提
 
-- `cnn_accel_cam/cnn_accel_cam.xpr`：Vivado 工程入口。
-- `cnn_accel_cam/cnn_accel_cam.srcs/`：BD、IP 配置、约束和图形布局。
-- `cnn_accel_cam/cnn_accel_cam.srcs/sources_1/imports/system_wrapper.v`：XPR 实际引用的 wrapper。
-- `cnn_accel_cam/ip_repo/`：完整的 CNN、Overlay、摄像头和 DVI 自定义 IP。
-- `cnn_accel_cam/vitis/`：现有平台、应用和系统工程；不另建一套目录结构。
+使用 Vivado 2022.2。Vitis 是仓库根目录下的独立工程，两者通过配套 XSA 交接。
 
-`ip_repo` 内的 HDL、`component.xml`、XGUI、驱动及 `.dat` 初始化文件是当前 BD 的
-实际依赖。即使由 HLS 生成，也不是可以随意删除的缓存；修改 HLS 后须重新导出 IP，
-不能手改已导出 HDL 来替代源码。
+板级工程包含OV5640、640×480视频、VDMA、DDR、DVI/HDMI输出及两个HLS IP。器件型号相同
+不等于板卡相同：使用其他板卡前须核对电源/接口、PS DDR/MIO配置、时钟和
+`vivado/cnn_accel_cam/cnn_accel_cam.srcs/constrs_1/new/LCD.xdc`的引脚约束。
+这些配置不是通用Zynq板卡模板。
 
-## 打开 Vivado
+## 工程文件分工
 
-1. 用 Vivado 2022.2 打开 `cnn_accel_cam/cnn_accel_cam.xpr`。
-2. 检查项目器件为 `xc7z020clg400-2`，IP Repository 指向本工程的 `ip_repo`。
-3. 打开 `system` BD，检查 IP Status，再 Validate Design。
-4. 首次打开时按需 Generate Output Products，然后运行综合、实现及 bitstream 生成。
-5. 若修改了硬件，重新导出包含 bitstream 的 XSA，并同步 Vitis 平台。
+| 内容 | 仓库内位置 |
+|---|---|
+| Vivado入口 | `vivado/cnn_accel_cam/cnn_accel_cam.xpr` |
+| BD、IP配置、约束及布局 | `vivado/cnn_accel_cam/cnn_accel_cam.srcs/` |
+| XPR实际引用的wrapper | `vivado/cnn_accel_cam/cnn_accel_cam.srcs/sources_1/imports/system_wrapper.v` |
+| 自定义IP实体 | `vivado/cnn_accel_cam/ip_repo/` |
 
-实际 BD、wrapper、XDC 和 IP 仓库均在工程内。XPR 中旧的 ImportPath、备用 run
-或未启用的增量缓存目录是迁移记录，不是缺失源文件；不要为消除这些记录而改器件、
-连接或时钟。遇到 locked IP，先看 Report IP Status 的具体原因，不要直接删除互联。
-保留同版本工具，避免无意升级 IP 改变已验证配置。
+`ip_repo`内HDL、`component.xml`、XGUI、驱动和`.dat`初始化文件都是当前BD的实际依赖，
+不能因其由HLS生成就当作缓存删除。现有导出IP可用于Vivado重建；只有修改HLS实现时才
+需要重新综合、导出并替换相应IP，不直接手改导出HDL。
 
-CNN 由 PS 逐次 Start；Overlay 是 `ap_ctrl_none` 自由运行、显式 FLP 流水，不调用
+## 打开和构建Vivado
+
+如果只想运行仓库已有硬件，且板卡和硬件配置匹配，可以跳过本节，直接把
+[`vitis/system_wrapper.xsa`](../vitis/system_wrapper.xsa) 交给 Vitis。该 XSA 已包含
+`system_wrapper.bit`；仓库未单独提交 Vivado 实现缓存或独立的 `.bit` 输出目录。
+
+1. 启动Vivado 2022.2，通过Open Project选择上表中的XPR。
+2. 检查当前项目器件为`xc7z020clg400-2`，IP Repository解析到本工程的`ip_repo`，
+   源文件列表中没有实际缺失的BD、wrapper或约束。
+3. 打开`system` BD，先检查Report IP Status，再执行Validate Design。
+   如有locked IP，按报告中的锁定原因处理，不直接删除互联或盲目升级所有IP。
+4. 对 `system` BD 执行 **Generate Output Products**。保留工程已引用的
+   `system_wrapper.v`；确认顶层是 `system_wrapper`，不需要另建一个同名 wrapper。
+5. 在 Flow Navigator 执行 **Generate Bitstream**。未完成的综合和实现会先运行；
+   检查运行状态、关键警告和实现时序报告。bitstream 通常位于
+   `vivado/cnn_accel_cam/cnn_accel_cam.runs/impl_1/system_wrapper.bit`（对应默认实现 run）。
+6. 选择 **File → Export → Export Hardware**，选择 **Include bitstream**，将 XSA
+   导出到独立的本地构建目录，例如 `build/ps/handoff/system_wrapper.xsa`。不要为一次本地试验
+   直接覆盖仓库快照。将这份新 XSA 通过 Vitis 平台的 **Update Hardware Specification**
+   导入，再重新构建平台、BSP 和应用。参见 [AMD 2022.2 XSA 导出说明](https://docs.amd.com/r/2022.2-English/ug1400-vitis-embedded/Creating-a-Hardware-Design-XSA-File)。
+
+部分XPR字段保存旧ImportPath、备用run或未启用增量缓存的历史位置，不应与当前实际
+文件依赖混为一谈。移植时先检查实际Source/IP Repository解析结果，不因看到旧目录名
+就改器件、连接或时钟。更换工具版本、板卡或时钟后，需要重新验证时序与功能。
+
+CNN由PS逐次Start；Overlay采用`ap_ctrl_none`自由运行和显式FLP流水，不调用
 Start/AutoRestart。两者不是同一种控制方式。
 
-## 打开 Vitis
+## 硬件交接与版本管理
 
-现有项目名称为：
+重新生成硬件后，导出包含 bitstream 的 XSA，按 [Vitis 工程说明](../vitis/README.md)
+更新平台。只移动软件工作区不需要重新综合、实现或导出硬件。
 
-| 类型 | 名称 |
-|---|---|
-| Platform | `system_wrapper` |
-| Application | `cnn_accel_cam` |
-| System project | `cnn_accel_cam_system` |
-
-1. 在 Vitis 2022.2 中使用 `cnn_accel_cam/vitis/` 作为工作区，导入现有平台及应用。
-2. 确认平台硬件指向本地的 `system_wrapper.xsa`，必要时 Update Hardware Specification。
-3. Build Platform，生成 BSP、库和 `export/system_wrapper/system_wrapper.xpfm`。
-4. **迁移目录后重新选择应用及系统工程关联的平台**。IDE 的 `.prj/.sprj` 保存过旧机器
-   的绝对平台路径，不能把缺失的旧 `.xpfm` 当成缺失源码，也不靠硬编码 include 路径绕过。
-5. 检查 BSP 启用 `xilffs`，长文件名 `use_lfn=1`；应用链接包含 `xilffs` 和 `m`。
-   Build Release 后，使用配套 bitstream、PS 初始化和新 ELF 运行。
-
-`platform.tcl` 的硬件路径已改为相对于脚本位置解析，原平台生成步骤和 BSP 配置保持
-不变。该文件是平台创建/生成脚本，不要在正在使用的平台上反复 source；已有平台优先
-通过 IDE 更新、构建。本轮整理没有执行平台重建或验证全新路径下的 IDE 构建。
-
-两个 `system_wrapper.xsa` 分别位于工作区根和 `system_wrapper/hw/`；平台描述会引用
-它们，因此都保留。整理时两者内容一致。硬件、XSA、驱动与应用必须配套；不要只更新
-其中一个。FSBL 源码、hook、链接脚本、初始化文件、平台描述及 BSP 的 `system.mss`
-继续保留，不把它们按“生成文件”整体移除。
-
-## 源文件与生成物
-
-版本管理保留 XPR、完整 SRCs、完整自定义 IP、两份 XSA，以及 Vitis 的源文件、工程
-描述、平台设置和 FSBL 源码。以下内容由本机重建，不纳入版本管理：
-
-- Vivado 的 `.cache/.runs/.sim/.hw/.ip_user_files/.gen`、日志及 `.Xil`。
-- Vitis 的工作区状态、`Debug/Release`、`_ide/_platform`、平台 `export/logs`。
-- BSP 自动生成的头、库、驱动工作副本、编译产物和平台硬件解包副本（上述 XSA 除外）。
-- PS 配置器的 `NA/ps7_summary.html` 等摘要报告、Python 缓存及旧测试的 CSV 输出。
-
-这些忽略规则不删除已有本地文件。已有跟踪的生成报告单独取消跟踪；不清空本机工作区，
-不改写 Git 历史。`.prj/.sprj/.cproject/platform.spr` 等必要配置仍跟踪，不使用
-`assume-unchanged` 隐藏真正的设置变化。再次生成工程后，应审查必要配置的 diff，
-不能以“所有 modified 都是垃圾”为理由统一忽略。
+Git 保留 XPR、SRCs 和工程引用的自定义 IP。缓存、运行输出和日志仅保留在本地。
